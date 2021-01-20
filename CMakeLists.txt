@@ -7,7 +7,7 @@ else()
 endif()
 
 # Project settings
-project(frost VERSION 0.1.0 LANGUAGES CXX)
+project(ReStore VERSION 0.1.0 LANGUAGES CXX)
 
 # Look in the /cmake dir for CMake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
@@ -106,7 +106,7 @@ target_compile_options(
 
 if(${PROJECT_NAME}_BUILD_TESTS)
   set(TEST_RUNNER_PARAMS "" CACHE STRING "Options added to the test runner")
-  
+
   if(${PROJECT_NAME}_SYSTEM_GTEST)
     find_package(GTest REQUIRED)
   else()
