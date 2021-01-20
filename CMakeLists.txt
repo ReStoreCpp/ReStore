@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.16)
 
 if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
   set(IS_SUBPROJECT OFF)
@@ -25,7 +25,7 @@ include(GNUInstallDirs)
 option(${PROJECT_NAME}_INSTALL "Add ${PROJECT_NAME} to the install list" ON)
 cmake_dependent_option("${PROJECT_NAME}_BUILD_TESTS" "Build tests for ${PROJECT_NAME}" ON "BUILD_TESTING" OFF)
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
-set("${PROJECT_NAME}_GTEST_DIR" "${CMAKE_CURRENT_LIST_DIR}/external/googletest" CACHE PATH "Path to the googletest source directory")
+set("${PROJECT_NAME}_GTEST_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/googletest" CACHE PATH "Path to the googletest source directory")
 option("${PROJECT_NAME}_BUILD_BENCHMARKS" "Build examples" OFF)
 option("${PROJECT_NAME}_BUILD_EXAMPLES" "Build examples" OFF)
 #option(${PROJECT_NAME}_USE_DOXYGEN "Add a doxygen target to generate the documentation" ON)
@@ -113,24 +113,28 @@ if(${PROJECT_NAME}_BUILD_TESTS)
     if(NOT EXISTS "${${PROJECT_NAME}_GTEST_DIR}/CMakeLists.txt")
       message(FATAL_ERROR "Could not find googletest in ${${PROJECT_NAME}_GTEST_DIR}")
     endif()
+    
     add_subdirectory("${${PROJECT_NAME}_GTEST_DIR}" EXCLUDE_FROM_ALL)
     list(APPEND CMAKE_MODULE_PATH "${${PROJECT_NAME}_GTEST_DIR}/contrib")
   endif()
+
+  enable_testing()
+  include(GoogleTest)
   add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/tests")
 endif()
 
-%if(${PROJECT_NAME}_USE_DOXYGEN)
-%  find_package(Doxygen)
-%  if(DOXYGEN_FOUND)
-%    doxygen_add_docs(
-%      doxygen
-%      "${CMAKE_CURRENT_LIST_DIR}/include/${PROJECT_NAME}"
-%      COMMENT "Generate man pages"
-%    )
-%  else()
-%    message("Doxygen not found, skipping documentation generation")
-%  endif()
-%endif()
+#if(${PROJECT_NAME}_USE_DOXYGEN)
+#  find_package(Doxygen)
+#  if(DOXYGEN_FOUND)
+#    doxygen_add_docs(
+#      doxygen
+#      "${CMAKE_CURRENT_LIST_DIR}/include/${PROJECT_NAME}"
+#      COMMENT "Generate man pages"
+#    )
+#  else()
+#    message("Doxygen not found, skipping documentation generation")
+#  endif()
+#endif()
 
 if(${PROJECT_NAME}_BUILD_BENCHMARKS)
   add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/benchmark")
@@ -140,55 +144,55 @@ if(${PROJECT_NAME}_BUILD_EXAMPLES)
   add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/examples")
 endif()
 
-%if(${PROJECT_NAME}_INSTALL)
-%  include(InstallRequiredSystemLibraries)
-%  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/License.txt")
-%  set(CPACK_RESOURCE_FILE_README ${CMAKE_CURRENT_LIST_DIR}/README.md)
-%  include(CPack)
-%  set(INSTALL_MODULEDIR "${CMAKE_INSTALL_LIBDIR}/cmake")
-%  set(INSTALL_CMAKEDIR "${INSTALL_MODULEDIR}/${PROJECT_NAME}")
-%  configure_package_config_file(
-%    "${CMAKE_CURRENT_LIST_DIR}/cmake/${PROJECT_NAME}Config.cmake.in"
-%    "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
-%    INSTALL_DESTINATION "${INSTALL_CMAKEDIR}"
-%    PATH_VARS INSTALL_MODULEDIR
-%  )
-%  write_basic_package_version_file(
-%    "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-%    VERSION ${PROJECT_VERSION}
-%    COMPATIBILITY
-%    SameMajorVersion
-%    ARCH_INDEPENDENT
-%  )
-%  # On install, copy the header files to the appropriate location.
-%  install(
-%    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/"
-%    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-%    FILES_MATCHING PATTERN "*.hpp"
-%  )
-%  # Also copy the artefacts generated at build time into the include directory.
-%  install(
-%    FILES "${CMAKE_CURRENT_BINARY_DIR}/version.hpp"
-%    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-%  )
-%  install(TARGETS "${PROJECT_NAME}" "${PROJECT_NAME}_compile_requirements" EXPORT "${PROJECT_NAME}Export")
-%  install(
-%    FILES
-%    "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
-%    "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-%    DESTINATION
-%    "${INSTALL_CMAKEDIR}"
-%  )
-%  install(
-%    EXPORT "${PROJECT_NAME}Export"
-%    DESTINATION "${INSTALL_MODULEDIR}"
-%    NAMESPACE "${PROJECT_NAME}::"
-%    FILE "${PROJECT_NAME}Targets.cmake"
-%  )
-%  if(${PROJECT_NAME}_INSTALL_DOCS)
-%    install(
-%      DIRECTORY docs/
-%      DESTINATION "${CMAKE_INSTALL_DOCDIR}"
-%    )
-%  endif()
-%endif()
+#if(${PROJECT_NAME}_INSTALL)
+#  include(InstallRequiredSystemLibraries)
+#  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/License.txt")
+#  set(CPACK_RESOURCE_FILE_README ${CMAKE_CURRENT_LIST_DIR}/README.md)
+#  include(CPack)
+#  set(INSTALL_MODULEDIR "${CMAKE_INSTALL_LIBDIR}/cmake")
+#  set(INSTALL_CMAKEDIR "${INSTALL_MODULEDIR}/${PROJECT_NAME}")
+#  configure_package_config_file(
+#    "${CMAKE_CURRENT_LIST_DIR}/cmake/${PROJECT_NAME}Config.cmake.in"
+#    "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
+#    INSTALL_DESTINATION "${INSTALL_CMAKEDIR}"
+#    PATH_VARS INSTALL_MODULEDIR
+#  )
+#  write_basic_package_version_file(
+#    "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
+#    VERSION ${PROJECT_VERSION}
+#    COMPATIBILITY
+#    SameMajorVersion
+#    ARCH_INDEPENDENT
+#  )
+#  # On install, copy the header files to the appropriate location.
+#  install(
+#    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/"
+#    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
+#    FILES_MATCHING PATTERN "*.hpp"
+#  )
+#  # Also copy the artefacts generated at build time into the include directory.
+#  install(
+#    FILES "${CMAKE_CURRENT_BINARY_DIR}/version.hpp"
+#    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
+#  )
+#  install(TARGETS "${PROJECT_NAME}" "${PROJECT_NAME}_compile_requirements" EXPORT "${PROJECT_NAME}Export")
+#  install(
+#    FILES
+#    "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
+#    "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
+#    DESTINATION
+#    "${INSTALL_CMAKEDIR}"
+#  )
+#  install(
+#    EXPORT "${PROJECT_NAME}Export"
+#    DESTINATION "${INSTALL_MODULEDIR}"
+#    NAMESPACE "${PROJECT_NAME}::"
+#    FILE "${PROJECT_NAME}Targets.cmake"
+#  )
+#  if(${PROJECT_NAME}_INSTALL_DOCS)
+#    install(
+#      DIRECTORY docs/
+#      DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+#    )
+#  endif()
+#endif()
