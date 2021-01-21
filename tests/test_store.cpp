@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include <core.hpp>
+#include <restore/core.hpp>
 
 using namespace std;
 class StoreTest : public ::testing::Environment {

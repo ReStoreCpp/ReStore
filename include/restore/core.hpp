@@ -3,6 +3,8 @@
 #include <vector>
 #include <optional>
 
+
+
 template <class BlockType>
 class ReStore
 {
@@ -71,6 +73,7 @@ class ReStore
     // Submits blocks to the replicated storage. They will be replicated among the ranks and can be
     // ReStored after a rank failure. Each rank has to call this function exactly once.
     // submitBlocks() also performs the replication and is therefore blocking until all ranks called it.
+    // Even if there are multiple receivers for a single block, serialize will be called only once per block.
     // 
     // serializeFunc: gets a reference to a block to serialize and a void * pointing to the destination
     //      (where to write the serialized block). it should return the number of bytes written.
@@ -84,7 +87,17 @@ class ReStore
         std::function<std::optional<std::pair<global_id, const BlockType&> >()> nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
+        // Allocate one send buffer per block range. That is, if blocks 
+
+        // Loop over the nextBlock generator to fetch all block we need to serialize
+            
+            // Determine the receivers of copies of this block
+            
+            // Call serialize once, instructing it to write the serialization at to one buffer
+
+            // Copy the serialization to the other receiver's buffers
         
+        // All blocks have been serialized, send & receive replicas
     }
 
     // pullBlocks()
