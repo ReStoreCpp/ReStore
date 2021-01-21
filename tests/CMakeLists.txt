@@ -13,12 +13,12 @@ set_target_properties(gmock PROPERTIES FOLDER extern)
 set_target_properties(gmock_main PROPERTIES FOLDER extern)
 
 # TODO Move to module
-macro(package_add_test TESTNAME)
+macro(package_add_test TESTNAME LIBRARIES)
     # create an exectuable in which the tests will be stored
     add_executable(${TESTNAME} ${ARGN})
     # link the Google test infrastructure, mocking library, and a default main fuction to
     # the test executable.  Remove g_test_main if writing your own main function.
-    target_link_libraries(${TESTNAME} gtest gmock gtest_main)
+    target_link_libraries(${TESTNAME} gtest gmock gtest_main ${LIBRARIES})
     # gtest_discover_tests replaces gtest_add_tests,
     # see https://cmake.org/cmake/help/v3.10/module/GoogleTest.html for more options to pass to it
     gtest_discover_tests(${TESTNAME}
@@ -27,6 +27,8 @@ macro(package_add_test TESTNAME)
         PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_DIR}"
     )
     set_target_properties(${TESTNAME} PROPERTIES FOLDER tests)
+    target_compile_options(${TESTNAME} INTERFACE "-g")
+    target_compile_options(${TESTNAME} INTERFACE "-Og")
 endmacro()
 
-package_add_test(test_store test_store.cpp)
+package_add_test(test_store ReStore::ReStore test_store.cpp)

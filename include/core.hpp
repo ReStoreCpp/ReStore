@@ -11,25 +11,37 @@ class ReStore
 
     // Defines how the serialized blocks are aligned in memory.
     // See the documentation for offsetMode() for details.
-    enum class OffsetMode : uint8_t { constant; explicit };
+    enum class OffsetMode : uint8_t { constant, lookUpTable };
 
-    ReStore(uint32_t replicationLevel, OffsetMode offsetMode, constOffset = 0) :
-        replicationLevel(replicationLevel),
-        offsetMode(offsetMode),
-        constOffset(constOffset) {
-        if (offsetMode == OffsetMode::explicit && constOffset != 0) {
-            throw runtime_error("Explicit offset mode set but the constant offset is not zero.")
+    // Global and local id. The global id is unique across all ranks, that is each copy of the
+    // same block has the same global id on all ranks. We can use the global id to request a
+    // block.
+    // TODO Do we need local ids?
+    typedef size_t global_id;
+
+    ReStore(uint32_t replicationLevel, OffsetMode offsetMode, size_t constOffset = 0) :
+        _replicationLevel(replicationLevel),
+        _offsetMode(offsetMode),
+        _constOffset(constOffset) {
+        if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
+            throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
+        }
+        if (offsetMode == OffsetMode::constant && constOffset == 0) {
+            throw std::runtime_error("Constant offset mode required a constOffset > 0.");
+        }
+        if (replicationLevel == 0) {
+            throw std::runtime_error("What is a replication level of 0 supposed to mean?");
         }
     }
 
     // Copying a ReStore object does not really make sense. It would be really hard and probably not
     // what you want to deep copy the replicated blocks (including the remote ones?), too.
     ReStore(const ReStore& other) = delete;
-    operator=(const ReStore& other) = delete;
+    ReStore& operator=(const ReStore& other) = delete;
 
     // Moving a ReStore is fine
-    // TODO Implement
-    ReStore& ReStore(ReStore&& other) {
+    ReStore(ReStore&& other) {
+        // TODO Implement
     }
 
     ReStore& operator=(ReStore&& other) {
@@ -43,13 +55,16 @@ class ReStore
     // replicationLevel()
     //
     // Get the replication level, that is how many copies of each block are scattered over the ranks.
-    uint32_t replicationLevel() const { return this->replicationLevel; }
+    uint32_t replicationLevel() const { return this->_replicationLevel; }
 
     // offsetMode()
     //
     // Get the offset mode that defines how the serialized blocks are aligned in memory.
     std::pair<OffsetMode, size_t> offsetMode() const {
-        return std::make_pair<OffsetMode, size_t>(this->offsetMode, this->constOffset);
+        assert(_offsetMode == OffsetMode::constant && _constOffset > 0 ||
+               _offsetMode == OffsetMode::lookUpTable && _constOffset == 0);
+               
+        return std::make_pair(this->_offsetMode, this->_constOffset);
     }
 
     // submitBlocks()
@@ -67,10 +82,10 @@ class ReStore
     //      are emitted by nextBlock.
     void submitBlocks(
         std::function<size_t(const BlockType&, void*)> serializeFunc,
-        std::function<std::optional<std::pair<size_t globalId, const BlockType&>>()> nextBlock,
+        std::function<std::optional<std::pair<global_id, const BlockType&> >()> nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
-
+        
     }
 
     // pullBlocks()
@@ -89,7 +104,9 @@ class ReStore
         std::vector<std::pair<size_t, size_t>> blockRanges,
         std::function<void(void*, size_t, size_t)> handleSerializedBlock,
         bool canBeParallelized = false // not supported yet
-    );
+    ) {
+        
+    }
 
     // pushBlocks()
     // 
@@ -107,17 +124,19 @@ class ReStore
     //      byte stream, a length in bytes of this encoding and the global id of this block.
     // canBeParallelized: Indicates if multiple handleSerializedBlock calls can happen on different
     //      inputs concurrently.
-    pushBlocks(
+    void pushBlocks(
         std::vector<std::pair<std::pair<size_t, size_t>, int>> blockRanges,
-        std::function<void(void*, length, globalId)> handleSerializedBlock,
+        std::function<void(void*, size_t, global_id)> handleSerializedBlock,
         bool canBeParallelized = false // not supported yet
-    );
+    ) {
+        
+    }
 
     private:
-    const uint16_t replicationLevel;
-    const offsetMode offsetMode;
-    const size_t constOffset;
-}
+    const uint16_t _replicationLevel;
+    const OffsetMode _offsetMode;
+    const size_t _constOffset;
+};
 
 /*
 Indended usage:
