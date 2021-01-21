@@ -6,7 +6,7 @@ class StoreTest : public ::testing::Environment {
     // You can remove any or all of the following functions if its body
     // is empty.
 
-    StoreTest() {};
+    StoreTest(){};
 
     virtual ~StoreTest() {
         // You can do clean-up work that doesn't throw exceptions here.
@@ -32,14 +32,15 @@ TEST(StoreTest, Constructor) {
     // Construction of a ReStore object
     ASSERT_NO_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::lookUpTable));
     ASSERT_NO_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::constant, sizeof(int)));
-    
+
     ASSERT_ANY_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::lookUpTable, sizeof(int)));
     ASSERT_ANY_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::constant, 0));
     ASSERT_ANY_THROW(ReStore<int>(0, ReStore<int>::OffsetMode::lookUpTable));
     ASSERT_ANY_THROW(ReStore<int>(0, ReStore<int>::OffsetMode::constant, sizeof(int)));
 
     // TODO Test a replication level that is larger than the number of ranks
-    // TODO Test a replication level that cannot be archived because of memory constraints
+    // TODO Test a replication level that cannot be archived because of memory
+    // constraints
 
     // Replication level and offset mode getters
     {
