@@ -13,11 +13,11 @@ class ReStore
     // See the documentation for offsetMode() for details.
     enum class OffsetMode : uint8_t { constant; explicit };
 
-    ReStore(uint32_t replicationLevel, OffsetMode offsetMode, const_offset = 0) :
+    ReStore(uint32_t replicationLevel, OffsetMode offsetMode, constOffset = 0) :
         replicationLevel(replicationLevel),
         offsetMode(offsetMode),
-        const_offset(constnt_offset) {
-        if (offsetMode == OffsetMode::explicit && const_offset != 0) {
+        constOffset(constOffset) {
+        if (offsetMode == OffsetMode::explicit && constOffset != 0) {
             throw runtime_error("Explicit offset mode set but the constant offset is not zero.")
         }
     }
@@ -49,7 +49,7 @@ class ReStore
     //
     // Get the offset mode that defines how the serialized blocks are aligned in memory.
     std::pair<OffsetMode, size_t> offsetMode() const {
-        return std::make_pair<OffsetMode, size_t>(this->offsetMode, this->const_offset);
+        return std::make_pair<OffsetMode, size_t>(this->offsetMode, this->constOffset);
     }
 
     // submitBlocks()
@@ -116,7 +116,7 @@ class ReStore
     private:
     const uint16_t replicationLevel;
     const offsetMode offsetMode;
-    const size_t const_offset;
+    const size_t constOffset;
 }
 
 /*
