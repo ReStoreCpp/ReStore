@@ -59,3 +59,10 @@ TEST(StoreTest, Constructor) {
         ASSERT_EQ(constOffset, 0);
     }
 }
+
+TEST(StoreTest, submitBlocks) {
+    auto store         = ReStore<uint8_t>(3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
+    auto serializeFunc = [](const uint8_t& block, void* buffer) { return size_t(1); };
+    auto nextBlock     = []() { return std::optional<std::pair<size_t, const uint8_t&>>(); };
+    store.submitBlocks(serializeFunc, nextBlock);
+}
