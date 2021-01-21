@@ -345,3 +345,6 @@ zsdoc/data
 /tests/_output/*
 !/tests/_output/.gitkeep
 
+.clangd
+clangbuild
+
