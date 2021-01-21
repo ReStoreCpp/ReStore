@@ -1,5 +1,7 @@
+#include <cstdint>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -60,8 +62,8 @@ class ReStore {
     // Get the offset mode that defines how the serialized blocks are aligned in memory.
     std::pair<OffsetMode, size_t> offsetMode() const {
         assert(
-            _offsetMode == OffsetMode::constant && _constOffset > 0
-            || _offsetMode == OffsetMode::lookUpTable && _constOffset == 0);
+            (_offsetMode == OffsetMode::constant && _constOffset > 0)
+            || (_offsetMode == OffsetMode::lookUpTable && _constOffset == 0));
 
         return std::make_pair(this->_offsetMode, this->_constOffset);
     }
