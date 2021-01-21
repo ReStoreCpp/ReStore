@@ -9,6 +9,13 @@ endif()
 # Project settings
 project(ReStore VERSION 0.1.0 LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 11)
+
+find_package(MPI REQUIRED)
+if(MPI_CXX_FOUND)
+  include_directories(${MPI_CXX_INCLUDE_PATH})
+endif()
+
 # Look in the /cmake dir for CMake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 

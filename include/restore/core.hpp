@@ -1,9 +1,14 @@
+#ifndef RESTORE_CORE_H
+#define RESTORE_CORE_H
+
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
+
+#include "mpi_context.hpp"
 
 
 template <class BlockType>
@@ -158,3 +163,5 @@ storage.submitBlocks(...)
 !! failure !!
 pushPullBlocks(...) || pullBlocks(...)
 */
+
+#endif // RESTORE_CORE_H
