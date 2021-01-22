@@ -94,19 +94,20 @@ class ReStore {
         std::function<std::optional<std::pair<global_id, const BlockType&>>()> nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
-        // Allocate one send buffer per block range. That is, if blocks
+        // Determine which rank will get which block range
+    
+        // Allocate one send buffer per block range. That is, those ranks which get the same blocks share a common
+        // sendbuffer.
 
         // Loop over the nextBlock generator to fetch all block we need to serialize
 
         // Determine the receivers of copies of this block
 
-        // Call serialize once, instructing it to write the serialization at to one buffer
-
-        // Copy the serialization to the other receiver's buffers
+        // Call serialize once, instructing it to write the serialization to one buffer
 
         // All blocks have been serialized, send & receive replicas
         std::vector<ReStoreMPIContext::Message<unsigned char>> messages;
-        mpiContext.SparseAllToall(messages);
+        mpiContext.SparseAllToAll(messages);
     }
 
     // pullBlocks()
