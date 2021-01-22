@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
-#include <restore/core.hpp>
+#include "restore/core.hpp"
+#include "restore/helpers.hpp"
+
+#include <mpi/mpi.h>
 
 using namespace std;
 class StoreTest : public ::testing::Environment {
@@ -30,13 +33,13 @@ class StoreTest : public ::testing::Environment {
 
 TEST(StoreTest, Constructor) {
     // Construction of a ReStore object
-    ASSERT_NO_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::lookUpTable));
-    ASSERT_NO_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::constant, sizeof(int)));
+    ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::lookUpTable));
+    ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, sizeof(int)));
 
-    ASSERT_ANY_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::lookUpTable, sizeof(int)));
-    ASSERT_ANY_THROW(ReStore<int>(3, ReStore<int>::OffsetMode::constant, 0));
-    ASSERT_ANY_THROW(ReStore<int>(0, ReStore<int>::OffsetMode::lookUpTable));
-    ASSERT_ANY_THROW(ReStore<int>(0, ReStore<int>::OffsetMode::constant, sizeof(int)));
+    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::lookUpTable, sizeof(int)));
+    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, 0));
+    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 0, ReStore<int>::OffsetMode::lookUpTable));
+    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 0, ReStore<int>::OffsetMode::constant, sizeof(int)));
 
     // TODO Test a replication level that is larger than the number of ranks
     // TODO Test a replication level that cannot be archived because of memory
@@ -44,7 +47,7 @@ TEST(StoreTest, Constructor) {
 
     // Replication level and offset mode getters
     {
-        auto store = ReStore<uint8_t>(3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
+        auto store = ReStore<uint8_t>(MPI_COMM_WORLD, 3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
         ASSERT_EQ(store.replicationLevel(), 3);
         auto [offsetMode, constOffset] = store.offsetMode();
         ASSERT_EQ(offsetMode, ReStore<uint8_t>::OffsetMode::constant);
@@ -52,7 +55,7 @@ TEST(StoreTest, Constructor) {
     }
 
     {
-        auto store = ReStore<uint8_t>(10, ReStore<uint8_t>::OffsetMode::lookUpTable);
+        auto store = ReStore<uint8_t>(MPI_COMM_WORLD, 10, ReStore<uint8_t>::OffsetMode::lookUpTable);
         ASSERT_EQ(store.replicationLevel(), 10);
         auto [offsetMode, constOffset] = store.offsetMode();
         ASSERT_EQ(offsetMode, ReStore<uint8_t>::OffsetMode::lookUpTable);
@@ -61,8 +64,12 @@ TEST(StoreTest, Constructor) {
 }
 
 TEST(StoreTest, submitBlocks) {
-    auto store         = ReStore<uint8_t>(3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
-    auto serializeFunc = [](const uint8_t& block, void* buffer) { return size_t(1); };
+    auto store         = ReStore<uint8_t>(MPI_COMM_WORLD, 3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
+    auto serializeFunc = [](const uint8_t& block, void* buffer) {
+        UNUSED(block);
+        UNUSED(buffer);
+        return size_t(1);
+    };
     auto nextBlock     = []() { return std::optional<std::pair<size_t, const uint8_t&>>(); };
     store.submitBlocks(serializeFunc, nextBlock);
 }
