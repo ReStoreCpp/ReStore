@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include <mpi/mpi.h>
 #include "mpi_context.hpp"
+#include <mpi/mpi.h>
 
 
 template <class BlockType>
