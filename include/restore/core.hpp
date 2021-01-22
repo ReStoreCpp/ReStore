@@ -43,7 +43,7 @@ class ReStore {
         : _replicationLevel(replicationLevel),
           _offsetMode(offsetMode),
           _constOffset(constOffset),
-          mpiContext(MPI_COMM_WORLD) {
+          _mpiContext(mpiCommunicator) {
         if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
             throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
         } else if (offsetMode == OffsetMode::constant && constOffset == 0) {
@@ -124,7 +124,7 @@ class ReStore {
 
         // All blocks have been serialized, send & receive replicas
         std::vector<ReStoreMPIContext::Message<unsigned char>> messages;
-        mpiContext.SparseAllToAll(messages);
+        _mpiContext.SparseAllToAll(messages);
     }
 
     // pullBlocks()
@@ -171,7 +171,7 @@ class ReStore {
     const uint16_t    _replicationLevel;
     const OffsetMode  _offsetMode;
     const size_t      _constOffset;
-    ReStoreMPIContext mpiContext;
+    ReStoreMPIContext _mpiContext;
 
     void _assertInvariants() const {
         assert(
