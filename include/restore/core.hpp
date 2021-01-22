@@ -27,7 +27,19 @@ class ReStore {
 
     typedef size_t global_id;
 
-    ReStore(uint32_t replicationLevel, OffsetMode offsetMode, size_t constOffset = 0)
+    // Constructor
+    //
+    // mpiCommunicator: The MPI Communicator to use.
+    // replicationLevel: The number of replicas to distribute among the different ranks.
+    // offsetMode: When the serialized blocks are stored in memory, we need to know at which memory location
+    //      each block starts. For large blocks, we can afford a look-up-table. This has the advantage that
+    //      we can handle blocks with different lengths. For very small blocks, however, a look-up-table would
+    //      incur too much of an memory overhead. Take for example block sizes of 4 bytes, resulting in millions
+    //      or billions of blocks per rank. By using a constant offset, we can still store that many blocks without
+    //      a look-up-table. The drawback is, that each block will take up constOffset _bytes_ of space.
+    // constOffset: An upper bound for the number of _bytes_ a serialized block takes up. Has to be equal to 0
+    //      when using look-up-table offset mode and greater than 0 when using consOffset mode.
+    ReStore(MPI_Comm mpiCommunicator, uint32_t replicationLevel, OffsetMode offsetMode, size_t constOffset = 0)
         : _replicationLevel(replicationLevel),
           _offsetMode(offsetMode),
           _constOffset(constOffset),
