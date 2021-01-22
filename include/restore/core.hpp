@@ -1,6 +1,7 @@
 #ifndef RESTORE_CORE_H
 #define RESTORE_CORE_H
 
+#include <cassert>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -33,11 +34,13 @@ class ReStore {
           mpiContext(MPI_COMM_WORLD) {
         if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
             throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
-        }
-        if (offsetMode == OffsetMode::constant && constOffset == 0) {
+        } else if (offsetMode == OffsetMode::constant && constOffset == 0) {
             throw std::runtime_error("Constant offset mode required a constOffset > 0.");
+        } else if (replicationLevel == 0) {
+            throw std::runtime_error("What is a replication level of 0 supposed to mean?");
+        } else {
+            _assertInvariants();
         }
-        if (replicationLevel == 0) { throw std::runtime_error("What is a replication level of 0 supposed to mean?"); }
     }
 
     // Copying a ReStore object does not really make sense. It would be really hard and probably not
@@ -62,16 +65,16 @@ class ReStore {
     // replicationLevel()
     //
     // Get the replication level, that is how many copies of each block are scattered over the ranks.
-    uint32_t replicationLevel() const { return this->_replicationLevel; }
+    uint32_t replicationLevel() const {
+        _assertInvariants();
+        return this->_replicationLevel;
+    }
 
     // offsetMode()
     //
     // Get the offset mode that defines how the serialized blocks are aligned in memory.
     std::pair<OffsetMode, size_t> offsetMode() const {
-        assert(
-            (_offsetMode == OffsetMode::constant && _constOffset > 0)
-            || (_offsetMode == OffsetMode::lookUpTable && _constOffset == 0));
-
+        _assertInvariants();
         return std::make_pair(this->_offsetMode, this->_constOffset);
     }
 
@@ -94,8 +97,10 @@ class ReStore {
         std::function<std::optional<std::pair<global_id, const BlockType&>>()> nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
+        _assertInvariants();
+
         // Determine which rank will get which block range
-    
+
         // Allocate one send buffer per block range. That is, those ranks which get the same blocks share a common
         // sendbuffer.
 
@@ -155,6 +160,13 @@ class ReStore {
     const OffsetMode  _offsetMode;
     const size_t      _constOffset;
     ReStoreMPIContext mpiContext;
+
+    void _assertInvariants() const {
+        assert(
+            (_offsetMode == OffsetMode::constant && _constOffset > 0)
+            || (_offsetMode == OffsetMode::lookUpTable && _constOffset == 0));
+        assert(_replicationLevel > 0);
+    }
 };
 
 /*

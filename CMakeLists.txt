@@ -19,6 +19,7 @@ endif()
 # Look in the /cmake dir for CMake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
+# Require out-of-source builds
 include(require_out_of_source_builds)
 require_out_of_source_builds()
 
