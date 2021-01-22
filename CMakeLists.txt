@@ -9,7 +9,7 @@ endif()
 # Project settings
 project(ReStore VERSION 0.1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 find_package(MPI REQUIRED)
 if(MPI_CXX_FOUND)
