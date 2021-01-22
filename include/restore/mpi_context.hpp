@@ -2,7 +2,7 @@
 #define MPI_CONTEXT_H
 
 #include <memory>
-#include <mpi/mpi.h>
+#include <mpi.h>
 #include <vector>
 
 class ReStoreMPIContext {

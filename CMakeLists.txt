@@ -13,7 +13,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(MPI REQUIRED)
 if(MPI_CXX_FOUND)
-  include_directories(${MPI_CXX_INCLUDE_PATH})
+  include_directories(BEFORE SYSTEM ${MPI_CXX_INCLUDE_PATH})
+  link_libraries(${MPI_LIBRARIES})
 endif()
 
 # Look in the /cmake dir for CMake modules

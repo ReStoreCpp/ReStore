@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "mpi_context.hpp"
-#include <mpi/mpi.h>
+#include <mpi.h>
 
 
 template <class BlockType>
