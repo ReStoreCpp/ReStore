@@ -19,7 +19,7 @@ class ReStoreMPIContext {
     };
 
     template <typename T>
-    std::vector<Message<T>> SparseAllToall(const std::vector<Message<T>>& messages) {
+    std::vector<Message<T>> SparseAllToAll(const std::vector<Message<T>>& messages) {
         return {};
     }
 
