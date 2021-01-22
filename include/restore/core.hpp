@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "mpi.h"
+#include <mpi/mpi.h>
 #include "mpi_context.hpp"
 
 
