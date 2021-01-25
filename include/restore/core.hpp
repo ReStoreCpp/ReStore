@@ -123,7 +123,7 @@ class ReStore {
         // Call serialize once, instructing it to write the serialization to one buffer
 
         // All blocks have been serialized, send & receive replicas
-        std::vector<ReStoreMPIContext::Message<unsigned char>> messages;
+        std::vector<ReStoreMPIContext::Message> messages;
         _mpiContext.SparseAllToAll(messages);
     }
 

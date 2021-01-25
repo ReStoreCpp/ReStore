@@ -1,8 +1,10 @@
 #ifndef MPI_CONTEXT_H
 #define MPI_CONTEXT_H
 
+#include <cstdint>
 #include <memory>
 #include <mpi.h>
+#include <optional>
 #include <vector>
 
 class ReStoreMPIContext {
@@ -11,17 +13,30 @@ class ReStoreMPIContext {
 
     void updateComm(MPI_Comm comm) { _comm = comm; }
 
-    template <typename T>
-    struct Message {
-        std::shared_ptr<T> data;
-        int                size;
-        int                rank;
+    struct OriginalRank {
+        int rank;
+            operator int() const { return rank; }
     };
 
-    template <typename T>
-    std::vector<Message<T>> SparseAllToAll(const std::vector<Message<T>>& messages) {
-        return {};
-    }
+    struct CurrentRank {
+        int rank;
+            operator int() const { return rank; }
+    };
+
+    struct Message {
+        std::shared_ptr<uint8_t> data;
+        int                      size;
+        CurrentRank              rank;
+    };
+
+    OriginalRank getOriginalRank(CurrentRank rank) { return {rank.rank}; }
+
+    std::optional<CurrentRank> getCurrentRank(OriginalRank rank) { return {}; }
+
+    bool isAlive(OriginalRank rank) { return false; }
+
+
+    std::vector<Message> SparseAllToAll(const std::vector<Message>& messages) { return {}; }
 
     private:
     MPI_Comm _comm;
