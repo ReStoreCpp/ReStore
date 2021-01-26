@@ -123,7 +123,7 @@ class ReStore {
         // Call serialize once, instructing it to write the serialization to one buffer
 
         // All blocks have been serialized, send & receive replicas
-        std::vector<ReStoreMPIContext::Message> messages;
+        std::vector<ReStoreMPI::Message> messages;
         _mpiContext.SparseAllToAll(messages);
     }
 
@@ -168,10 +168,10 @@ class ReStore {
     ) {}
 
     private:
-    const uint16_t    _replicationLevel;
-    const OffsetMode  _offsetMode;
-    const size_t      _constOffset;
-    ReStoreMPIContext _mpiContext;
+    const uint16_t         _replicationLevel;
+    const OffsetMode       _offsetMode;
+    const size_t           _constOffset;
+    ReStoreMPI::MPIContext _mpiContext;
 
     void _assertInvariants() const {
         assert(

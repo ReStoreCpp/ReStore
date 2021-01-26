@@ -7,23 +7,24 @@
 #include <optional>
 #include <vector>
 
-// TODO Put this into a namespace
+namespace ReStoreMPI {
+
 enum class OriginalRank : int {};
 enum class CurrentRank : int {};
 
-class ReStoreMPIContext {
+struct Message {
+    std::shared_ptr<uint8_t> data;
+    int                      size;
+    CurrentRank              rank;
+};
+
+class MPIContext {
     public:
-    ReStoreMPIContext(MPI_Comm comm) : _comm(comm) {}
+    MPIContext(MPI_Comm comm) : _comm(comm) {}
 
     void updateComm(MPI_Comm comm) { _comm = comm; }
 
-    struct Message {
-        std::shared_ptr<uint8_t> data;
-        int                      size;
-        CurrentRank              rank;
-    };
-
-    OriginalRank getOriginalRank(CurrentRank rank) { return static_cast<OriginalRank>(static_cast<int>(rank)); }
+    OriginalRank getOriginalRank(CurrentRank rank) { return static_cast<OriginalRank>(rank); }
 
     std::optional<CurrentRank> getCurrentRank(OriginalRank rank) { return {}; }
 
@@ -34,5 +35,7 @@ class ReStoreMPIContext {
     private:
     MPI_Comm _comm;
 };
+
+} // namespace ReStoreMPI
 
 #endif // MPI_CONTEXT_H
