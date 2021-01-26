@@ -7,21 +7,15 @@
 #include <optional>
 #include <vector>
 
+// TODO Put this into a namespace
+enum class OriginalRank : int {};
+enum class CurrentRank : int {};
+
 class ReStoreMPIContext {
     public:
     ReStoreMPIContext(MPI_Comm comm) : _comm(comm) {}
 
     void updateComm(MPI_Comm comm) { _comm = comm; }
-
-    struct OriginalRank {
-        int rank;
-            operator int() const { return rank; }
-    };
-
-    struct CurrentRank {
-        int rank;
-            operator int() const { return rank; }
-    };
 
     struct Message {
         std::shared_ptr<uint8_t> data;
@@ -29,12 +23,11 @@ class ReStoreMPIContext {
         CurrentRank              rank;
     };
 
-    OriginalRank getOriginalRank(CurrentRank rank) { return {rank.rank}; }
+    OriginalRank getOriginalRank(CurrentRank rank) { return static_cast<OriginalRank>(static_cast<int>(rank)); }
 
     std::optional<CurrentRank> getCurrentRank(OriginalRank rank) { return {}; }
 
     bool isAlive(OriginalRank rank) { return false; }
-
 
     std::vector<Message> SparseAllToAll(const std::vector<Message>& messages) { return {}; }
 
