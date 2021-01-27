@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "restore/core.hpp"
 #include "restore/helpers.hpp"
+#include <gtest/gtest.h>
 
 #include <mpi/mpi.h>
 
@@ -70,6 +70,6 @@ TEST(StoreTest, submitBlocks) {
         UNUSED(buffer);
         return size_t(1);
     };
-    auto nextBlock     = []() { return std::optional<std::pair<size_t, const uint8_t&>>(); };
+    auto nextBlock = []() { return std::optional<std::pair<size_t, const uint8_t&>>(); };
     store.submitBlocks(serializeFunc, nextBlock);
 }
