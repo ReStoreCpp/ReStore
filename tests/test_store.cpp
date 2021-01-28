@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "restore/core.hpp"
 #include "restore/helpers.hpp"
+#include <gtest/gtest.h>
 
 #include <mpi/mpi.h>
 
@@ -31,7 +31,7 @@ class StoreTest : public ::testing::Environment {
     // Objects declared here can be used by all tests in the test case for Foo.
 };
 
-TEST(StoreTest, Constructor) {
+TEST(StoreTest, ReStore_Constructor) {
     // Construction of a ReStore object
     ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::lookUpTable));
     ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, sizeof(int)));
@@ -63,13 +63,13 @@ TEST(StoreTest, Constructor) {
     }
 }
 
-TEST(StoreTest, submitBlocks) {
+TEST(StoreTest, ReStore_submitBlocks) {
     auto store         = ReStore<uint8_t>(MPI_COMM_WORLD, 3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
-    auto serializeFunc = [](const uint8_t& block, void* buffer) {
+    auto serializeFunc = [](const ReStore<uint8_t>::block_id_t& block, void* buffer) {
         UNUSED(block);
         UNUSED(buffer);
         return size_t(1);
     };
-    auto nextBlock     = []() { return std::optional<std::pair<size_t, const uint8_t&>>(); };
+    auto nextBlock = []() { return std::optional<std::pair<ReStore<uint8_t>::block_id_t, const uint8_t&>>(); };
     store.submitBlocks(serializeFunc, nextBlock);
 }
