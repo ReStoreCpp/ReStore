@@ -22,15 +22,25 @@ class MPIContext {
     public:
     MPIContext(MPI_Comm comm) : _comm(comm) {}
 
-    void updateComm(MPI_Comm comm) { _comm = comm; }
+    void updateComm(MPI_Comm comm) {
+        _comm = comm;
+    }
 
-    OriginalRank getOriginalRank(CurrentRank rank) const { return static_cast<OriginalRank>(rank); }
+    OriginalRank getOriginalRank(CurrentRank rank) const {
+        return static_cast<OriginalRank>(rank);
+    }
 
-    std::optional<CurrentRank> getCurrentRank(OriginalRank rank) const { return {}; }
+    std::optional<CurrentRank> getCurrentRank(OriginalRank rank) const {
+        return {};
+    }
 
-    bool isAlive(OriginalRank rank) const { return false; }
+    bool isAlive(OriginalRank rank) const {
+        return false;
+    }
 
-    std::vector<Message> SparseAllToAll(const std::vector<Message>& messages) const { return {}; }
+    std::vector<Message> SparseAllToAll(const std::vector<Message>& messages) const {
+        return {};
+    }
 
     private:
     MPI_Comm _comm;

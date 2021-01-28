@@ -86,7 +86,9 @@ class ReStore {
             // partOf()
             //
             // Returns true if the given block is part of this range; false otherwise
-            bool includes(block_id_t block) { return block >= this->start && block < this->start + this->length; }
+            bool includes(block_id_t block) {
+                return block >= this->start && block < this->start + this->length;
+            }
         };
 
         BlockDistribution(
