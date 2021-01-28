@@ -7,32 +7,35 @@
 #include <optional>
 #include <vector>
 
-// TODO Put this into a namespace
+namespace ReStoreMPI {
+
 enum class OriginalRank : int {};
 enum class CurrentRank : int {};
 
-class ReStoreMPIContext {
+struct Message {
+    std::shared_ptr<uint8_t> data;
+    int                      size;
+    CurrentRank              rank;
+};
+
+class MPIContext {
     public:
-    ReStoreMPIContext(MPI_Comm comm) : _comm(comm) {}
+    MPIContext(MPI_Comm comm) : _comm(comm) {}
 
     void updateComm(MPI_Comm comm) { _comm = comm; }
 
-    struct Message {
-        std::shared_ptr<uint8_t> data;
-        int                      size;
-        CurrentRank              rank;
-    };
+    OriginalRank getOriginalRank(CurrentRank rank) const { return static_cast<OriginalRank>(rank); }
 
-    OriginalRank getOriginalRank(CurrentRank rank) { return static_cast<OriginalRank>(static_cast<int>(rank)); }
+    std::optional<CurrentRank> getCurrentRank(OriginalRank rank) const { return {}; }
 
-    std::optional<CurrentRank> getCurrentRank(OriginalRank rank) { return {}; }
+    bool isAlive(OriginalRank rank) const { return false; }
 
-    bool isAlive(OriginalRank rank) { return false; }
-
-    std::vector<Message> SparseAllToAll(const std::vector<Message>& messages) { return {}; }
+    std::vector<Message> SparseAllToAll(const std::vector<Message>& messages) const { return {}; }
 
     private:
     MPI_Comm _comm;
 };
+
+} // namespace ReStoreMPI
 
 #endif // MPI_CONTEXT_H

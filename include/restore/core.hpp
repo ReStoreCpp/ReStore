@@ -53,8 +53,8 @@ class ReStore {
         // BlockDistribution object.
         struct BlockRange {
             block_id_t start;
-            size_t  length;
-            size_t  id;
+            size_t     length;
+            size_t     id;
 
             // Constructor
             //
@@ -86,12 +86,11 @@ class ReStore {
             // partOf()
             //
             // Returns true if the given block is part of this range; false otherwise
-            bool includes(block_id_t block) {
-                return block >= this->start && block < this->start + this->length;
-            }
+            bool includes(block_id_t block) { return block >= this->start && block < this->start + this->length; }
         };
 
-        BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, ReStoreMPIContext& mpiContext)
+        BlockDistribution(
+            uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, ReStoreMPI::MPIContext& mpiContext)
             : _numRanks(numRanks),
               _numBlocks(numBlocks),
               _replicationLevel(replicationLevel),
@@ -130,7 +129,7 @@ class ReStore {
         // ranksBlockIsStoredOn()
         //
         // Returns the ranks the given block is stored on. The ranks are identified by their original rank id.
-        std::vector<OriginalRank> ranksBlockIsStoredOn(block_id_t block) const {
+        std::vector<ReStoreMPI::OriginalRank> ranksBlockIsStoredOn(block_id_t block) const {
             assert(block < _numBlocks);
             BlockRange range = rangeForBlock(block);
             assert(range.start.id < _numBlocks);
@@ -139,16 +138,16 @@ class ReStore {
             assert(range.id < _numRanks);
 
             // The range is located on the rank with the same id ...
-            auto         rankIds   = std::vector<OriginalRank>();
-            OriginalRank firstRank = static_cast<OriginalRank>(range.id);
+            auto                     rankIds   = std::vector<ReStoreMPI::OriginalRank>();
+            ReStoreMPI::OriginalRank firstRank = static_cast<ReStoreMPI::OriginalRank>(range.id);
             if (_mpiContext.isAlive(firstRank)) {
                 rankIds.push_back(firstRank);
             }
 
             // ... and on <replication level> - 1 further ranks, all <shift width> apart.
             for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
-                OriginalRank nextRank =
-                    static_cast<OriginalRank>((static_cast<int>(firstRank) + _shiftWidth * replica) % _numRanks);
+                ReStoreMPI::OriginalRank nextRank = static_cast<ReStoreMPI::OriginalRank>(
+                    (static_cast<int>(firstRank) + _shiftWidth * replica) % _numRanks);
                 assert(static_cast<int>(nextRank) < _numRanks);
                 if (_mpiContext.isAlive(nextRank)) {
                     rankIds.push_back(nextRank);
@@ -161,7 +160,7 @@ class ReStore {
         // rangesStoredOnRank()
         //
         //  Returns the block ranges residing on the given rank
-        std::vector<BlockRange> rangesStoredOnRank(OriginalRank rankId) const {
+        std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::OriginalRank rankId) const {
             assert(static_cast<int>(rankId) >= 0);
             assert(static_cast<int>(rankId) < _numRanks);
 
@@ -179,7 +178,7 @@ class ReStore {
         // isStoredOn()
         //
         // Returns true if the given block or block range is stored on the given rank
-        bool isStoredOn(BlockRange blockRange, OriginalRank rankId) const {
+        bool isStoredOn(BlockRange blockRange, ReStoreMPI::OriginalRank rankId) const {
             assert(static_cast<int>(rankId) >= 0);
             assert(static_cast<int>(rankId) < _numRanks);
 
@@ -197,21 +196,23 @@ class ReStore {
             return false;
         }
 
-        bool isStoredOn(block_id_t block, OriginalRank rankId) const { return isStoredOn(rangeForBlock(block), rankId); }
+        bool isStoredOn(block_id_t block, ReStoreMPI::OriginalRank rankId) const {
+            return isStoredOn(rangeForBlock(block), rankId);
+        }
 
         private:
         uint32_t determineShiftWidth(uint32_t numRanks, uint16_t replicationLevel) const {
             return numRanks / replicationLevel;
         }
 
-        const size_t      _numBlocks;
-        const uint32_t    _numRanks;
-        const uint16_t    _replicationLevel;
-        const size_t      _blocksPerRange;
-        const size_t      _numRangesWithAdditionalBlock;
-        const size_t      _numRanges;
-        const size_t      _shiftWidth;
-        ReStoreMPIContext _mpiContext;
+        const size_t           _numBlocks;
+        const uint32_t         _numRanks;
+        const uint16_t         _replicationLevel;
+        const size_t           _blocksPerRange;
+        const size_t           _numRangesWithAdditionalBlock;
+        const size_t           _numRanges;
+        const size_t           _shiftWidth;
+        ReStoreMPI::MPIContext _mpiContext;
     };
 
     // Constructor
@@ -292,7 +293,7 @@ class ReStore {
     //      concurrently. Also assumes that the blocks do not have to be serialized in the order they
     //      are emitted by nextBlock.
     void submitBlocks(
-        std::function<size_t(const BlockType&, void*)>                     serializeFunc,
+        std::function<size_t(const BlockType&, void*)>                          serializeFunc,
         std::function<std::optional<std::pair<block_id_t, const BlockType&>>()> nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
@@ -310,7 +311,7 @@ class ReStore {
         // Call serialize once, instructing it to write the serialization to one buffer
 
         // All blocks have been serialized, send & receive replicas
-        std::vector<ReStoreMPIContext::Message> messages;
+        std::vector<ReStoreMPI::Message> messages;
         _mpiContext.SparseAllToAll(messages);
     }
 
@@ -352,15 +353,15 @@ class ReStore {
     // this might be confusing when appearing in the interface.
     void pushBlocks(
         std::vector<std::pair<std::pair<size_t, size_t>, int>> blockRanges,
-        std::function<void(void*, size_t, block_id_t)>              handleSerializedBlock,
+        std::function<void(void*, size_t, block_id_t)>         handleSerializedBlock,
         bool                                                   canBeParallelized = false // not supported yet
     ) {}
 
     private:
-    const uint16_t    _replicationLevel;
-    const OffsetMode  _offsetMode;
-    const size_t      _constOffset;
-    ReStoreMPIContext _mpiContext;
+    const uint16_t         _replicationLevel;
+    const OffsetMode       _offsetMode;
+    const size_t           _constOffset;
+    ReStoreMPI::MPIContext _mpiContext;
 
     void _assertInvariants() const {
         assert(
