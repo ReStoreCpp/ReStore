@@ -70,6 +70,131 @@ TEST(StoreTest, ReStore_submitBlocks) {
         UNUSED(buffer);
         return size_t(1);
     };
-    auto nextBlock = []() { return std::optional<std::pair<ReStore<uint8_t>::block_id_t, const uint8_t&>>(); };
+    auto nextBlock = []() {
+        return std::optional<std::pair<ReStore<uint8_t>::block_id_t, const uint8_t&>>();
+    };
     store.submitBlocks(serializeFunc, nextBlock);
+}
+
+TEST(StoreTest, ReStore_BlockDistribution) {
+    // BlockRange(size_t range_id, size_t numBlocks, size_t numRanges) {
+    // bool includes(block_id_t block) {
+    typedef ReStore<u_int8_t>::BlockDistribution::BlockRange BlockRange;
+
+    ASSERT_ANY_THROW(BlockRange(100, 1, 10)); // Range id greater than the number of ranges
+    ASSERT_ANY_THROW(BlockRange(0, 1, 2));    // More ranges than blocks
+
+    {
+        auto range = BlockRange(0, 100, 10);
+        ASSERT_EQ(range.id, 0);
+        ASSERT_EQ(range.start, 0);
+        ASSERT_EQ(range.length, 10);
+
+        for (size_t blockId = 0; blockId < 10; blockId++) {
+            ASSERT_TRUE(range.contains(blockId));
+        }
+        for (size_t blockId = 10; blockId < 100; blockId++) {
+            ASSERT_FALSE(range.contains(blockId));
+        }
+
+        ASSERT_FALSE(range.contains(101));
+    }
+
+    {
+        auto range = BlockRange(2, 100, 10);
+        ASSERT_EQ(range.id, 2);
+        ASSERT_EQ(range.start, 20);
+        ASSERT_EQ(range.length, 10);
+
+        for (size_t blockId = 0; blockId < 20; blockId++) {
+            ASSERT_FALSE(range.contains(blockId));
+        }
+        for (size_t blockId = 20; blockId < 30; blockId++) {
+            ASSERT_TRUE(range.contains(blockId));
+        }
+        for (size_t blockId = 30; blockId < 100; blockId++) {
+            ASSERT_FALSE(range.contains(blockId));
+        }
+
+        ASSERT_FALSE(range.contains(101));
+    }
+
+    {
+        // range 0: 0, 1, 2, 3
+        // range 1: 4, 5, 6
+        // range 2: 7, 8, 9
+        auto range0 = BlockRange(0, 10, 3);
+        ASSERT_TRUE(range0.contains(0));
+        ASSERT_TRUE(range0.contains(1));
+        ASSERT_TRUE(range0.contains(2));
+        ASSERT_TRUE(range0.contains(3));
+        ASSERT_FALSE(range0.contains(4));
+        ASSERT_FALSE(range0.contains(5));
+        ASSERT_FALSE(range0.contains(6));
+        ASSERT_FALSE(range0.contains(7));
+        ASSERT_FALSE(range0.contains(8));
+        ASSERT_FALSE(range0.contains(9));
+
+        auto range1 = BlockRange(1, 10, 3);
+        ASSERT_FALSE(range1.contains(0));
+        ASSERT_FALSE(range1.contains(1));
+        ASSERT_FALSE(range1.contains(2));
+        ASSERT_FALSE(range1.contains(3));
+        ASSERT_TRUE(range1.contains(4));
+        ASSERT_TRUE(range1.contains(5));
+        ASSERT_TRUE(range1.contains(6));
+        ASSERT_FALSE(range1.contains(7));
+        ASSERT_FALSE(range1.contains(8));
+        ASSERT_FALSE(range1.contains(9));
+
+        auto range2 = BlockRange(2, 10, 3);
+        ASSERT_FALSE(range2.contains(0));
+        ASSERT_FALSE(range2.contains(1));
+        ASSERT_FALSE(range2.contains(2));
+        ASSERT_FALSE(range2.contains(3));
+        ASSERT_FALSE(range2.contains(4));
+        ASSERT_FALSE(range2.contains(5));
+        ASSERT_FALSE(range2.contains(6));
+        ASSERT_TRUE(range2.contains(7));
+        ASSERT_TRUE(range2.contains(8));
+        ASSERT_TRUE(range2.contains(9));
+    }
+
+    {
+        // range0: 0, 1
+        // range1: 2, 3
+        // range2: 4
+        // range3: 5
+        auto range0 = BlockRange(0, 6, 4);
+        ASSERT_TRUE(range0.contains(0));
+        ASSERT_TRUE(range0.contains(1));
+        ASSERT_FALSE(range0.contains(2));
+        ASSERT_FALSE(range0.contains(3));
+        ASSERT_FALSE(range0.contains(4));
+        ASSERT_FALSE(range0.contains(5));
+
+        auto range1 = BlockRange(1, 6, 4);
+        ASSERT_FALSE(range1.contains(0));
+        ASSERT_FALSE(range1.contains(1));
+        ASSERT_TRUE(range1.contains(2));
+        ASSERT_TRUE(range1.contains(3));
+        ASSERT_FALSE(range1.contains(4));
+        ASSERT_FALSE(range1.contains(5));
+
+        auto range2 = BlockRange(2, 6, 4);
+        ASSERT_FALSE(range2.contains(0));
+        ASSERT_FALSE(range2.contains(1));
+        ASSERT_FALSE(range2.contains(2));
+        ASSERT_FALSE(range2.contains(3));
+        ASSERT_TRUE(range2.contains(4));
+        ASSERT_FALSE(range2.contains(5));
+
+        auto range3 = BlockRange(3, 6, 4);
+        ASSERT_FALSE(range3.contains(0));
+        ASSERT_FALSE(range3.contains(1));
+        ASSERT_FALSE(range3.contains(2));
+        ASSERT_FALSE(range3.contains(3));
+        ASSERT_FALSE(range3.contains(4));
+        ASSERT_TRUE(range3.contains(5));
+    }
 }

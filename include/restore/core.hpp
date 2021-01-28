@@ -60,8 +60,10 @@ class ReStore {
             //
             // Build a block range from the given block id. We need to know the number of blocks and the number ranges
             // to compute the starting block and number of block in this BlockRange.
-            BlockRange(size_t range_id, size_t numBlocks, size_t numRanges) {
-                assert(numRanges <= numBlocks);
+            BlockRange(size_t range_id, size_t numBlocks, size_t numRanges) : id(range_id) {
+                if (numRanges > numBlocks) {
+                    throw std::runtime_error("There cannot be more block ranges than blocks.");
+                }
 
                 size_t blocksPerRange               = numBlocks / numRanges;
                 size_t numRangesWithAdditionalBlock = numBlocks - blocksPerRange * numRanges;
@@ -80,7 +82,7 @@ class ReStore {
                 }
 
                 assert(start < numBlocks);
-                assert(length == blocksPerRange || length == blocksPerRange - 1);
+                assert(length == blocksPerRange || length == blocksPerRange + 1);
             }
 
             // contains()
