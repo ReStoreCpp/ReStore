@@ -22,8 +22,7 @@ TEST(MPIContext, SparseAllToAll) {
     for (int target = (rank + 2) % size; target != rank && target != (rank + 1) % size; target = (target + 2) % size) {
         sendMessages.emplace_back(
             ReStoreMPI::Message{std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(new int[2]{rank, target})),
-                                2 * sizeof(int),
-                                static_cast<ReStoreMPI::CurrentRank>(target)});
+                                2 * sizeof(int), static_cast<ReStoreMPI::CurrentRank>(target)});
     }
     auto receiveMessages = context.SparseAllToAll(sendMessages);
 
@@ -32,17 +31,14 @@ TEST(MPIContext, SparseAllToAll) {
          source     = (source - 2 + 2 * size) % size) {
         receiveMessagesExpected.emplace_back(
             ReStoreMPI::Message{std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(new int[2]{source, rank})),
-                                2 * sizeof(int),
-                                static_cast<ReStoreMPI::CurrentRank>(source)});
+                                2 * sizeof(int), static_cast<ReStoreMPI::CurrentRank>(source)});
     }
 
     std::sort(
-        receiveMessages.begin(),
-        receiveMessages.end(),
+        receiveMessages.begin(), receiveMessages.end(),
         [](const ReStoreMPI::Message& lhs, const ReStoreMPI::Message& rhs) { return lhs.rank < rhs.rank; });
     std::sort(
-        receiveMessagesExpected.begin(),
-        receiveMessagesExpected.end(),
+        receiveMessagesExpected.begin(), receiveMessagesExpected.end(),
         [](const ReStoreMPI::Message& lhs, const ReStoreMPI::Message& rhs) { return lhs.rank < rhs.rank; });
 
     ASSERT_EQ(receiveMessagesExpected.size(), receiveMessages.size());
@@ -78,8 +74,7 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
     for (int target = (rank + 2) % size; target != rank && target != (rank + 1) % size; target = (target + 2) % size) {
         sendMessages.emplace_back(
             ReStoreMPI::Message{std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(new int[2]{rank, target})),
-                                2 * sizeof(int),
-                                static_cast<ReStoreMPI::CurrentRank>(target)});
+                                2 * sizeof(int), static_cast<ReStoreMPI::CurrentRank>(target)});
     }
     auto receiveMessages = context.SparseAllToAll(sendMessages);
 
@@ -88,17 +83,14 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
          source     = (source - 2 + 2 * size) % size) {
         receiveMessagesExpected.emplace_back(
             ReStoreMPI::Message{std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(new int[2]{source, rank})),
-                                2 * sizeof(int),
-                                static_cast<ReStoreMPI::CurrentRank>(source)});
+                                2 * sizeof(int), static_cast<ReStoreMPI::CurrentRank>(source)});
     }
 
     std::sort(
-        receiveMessages.begin(),
-        receiveMessages.end(),
+        receiveMessages.begin(), receiveMessages.end(),
         [](const ReStoreMPI::Message& lhs, const ReStoreMPI::Message& rhs) { return lhs.rank < rhs.rank; });
     std::sort(
-        receiveMessagesExpected.begin(),
-        receiveMessagesExpected.end(),
+        receiveMessagesExpected.begin(), receiveMessagesExpected.end(),
         [](const ReStoreMPI::Message& lhs, const ReStoreMPI::Message& rhs) { return lhs.rank < rhs.rank; });
 
     ASSERT_EQ(receiveMessagesExpected.size(), receiveMessages.size());
@@ -160,15 +152,19 @@ TEST(MPIContext, RankConversion) {
     std::vector<std::optional<ReStoreMPI::CurrentRank>> originalToCurrent;
     if (originalRank == 1 || originalRank == 2) {
         originalToCurrent.emplace_back(std::nullopt);
-        if (originalSize >= 2) originalToCurrent.emplace_back(ReStoreMPI::CurrentRank(0));
-        if (originalSize >= 3) originalToCurrent.emplace_back(ReStoreMPI::CurrentRank(1));
+        if (originalSize >= 2)
+            originalToCurrent.emplace_back(ReStoreMPI::CurrentRank(0));
+        if (originalSize >= 3)
+            originalToCurrent.emplace_back(ReStoreMPI::CurrentRank(1));
         for (int rank = 3; rank < originalSize; ++rank) {
             originalToCurrent.emplace_back(std::nullopt);
         }
     } else {
         originalToCurrent.emplace_back(ReStoreMPI::CurrentRank(0));
-        if (originalSize >= 2) originalToCurrent.emplace_back(std::nullopt);
-        if (originalSize >= 3) originalToCurrent.emplace_back(std::nullopt);
+        if (originalSize >= 2)
+            originalToCurrent.emplace_back(std::nullopt);
+        if (originalSize >= 3)
+            originalToCurrent.emplace_back(std::nullopt);
         for (int rank = 3; rank < originalSize; ++rank) {
             originalToCurrent.emplace_back(static_cast<ReStoreMPI::CurrentRank>(rank - 2));
         }
