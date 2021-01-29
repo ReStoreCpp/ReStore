@@ -31,4 +31,4 @@ macro(package_add_test TESTNAME LIBRARIES)
     target_compile_options(${TESTNAME} INTERFACE "-Og")
 endmacro()
 
-package_add_test(test_store ReStore::ReStore test_store.cpp)
+package_add_test(test_store "ReStore::ReStore;cppitertools" test_store.cpp)
