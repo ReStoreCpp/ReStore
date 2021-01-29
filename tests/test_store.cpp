@@ -198,3 +198,15 @@ TEST(StoreTest, ReStore_BlockDistribution) {
         ASSERT_TRUE(range3.contains(5));
     }
 }
+
+int main(int argc, char** argv) {
+    // Filter out Google Test arguments
+    ::testing::InitGoogleTest(&argc, argv);
+
+    // Initialize MPI
+    MPI_Init(&argc, &argv);
+
+    int result = RUN_ALL_TESTS();
+
+    return result;
+}
