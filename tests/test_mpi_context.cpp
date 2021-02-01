@@ -117,6 +117,7 @@ TEST(MPIContext, RankConversion) {
     MPI_Comm_rank(MPI_COMM_WORLD, &originalRank);
     MPI_Comm_size(MPI_COMM_WORLD, &originalSize);
     ReStoreMPI::MPIContext context(MPI_COMM_WORLD);
+    ASSERT_EQ(4, originalSize);
     for (int rank = 0; rank < originalSize; ++rank) {
         EXPECT_EQ(static_cast<ReStoreMPI::original_rank_t>(rank), context.getOriginalRank(rank));
         EXPECT_EQ(static_cast<ReStoreMPI::current_rank_t>(rank), context.getCurrentRank(rank));
@@ -211,5 +212,5 @@ int main(int argc, char** argv) {
     // pass and 1 if some test fails.
     int result = RUN_ALL_TESTS();
 
-    return 0;
+    return result;
 }
