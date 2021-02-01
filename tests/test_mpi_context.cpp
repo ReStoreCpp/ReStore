@@ -6,6 +6,7 @@
 #include <memory>
 #include <mpi.h>
 #include <mpi/mpi.h>
+#include <numeric>
 #include <optional>
 #include <vector>
 
@@ -177,6 +178,18 @@ TEST(MPIContext, RankConversion) {
         } else {
             EXPECT_EQ(true, context.isAlive(static_cast<ReStoreMPI::OriginalRank>(rank)));
         }
+    }
+
+    std::vector<ReStoreMPI::OriginalRank> allRanksOriginal(originalSize);
+    std::iota(allRanksOriginal.begin(), allRanksOriginal.end(), ReStoreMPI::OriginalRank(0));
+    std::vector<ReStoreMPI::CurrentRank> allRanksCurrentExpected(currentSize);
+    std::iota(allRanksCurrentExpected.begin(), allRanksCurrentExpected.end(), ReStoreMPI::CurrentRank(0));
+
+    auto allRanksCurrent = context.getAliveCurrentRanks(allRanksOriginal);
+
+    ASSERT_EQ(allRanksCurrentExpected.size(), allRanksCurrent.size());
+    for (size_t i = 0; i < allRanksCurrentExpected.size(); ++i) {
+        EXPECT_EQ(allRanksCurrentExpected[i], allRanksCurrent[i]);
     }
 }
 

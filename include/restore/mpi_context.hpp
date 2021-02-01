@@ -1,6 +1,8 @@
 #ifndef MPI_CONTEXT_H
 #define MPI_CONTEXT_H
 
+
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -14,8 +16,8 @@
 
 namespace ReStoreMPI {
 
-enum class OriginalRank : int {};
-enum class CurrentRank : int {};
+typedef int CurrentRank;
+typedef int OriginalRank;
 
 struct Message {
     std::shared_ptr<uint8_t> data;
@@ -49,6 +51,18 @@ class RankManager {
         MPI_Group_translate_ranks(_originalGroup, 1, &originalRank, _currentGroup, &currentRank);
         return currentRank != MPI_UNDEFINED ? std::optional<CurrentRank>(static_cast<CurrentRank>(currentRank))
                                             : std::nullopt;
+    }
+
+    std::vector<CurrentRank> getAliveCurrentRanks(const std::vector<OriginalRank>& originalRanks) const {
+        const int*               originalRanksPtr = reinterpret_cast<const int*>(originalRanks.data());
+        std::vector<CurrentRank> currentRanks(originalRanks.size());
+        int*                     currentRanksPtr = reinterpret_cast<int*>(currentRanks.data());
+        MPI_Group_translate_ranks(
+            _originalGroup, originalRanks.size(), originalRanksPtr, _currentGroup, currentRanksPtr);
+        std::remove_if(currentRanks.begin(), currentRanks.end(), [](const CurrentRank& rank) {
+            return rank == static_cast<CurrentRank>(MPI_UNDEFINED);
+        });
+        return currentRanks;
     }
 
     private:
@@ -124,6 +138,10 @@ class MPIContext {
 
     bool isAlive(const OriginalRank rank) const {
         return getCurrentRank(rank).has_value();
+    }
+
+    std::vector<CurrentRank> getAliveCurrentRanks(const std::vector<OriginalRank>& originalRanks) const {
+        return _rankManager.getAliveCurrentRanks(originalRanks);
     }
 
     std::vector<Message>
