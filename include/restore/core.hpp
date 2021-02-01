@@ -133,7 +133,7 @@ class ReStore {
         // ranksBlockIsStoredOn()
         //
         // Returns the ranks the given block is stored on. The ranks are identified by their original rank id.
-        std::vector<ReStoreMPI::OriginalRank> ranksBlockIsStoredOn(block_id_t block) const {
+        std::vector<ReStoreMPI::original_rank_t> ranksBlockIsStoredOn(block_id_t block) const {
             assert(block < _numBlocks);
             BlockRange range = rangeForBlock(block);
             assert(range.start.id < _numBlocks);
@@ -142,15 +142,15 @@ class ReStore {
             assert(range.id < _numRanks);
 
             // The range is located on the rank with the same id ...
-            auto                     rankIds   = std::vector<ReStoreMPI::OriginalRank>();
-            ReStoreMPI::OriginalRank firstRank = static_cast<ReStoreMPI::OriginalRank>(range.id);
+            auto                     rankIds   = std::vector<ReStoreMPI::original_rank_t>();
+            ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id);
             if (_mpiContext.isAlive(firstRank)) {
                 rankIds.push_back(firstRank);
             }
 
             // ... and on <replication level> - 1 further ranks, all <shift width> apart.
             for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
-                ReStoreMPI::OriginalRank nextRank = static_cast<ReStoreMPI::OriginalRank>(
+                ReStoreMPI::original_rank_t nextRank = static_cast<ReStoreMPI::original_rank_t>(
                     (static_cast<int>(firstRank) + _shiftWidth * replica) % _numRanks);
                 assert(static_cast<int>(nextRank) < _numRanks);
                 if (_mpiContext.isAlive(nextRank)) {
@@ -164,7 +164,7 @@ class ReStore {
         // rangesStoredOnRank()
         //
         //  Returns the block ranges residing on the given rank
-        std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::OriginalRank rankId) const {
+        std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::original_rank_t rankId) const {
             assert(static_cast<int>(rankId) >= 0);
             assert(static_cast<int>(rankId) < _numRanks);
 
@@ -182,7 +182,7 @@ class ReStore {
         // isStoredOn()
         //
         // Returns true if the given block or block range is stored on the given rank
-        bool isStoredOn(BlockRange blockRange, ReStoreMPI::OriginalRank rankId) const {
+        bool isStoredOn(BlockRange blockRange, ReStoreMPI::original_rank_t rankId) const {
             assert(static_cast<int>(rankId) >= 0);
             assert(static_cast<int>(rankId) < _numRanks);
 
@@ -200,7 +200,7 @@ class ReStore {
             return false;
         }
 
-        bool isStoredOn(block_id_t block, ReStoreMPI::OriginalRank rankId) const {
+        bool isStoredOn(block_id_t block, ReStoreMPI::original_rank_t rankId) const {
             return isStoredOn(rangeForBlock(block), rankId);
         }
 

@@ -16,13 +16,13 @@
 
 namespace ReStoreMPI {
 
-typedef int CurrentRank;
-typedef int OriginalRank;
+typedef int current_rank_t;
+typedef int original_rank_t;
 
 struct Message {
     std::shared_ptr<uint8_t> data;
     int                      size;
-    CurrentRank              rank;
+    current_rank_t              rank;
 };
 
 class RankManager {
@@ -37,25 +37,25 @@ class RankManager {
         MPI_Comm_group(newComm, &_currentGroup);
     }
 
-    OriginalRank getOriginalRank(const CurrentRank currentRank) const {
+    original_rank_t getOriginalRank(const current_rank_t currentRank) const {
         int originalRank;
         MPI_Group_translate_ranks(_currentGroup, 1, &currentRank, _originalGroup, &originalRank);
         assert(originalRank != MPI_UNDEFINED);
         return originalRank;
     }
 
-    std::optional<CurrentRank> getCurrentRank(const OriginalRank originalRank) const {
+    std::optional<current_rank_t> getCurrentRank(const original_rank_t originalRank) const {
         int currentRank;
         MPI_Group_translate_ranks(_originalGroup, 1, &originalRank, _currentGroup, &currentRank);
-        return currentRank != MPI_UNDEFINED ? std::optional<CurrentRank>(currentRank) : std::nullopt;
+        return currentRank != MPI_UNDEFINED ? std::optional<current_rank_t>(currentRank) : std::nullopt;
     }
 
-    std::vector<CurrentRank> getAliveCurrentRanks(const std::vector<OriginalRank>& originalRanks) const {
-        std::vector<CurrentRank> currentRanks(originalRanks.size());
+    std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
+        std::vector<current_rank_t> currentRanks(originalRanks.size());
         MPI_Group_translate_ranks(
             _originalGroup, originalRanks.size(), originalRanks.data(), _currentGroup, currentRanks.data());
         std::remove_if(
-            currentRanks.begin(), currentRanks.end(), [](const CurrentRank& rank) { return rank == MPI_UNDEFINED; });
+            currentRanks.begin(), currentRanks.end(), [](const current_rank_t& rank) { return rank == MPI_UNDEFINED; });
         return currentRanks;
     }
 
@@ -121,19 +121,19 @@ class MPIContext {
         _rankManager.updateComm(newComm);
     }
 
-    OriginalRank getOriginalRank(const CurrentRank rank) const {
+    original_rank_t getOriginalRank(const current_rank_t rank) const {
         return _rankManager.getOriginalRank(rank);
     }
 
-    std::optional<CurrentRank> getCurrentRank(const OriginalRank rank) const {
+    std::optional<current_rank_t> getCurrentRank(const original_rank_t rank) const {
         return _rankManager.getCurrentRank(rank);
     }
 
-    bool isAlive(const OriginalRank rank) const {
+    bool isAlive(const original_rank_t rank) const {
         return getCurrentRank(rank).has_value();
     }
 
-    std::vector<CurrentRank> getAliveCurrentRanks(const std::vector<OriginalRank>& originalRanks) const {
+    std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
         return _rankManager.getAliveCurrentRanks(originalRanks);
     }
 
