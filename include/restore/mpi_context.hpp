@@ -37,31 +37,25 @@ class RankManager {
         MPI_Comm_group(newComm, &_currentGroup);
     }
 
-    OriginalRank getOriginalRank(const CurrentRank rank) const {
-        int currentRank = static_cast<int>(rank);
+    OriginalRank getOriginalRank(const CurrentRank currentRank) const {
         int originalRank;
         MPI_Group_translate_ranks(_currentGroup, 1, &currentRank, _originalGroup, &originalRank);
         assert(originalRank != MPI_UNDEFINED);
-        return static_cast<OriginalRank>(originalRank);
+        return originalRank;
     }
 
-    std::optional<CurrentRank> getCurrentRank(const OriginalRank rank) const {
-        int originalRank = static_cast<int>(rank);
+    std::optional<CurrentRank> getCurrentRank(const OriginalRank originalRank) const {
         int currentRank;
         MPI_Group_translate_ranks(_originalGroup, 1, &originalRank, _currentGroup, &currentRank);
-        return currentRank != MPI_UNDEFINED ? std::optional<CurrentRank>(static_cast<CurrentRank>(currentRank))
-                                            : std::nullopt;
+        return currentRank != MPI_UNDEFINED ? std::optional<CurrentRank>(currentRank) : std::nullopt;
     }
 
     std::vector<CurrentRank> getAliveCurrentRanks(const std::vector<OriginalRank>& originalRanks) const {
-        const int*               originalRanksPtr = reinterpret_cast<const int*>(originalRanks.data());
         std::vector<CurrentRank> currentRanks(originalRanks.size());
-        int*                     currentRanksPtr = reinterpret_cast<int*>(currentRanks.data());
         MPI_Group_translate_ranks(
-            _originalGroup, originalRanks.size(), originalRanksPtr, _currentGroup, currentRanksPtr);
-        std::remove_if(currentRanks.begin(), currentRanks.end(), [](const CurrentRank& rank) {
-            return rank == static_cast<CurrentRank>(MPI_UNDEFINED);
-        });
+            _originalGroup, originalRanks.size(), originalRanks.data(), _currentGroup, currentRanks.data());
+        std::remove_if(
+            currentRanks.begin(), currentRanks.end(), [](const CurrentRank& rank) { return rank == MPI_UNDEFINED; });
         return currentRanks;
     }
 
@@ -78,8 +72,7 @@ void receiveNewMessage(std::vector<Message>& result, const MPI_Comm comm, const 
         assert(receiveStatus.MPI_TAG == tag);
         int size;
         MPI_Get_count(&receiveStatus, MPI_BYTE, &size);
-        result.emplace_back(Message{std::shared_ptr<uint8_t>(new uint8_t[size]), size,
-                                    static_cast<CurrentRank>(receiveStatus.MPI_SOURCE)});
+        result.emplace_back(Message{std::shared_ptr<uint8_t>(new uint8_t[size]), size, receiveStatus.MPI_SOURCE});
         MPI_Recv(
             result.back().data.get(), size, MPI_BYTE, receiveStatus.MPI_SOURCE, receiveStatus.MPI_TAG, comm,
             &receiveStatus);
@@ -92,7 +85,7 @@ std::vector<Message> SparseAllToAll(const std::vector<Message>& messages, const 
     for (size_t i = 0; i < messages.size(); ++i) {
         const auto&  message    = messages[i];
         MPI_Request* requestPtr = &requests[i];
-        MPI_Issend(message.data.get(), message.size, MPI_BYTE, static_cast<int>(message.rank), tag, comm, requestPtr);
+        MPI_Issend(message.data.get(), message.size, MPI_BYTE, message.rank, tag, comm, requestPtr);
     }
 
     // Receive messages until all messages sent have been received
