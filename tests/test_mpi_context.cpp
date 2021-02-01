@@ -82,9 +82,8 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
     std::vector<ReStoreMPI::Message> receiveMessagesExpected;
     for (int source = (rank - 2 + 2 * size) % size; source != rank && source != (rank - 1 + 2 * size) % size;
          source     = (source - 2 + 2 * size) % size) {
-        receiveMessagesExpected.emplace_back(
-            ReStoreMPI::Message{std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(new int[2]{source, rank})),
-                                2 * sizeof(int), static_cast<ReStoreMPI::current_rank_t>(source)});
+        receiveMessagesExpected.emplace_back(ReStoreMPI::Message{
+            std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(new int[2]{source, rank})), 2 * sizeof(int), source});
     }
 
     std::sort(
@@ -119,12 +118,8 @@ TEST(MPIContext, RankConversion) {
     MPI_Comm_size(MPI_COMM_WORLD, &originalSize);
     ReStoreMPI::MPIContext context(MPI_COMM_WORLD);
     for (int rank = 0; rank < originalSize; ++rank) {
-        EXPECT_EQ(
-            static_cast<ReStoreMPI::original_rank_t>(rank),
-            context.getOriginalRank(static_cast<ReStoreMPI::current_rank_t>(rank)));
-        EXPECT_EQ(
-            static_cast<ReStoreMPI::current_rank_t>(rank),
-            context.getCurrentRank(static_cast<ReStoreMPI::original_rank_t>(rank)));
+        EXPECT_EQ(static_cast<ReStoreMPI::original_rank_t>(rank), context.getOriginalRank(rank));
+        EXPECT_EQ(static_cast<ReStoreMPI::current_rank_t>(rank), context.getCurrentRank(rank));
     }
     MPI_Comm comm;
     MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
@@ -142,12 +137,12 @@ TEST(MPIContext, RankConversion) {
     } else {
         currentToOriginal.emplace_back(ReStoreMPI::original_rank_t(0));
         for (int rank = 3; rank < originalSize; ++rank) {
-            currentToOriginal.emplace_back(static_cast<ReStoreMPI::original_rank_t>(rank));
+            currentToOriginal.emplace_back(rank);
         }
     }
 
     for (int rank = 0; rank < currentSize; ++rank) {
-        EXPECT_EQ(currentToOriginal[rank], context.getOriginalRank(static_cast<ReStoreMPI::current_rank_t>(rank)));
+        EXPECT_EQ(currentToOriginal[rank], context.getOriginalRank(rank));
     }
 
     std::vector<std::optional<ReStoreMPI::current_rank_t>> originalToCurrent;
@@ -167,16 +162,16 @@ TEST(MPIContext, RankConversion) {
         if (originalSize >= 3)
             originalToCurrent.emplace_back(std::nullopt);
         for (int rank = 3; rank < originalSize; ++rank) {
-            originalToCurrent.emplace_back(static_cast<ReStoreMPI::current_rank_t>(rank - 2));
+            originalToCurrent.emplace_back(rank - 2);
         }
     }
 
     for (int rank = 0; rank < originalSize; ++rank) {
-        EXPECT_EQ(originalToCurrent[rank], context.getCurrentRank(static_cast<ReStoreMPI::original_rank_t>(rank)));
+        EXPECT_EQ(originalToCurrent[rank], context.getCurrentRank(rank));
         if (originalToCurrent[rank] == std::nullopt) {
-            EXPECT_EQ(false, context.isAlive(static_cast<ReStoreMPI::original_rank_t>(rank)));
+            EXPECT_EQ(false, context.isAlive(rank));
         } else {
-            EXPECT_EQ(true, context.isAlive(static_cast<ReStoreMPI::original_rank_t>(rank)));
+            EXPECT_EQ(true, context.isAlive(rank));
         }
     }
 
