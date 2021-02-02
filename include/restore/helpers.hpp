@@ -5,10 +5,10 @@
 
 #ifdef BACKWARD_CXX11
 void print_stacktrace() {
-    backward::StackTrace st;
-    backward::Printer    p;
-    st.load_here(32);
-    p.print(st);
+    backward::StackTrace stacktrace;
+    backward::Printer    printer;
+    stacktrace.load_here(32);
+    printer.print(stacktrace);
 }
 #endif
 
