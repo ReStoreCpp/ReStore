@@ -22,7 +22,7 @@ typedef int original_rank_t;
 struct Message {
     std::shared_ptr<uint8_t> data;
     int                      size;
-    current_rank_t              rank;
+    current_rank_t           rank;
 };
 
 class RankManager {
