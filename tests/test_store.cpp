@@ -206,6 +206,20 @@ TEST(StoreTest, ReStore_BlockRange) {
         ASSERT_FALSE(range3.contains(4));
         ASSERT_TRUE(range3.contains(5));
     }
+
+    {
+        ASSERT_EQ(BlockRange(1, 100, 4), BlockRange(1, 100, 4));
+        ASSERT_EQ(BlockRange(2, 200, 5), BlockRange(2, 200, 5));
+        ASSERT_EQ(BlockRange(1, 500, 4), BlockRange(1, 500, 4));
+        ASSERT_EQ(BlockRange(10, 1000, 40), BlockRange(10, 1000, 40));
+        ASSERT_EQ(BlockRange(1000, 1000000, 60000), BlockRange(1000, 1000000, 60000));
+
+        ASSERT_NE(BlockRange(1, 100, 4), BlockRange(2, 100, 4));
+        ASSERT_NE(BlockRange(5, 1000, 40), BlockRange(19, 1000, 40));
+        ASSERT_NE(BlockRange(7, 1000, 40), BlockRange(34, 1000, 40));
+        ASSERT_NE(BlockRange(8, 1000, 40), BlockRange(3, 1000, 40));
+        ASSERT_NE(BlockRange(100, 1000000, 400), BlockRange(2, 1000000, 400));
+    }
 }
 
 TEST(StoreTest, ReStore_BlockDistribution) {

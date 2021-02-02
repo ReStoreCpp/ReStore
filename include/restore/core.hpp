@@ -106,6 +106,9 @@ class ReStore {
                 assert(this->id == that.id || this->start != that.start);
                 return this->id == that.id;
             }
+            bool operator!=(const BlockRange& that) const {
+                return !(*this == that);
+            }
 
             // How to print a BlockRange
             //
