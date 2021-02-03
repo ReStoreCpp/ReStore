@@ -50,6 +50,18 @@ class RankManager {
         return currentRank != MPI_UNDEFINED ? std::optional<current_rank_t>(currentRank) : std::nullopt;
     }
 
+    std::vector<original_rank_t> getOnlyAlive(const std::vector<original_rank_t>& in) const {
+        std::vector<current_rank_t> out(in.size());
+        MPI_Group_translate_ranks(_originalGroup, in.size(), in.data(), _currentGroup, out.data());
+        for (size_t i = 0; i < in.size(); ++i) {
+            out[i] = out[i] == MPI_UNDEFINED ? MPI_UNDEFINED : in[i];
+        }
+        out.erase(
+            std::remove_if(out.begin(), out.end(), [](const current_rank_t& rank) { return rank == MPI_UNDEFINED; }),
+            out.end());
+        return out;
+    }
+
     std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
         std::vector<current_rank_t> currentRanks(originalRanks.size());
         MPI_Group_translate_ranks(
@@ -134,6 +146,10 @@ class MPIContext {
 
     bool isAlive(const original_rank_t rank) const {
         return getCurrentRank(rank).has_value();
+    }
+
+    std::vector<original_rank_t> getOnlyAlive(const std::vector<original_rank_t>& in) const {
+        return _rankManager.getOnlyAlive(in);
     }
 
     std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {

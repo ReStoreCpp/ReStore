@@ -187,6 +187,13 @@ TEST(MPIContext, RankConversion) {
     for (size_t i = 0; i < allRanksCurrentExpected.size(); ++i) {
         EXPECT_EQ(allRanksCurrentExpected[i], allRanksCurrent[i]);
     }
+
+    auto allAliveRanks = context.getOnlyAlive(allRanksOriginal);
+
+    ASSERT_EQ(currentToOriginal.size(), allAliveRanks.size());
+    for (size_t i = 0; i < currentToOriginal.size(); ++i) {
+        EXPECT_EQ(currentToOriginal[i], allAliveRanks[i]);
+    }
 }
 
 int main(int argc, char** argv) {
