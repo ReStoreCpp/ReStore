@@ -108,7 +108,7 @@ TEST(StoreTest, ReStore_submitBlocks) {
 TEST(StoreTest, ReStore_BlockRange) {
     // BlockRange(size_t range_id, size_t numBlocks, size_t numRanges) {
     // bool includes(block_id_t block) {
-    typedef ReStore<u_int8_t>::BlockDistribution::BlockRange BlockRange;
+    typedef ReStore<u_int8_t>::BlockDistribution<MPIContextMock>::BlockRange BlockRange;
 
     ASSERT_ANY_THROW(BlockRange(100, 1, 10)); // Range id greater than the number of ranges
     ASSERT_ANY_THROW(BlockRange(0, 1, 2));    // More ranges than blocks
@@ -279,7 +279,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
             ASSERT_NE(blockDistribution.rangeOfBlock(blockId).id, 0);
         }
 
-        // Blocks 30..39 should be in range 0
+        // Blocks 30..39 should be in range 3
         for (auto blockId: iter::range<block_id_t>(0, 30)) {
             ASSERT_NE(blockDistribution.rangeOfBlock(blockId).id, 3);
         }
@@ -298,7 +298,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
                 blockDistribution.blockRangeById(1)));
 
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(0), 7));
-        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(1), 1));
+        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(1), 7));
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(2), 7));
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(3), 7));
         ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(4), 7));
@@ -392,22 +392,16 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
         // rangesStoredOnRank() and isStoredOn() yield consistent results
         for (ReStoreMPI::original_rank_t rankId: iter::range(0, 10)) {
             auto rangesOnThisRank = blockDistribution.rangesStoredOnRank(rankId);
-            for (BlockDistribution::BlockRange blockRange: rangesOnThisRank) {
+            for (block_id_t blockId: iter::range(0, 10)) {
+                auto blockRange = blockDistribution.blockRangeById(blockId);
                 if (std::find(rangesOnThisRank.begin(), rangesOnThisRank.end(), blockRange) != rangesOnThisRank.end()) {
-                    ASSERT_TRUE(blockDistribution.isStoredOn(blockRange.id, rankId));
+                    ASSERT_TRUE(blockDistribution.isStoredOn(blockRange, rankId));
                 } else {
-                    ASSERT_FALSE(blockDistribution.isStoredOn(blockRange.id, rankId));
+                    ASSERT_FALSE(blockDistribution.isStoredOn(blockRange, rankId));
                 }
             }
         }
     }
-    /*
-        BlockRange rangeOfBlock(block_id_t block) const {
-        std::vector<ReStoreMPI::original_rank_t> ranksBlockIsStoredOn(block_id_t block) const {
-        std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::original_rank_t rankId) const {
-        bool isStoredOn(BlockRange blockRange, ReStoreMPI::original_rank_t rankId) const {
-        bool isStoredOn(block_id_t block, ReStoreMPI::original_rank_t rankId) const {}
-    */
 }
 
 int main(int argc, char** argv) {
