@@ -404,6 +404,165 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
     }
 }
 
+TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
+    using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
+    using block_id_t        = ReStore<uint16_t>::block_id_t;
+
+    // Mock MPI context to pass to the block distribution
+    auto mpiContext = MPIContextMock();
+    EXPECT_CALL(mpiContext, getOriginalRank(_)).WillRepeatedly(ReturnArg<0>());
+    EXPECT_CALL(mpiContext, getCurrentRank(_)).WillRepeatedly(ReturnArg<0>());
+    EXPECT_CALL(mpiContext, isAlive(_)).WillRepeatedly(Return(true));
+
+    {
+        // 20 ranks, 81 blocks, (replication level) k = 3
+        auto blockDistribution = BlockDistribution(20, 81, 3, mpiContext);
+        ASSERT_EQ(blockDistribution.shiftWidth(), 6);
+        ASSERT_EQ(blockDistribution.numBlocks(), 81);
+        ASSERT_EQ(blockDistribution.numRanks(), 20);
+        ASSERT_EQ(blockDistribution.replicationLevel(), 3);
+        ASSERT_EQ(blockDistribution.numRanges(), 20);
+        ASSERT_EQ(blockDistribution.blocksPerRange(), 4);
+        ASSERT_EQ(blockDistribution.numRangesWithAdditionalBlock(), 1);
+
+        // Exactly first five blocks should be in range 0
+        for (auto blockId: iter::range<block_id_t>(0, 5)) {
+            ASSERT_EQ(blockDistribution.rangeOfBlock(blockId).id, 0);
+        }
+        for (auto blockId: iter::range<block_id_t>(5, 81)) {
+            ASSERT_NE(blockDistribution.rangeOfBlock(blockId).id, 0);
+        }
+
+        // Blocks 9..12 should be in range 2
+        for (auto blockId: iter::range<block_id_t>(0, 9)) {
+            ASSERT_NE(blockDistribution.rangeOfBlock(blockId).id, 2);
+        }
+        for (auto blockId: iter::range<block_id_t>(9, 13)) {
+            ASSERT_EQ(blockDistribution.rangeOfBlock(blockId).id, 2);
+        }
+        for (auto blockId: iter::range<block_id_t>(13, 81)) {
+            ASSERT_NE(blockDistribution.rangeOfBlock(blockId).id, 2);
+        }
+
+        // Rank 19 stores ranges 7, 13, and 19
+        ASSERT_THAT(
+            blockDistribution.rangesStoredOnRank(19),
+            ElementsAre(
+                blockDistribution.blockRangeById(19), blockDistribution.blockRangeById(13),
+                blockDistribution.blockRangeById(7)));
+
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(0), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(1), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(2), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(3), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(4), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(5), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(6), 19));
+        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(7), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(8), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(9), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(11), 19));
+        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(13), 19));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(18), 19));
+        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(19), 19));
+
+        // ... and so should the blocks 28..31, 52..55, 77..81
+        for (block_id_t blockId: iter::chain(iter::range(29, 33), iter::range(53, 57), iter::range(77, 81))) {
+            ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 19));
+        }
+        for (block_id_t blockId: iter::chain(iter::range(0, 29), iter::range(33, 53), iter::range(57, 77))) {
+            ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 19));
+        }
+
+        // Rank 0 stores ranges 0, 14 and 8
+        ASSERT_THAT(
+            blockDistribution.rangesStoredOnRank(0),
+            ElementsAre(
+                blockDistribution.blockRangeById(0), blockDistribution.blockRangeById(14),
+                blockDistribution.blockRangeById(8)));
+
+        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(0), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(1), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(2), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(3), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(4), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(5), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(6), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(7), 0));
+        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(8), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(9), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(10), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(11), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(12), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(13), 0));
+        ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(14), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(15), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(16), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(17), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(18), 0));
+        ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(19), 0));
+
+        // ... and so should the blocks 0..4, 57..60 and 33..36
+        for (block_id_t blockId: iter::chain(iter::range(0, 5), iter::range(57, 61), iter::range(33, 37))) {
+            ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 0));
+        }
+        for (block_id_t blockId: iter::chain(iter::range(5, 33), iter::range(37, 57), iter::range(61, 81))) {
+            ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 0));
+        }
+
+        // The first five blocks should be on rank 0, 6 and 12 but not on any other ranks
+        // TODO Test in the presence of failures
+        for (auto blockId: iter::range<block_id_t>(0, 5)) {
+            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+                if (rankId == 0 || rankId == 6 || rankId == 12) {
+                    ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
+                } else {
+                    ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+                }
+            }
+
+            ASSERT_THAT(blockDistribution.ranksBlockIsStoredOn(blockId), ElementsAre(0, 6, 12));
+        }
+
+        // The blocks 77..80 should be on rank 19, 5 and 11 but not on any other ranks
+        for (auto blockId: iter::range<block_id_t>(77, 81)) {
+            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+                if (rankId == 19 || rankId == 5 || rankId == 11) {
+                    ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
+                } else {
+                    ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+                }
+            }
+
+            ASSERT_THAT(blockDistribution.ranksBlockIsStoredOn(blockId), ElementsAre(19, 5, 11));
+        }
+
+        // ranksBlockIsStored() and isStoredOn() yield consistent results
+        for (block_id_t blockId: iter::range(0, 81)) {
+            auto ranksOfThisBlock = blockDistribution.ranksBlockIsStoredOn(blockId);
+            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+                if (std::find(ranksOfThisBlock.begin(), ranksOfThisBlock.end(), rankId) != ranksOfThisBlock.end()) {
+                    ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
+                } else {
+                    ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+                }
+            }
+        }
+
+        // rangesStoredOnRank() and isStoredOn() yield consistent results
+        for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+            auto rangesOnThisRank = blockDistribution.rangesStoredOnRank(rankId);
+            for (block_id_t blockId: iter::range(0, 20)) {
+                auto blockRange = blockDistribution.blockRangeById(blockId);
+                if (std::find(rangesOnThisRank.begin(), rangesOnThisRank.end(), blockRange) != rangesOnThisRank.end()) {
+                    ASSERT_TRUE(blockDistribution.isStoredOn(blockRange, rankId));
+                } else {
+                    ASSERT_FALSE(blockDistribution.isStoredOn(blockRange, rankId));
+                }
+            }
+        }
+    }
+}
 int main(int argc, char** argv) {
     // Filter out Google Test arguments
     ::testing::InitGoogleTest(&argc, argv);
