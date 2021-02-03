@@ -4,11 +4,11 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <iostream>
 
 //#include "backward.hpp"
 #include "mpi_context.hpp"
