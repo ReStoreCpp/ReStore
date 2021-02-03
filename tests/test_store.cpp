@@ -19,6 +19,7 @@ class MPIContextMock {
     MOCK_METHOD(original_rank_t, getOriginalRank, (const current_rank_t), (const));
     MOCK_METHOD(current_rank_t, getCurrentRank, (const original_rank_t), (const));
     MOCK_METHOD(bool, isAlive, (const original_rank_t), (const));
+    MOCK_METHOD(std::vector<original_rank_t>, getAliveOnly, (const std::vector<original_rank_t>&), (const));
 
     /*
     std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
@@ -251,6 +252,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
     EXPECT_CALL(mpiContext, getOriginalRank(_)).WillRepeatedly(ReturnArg<0>());
     EXPECT_CALL(mpiContext, getCurrentRank(_)).WillRepeatedly(ReturnArg<0>());
     EXPECT_CALL(mpiContext, isAlive(_)).WillRepeatedly(Return(true));
+    EXPECT_CALL(mpiContext, getAliveOnly(_)).WillRepeatedly(ReturnArg<0>());
 
     // Constructor - invalid arguments
     ASSERT_ANY_THROW(BlockDistribution(0, 1, 1, mpiContext));     // No ranks
@@ -413,6 +415,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
     EXPECT_CALL(mpiContext, getOriginalRank(_)).WillRepeatedly(ReturnArg<0>());
     EXPECT_CALL(mpiContext, getCurrentRank(_)).WillRepeatedly(ReturnArg<0>());
     EXPECT_CALL(mpiContext, isAlive(_)).WillRepeatedly(Return(true));
+    EXPECT_CALL(mpiContext, getAliveOnly(_)).WillRepeatedly(ReturnArg<0>());
 
     {
         // 20 ranks, 81 blocks, (replication level) k = 3

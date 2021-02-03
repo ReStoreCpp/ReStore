@@ -182,27 +182,28 @@ class ReStore {
             // The range is located on the rank with the same id ...
             auto                        rankIds   = std::vector<ReStoreMPI::original_rank_t>();
             ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id);
-            if (_mpiContext.isAlive(firstRank)) {
-                rankIds.push_back(firstRank);
-            }
+            rankIds.push_back(firstRank);
 
             // ... and on <replication level> - 1 further ranks, all <shift width> apart.
             for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
                 ReStoreMPI::original_rank_t nextRank = static_cast<ReStoreMPI::original_rank_t>(
                     (static_cast<int>(firstRank) + _shiftWidth * replica) % _numRanks);
                 assert(static_cast<int>(nextRank) < _numRanks);
-                if (_mpiContext.isAlive(nextRank)) {
-                    rankIds.push_back(nextRank);
-                }
+                rankIds.push_back(nextRank);
             }
 
-            return rankIds;
+            return _mpiContext.getAliveOnly(rankIds);
         }
 
         // rangesStoredOnRank()
         //
-        //  Returns the block ranges residing on the given rank
+        // Returns the block ranges residing on the given rank.
+        // If the given rank is dead, this returns an empty vector.
         std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::original_rank_t rankId) const {
+            if (!_mpiContext.isAlive(rankId)) {
+                return std::vector<BlockRange>();
+            }
+
             // TODO remove the static_casts
             if (rankId < 0) {
                 throw std::runtime_error("Invalid rank id: Less than zero.");
@@ -237,12 +238,18 @@ class ReStore {
 
         // isStoredOn()
         //
-        // Returns true if the given block or block range is stored on the given rank
+        // Returns true if the given block or block range is stored on the given rank.
+        // If the given rank is dead, this will return false.
         bool isStoredOn(BlockRange blockRange, ReStoreMPI::original_rank_t rankId) const {
             if (blockRange.id > _numRanges) {
                 throw std::runtime_error("The given ranges id is too large.");
             } else if (rankId < 0 || rankId > _numRanks) {
                 throw std::runtime_error("The given rank id is either negative or too large.");
+            }
+
+            // If the given rank is dead, return false (it does not store anything).
+            if (!_mpiContext.isAlive(rankId)) {
+                return false;
             }
 
             // I tried to find a closed form solution for this, it quickly grow to an angry beast.
@@ -286,14 +293,14 @@ class ReStore {
 
         // numRanks()
         //
-        // Return the number of ranks.
+        // Return the number of ranks. This is *not* the number of ranks which are still alive!
         size_t numRanks() const {
             return _numRanks;
         }
 
         // replicationLevel()
         //
-        // Return the replicationLevel.
+        // Return the replicationLevel. This is *not* the current replication level (including failed ranks)!
         uint16_t replicationLevel() const {
             return _replicationLevel;
         }
