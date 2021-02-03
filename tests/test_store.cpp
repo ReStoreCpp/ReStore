@@ -11,6 +11,27 @@
 
 using namespace ::testing;
 
+class MPIContextMock {
+    using original_rank_t = ReStoreMPI::original_rank_t;
+    using current_rank_t  = ReStoreMPI::current_rank_t;
+
+    public:
+    MOCK_METHOD(original_rank_t, getOriginalRank, (const current_rank_t), (const));
+    MOCK_METHOD(current_rank_t, getCurrentRank, (const original_rank_t), (const));
+    MOCK_METHOD(bool, isAlive, (const original_rank_t), (const));
+
+    /*
+    std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
+        return _rankManager.getAliveCurrentRanks(originalRanks);
+    }
+
+    std::vector<Message>
+    SparseAllToAll(const std::vector<Message>& messages, const int tag = RESTORE_SPARSE_ALL_TO_ALL_TAG) const {
+        return ReStoreMPI::SparseAllToAll(messages, _comm, tag);
+    }
+    */
+};
+
 class StoreTest : public ::testing::Environment {
     // You can remove any or all of the following functions if its body
     // is empty.
@@ -221,12 +242,15 @@ TEST(StoreTest, ReStore_BlockRange) {
     }
 }
 
-TEST(StoreTest, ReStore_BlockDistribution) {
-    using BlockDistribution = ReStore<uint16_t>::BlockDistribution;
+TEST(StoreTest, ReStore_BlockDistribution_Basic) {
+    using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore<uint16_t>::block_id_t;
 
-    // Dummy MPI context to pass to the block distribution
-    auto mpiContext = ReStoreMPI::MPIContext(MPI_COMM_WORLD);
+    // Mock MPI context to pass to the block distribution
+    auto mpiContext = MPIContextMock();
+    EXPECT_CALL(mpiContext, getOriginalRank(_)).WillRepeatedly(ReturnArg<0>());
+    EXPECT_CALL(mpiContext, getCurrentRank(_)).WillRepeatedly(ReturnArg<0>());
+    EXPECT_CALL(mpiContext, isAlive(_)).WillRepeatedly(Return(true));
 
     // Constructor - invalid arguments
     ASSERT_ANY_THROW(BlockDistribution(0, 1, 1, mpiContext));     // No ranks

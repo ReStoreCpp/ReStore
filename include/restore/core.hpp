@@ -46,6 +46,7 @@ class ReStore {
     //   - Each block range is stored on k different ranks. This means there are k ranges stored on each rank.
     //   - If the replication level is 3, and the rank id of the first rank which stores a particular block range is
     //     fid, the block is stored on fid, fid+s and fid+2s.
+    template <typename MPIContext = ReStoreMPI::MPIContext>
     class BlockDistribution {
         public:
         // BlockRange
@@ -119,8 +120,7 @@ class ReStore {
             }
         };
 
-        BlockDistribution(
-            uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, ReStoreMPI::MPIContext& mpiContext)
+        BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
             : _constructorArgumentsValid(
                 validateConstructorArguments(numRanks, numBlocks, replicationLevel, mpiContext)),
               _numRanks(numRanks),
@@ -211,7 +211,7 @@ class ReStore {
             }
 
             // The range with the same id as this rank is stored on this rank ...
-            auto       rangeIds   = std::vector<BlockRange>();
+            auto rangeIds = std::vector<BlockRange>();
             assert(rankId >= 0);
             BlockRange firstRange = blockRangeById(static_cast<size_t>(rankId));
             rangeIds.push_back(firstRange);
@@ -244,7 +244,7 @@ class ReStore {
             } else if (rankId < 0 || rankId > _numRanks) {
                 throw std::runtime_error("The given rank id is either negative or too large.");
             }
-            
+
             // I tried to find a closed form solution for this, it quickly grow to an angry beast.
             // Let's try this and think about a more clever solution once we actually _measure_ a performance
             // bottleneck.
@@ -326,7 +326,7 @@ class ReStore {
         }
 
         bool validateConstructorArguments(
-            uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, ReStoreMPI::MPIContext& mpiContext) {
+            uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext) const {
             if (numRanks <= 0) {
                 throw std::runtime_error("There has to be at least one rank.");
             } else if (numBlocks == 0) {
@@ -344,15 +344,15 @@ class ReStore {
             return true;
         }
 
-        const bool             _constructorArgumentsValid;
-        const size_t           _numBlocks;
-        const uint32_t         _numRanks;
-        const uint16_t         _replicationLevel;
-        const size_t           _numRanges;
-        const size_t           _blocksPerRange;
-        const size_t           _numRangesWithAdditionalBlock;
-        const size_t           _shiftWidth;
-        ReStoreMPI::MPIContext _mpiContext;
+        const bool        _constructorArgumentsValid;
+        const size_t      _numBlocks;
+        const uint32_t    _numRanks;
+        const uint16_t    _replicationLevel;
+        const size_t      _numRanges;
+        const size_t      _blocksPerRange;
+        const size_t      _numRangesWithAdditionalBlock;
+        const size_t      _shiftWidth;
+        const MPIContext& _mpiContext;
     };
 
     // Constructor
