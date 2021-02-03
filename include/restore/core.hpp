@@ -4,13 +4,17 @@
 #include <cassert>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
+//#include "backward.hpp"
 #include "mpi_context.hpp"
 #include <mpi.h>
+
+#include "helpers.hpp"
 
 template <class BlockType>
 class ReStore {
@@ -42,6 +46,7 @@ class ReStore {
     //   - Each block range is stored on k different ranks. This means there are k ranges stored on each rank.
     //   - If the replication level is 3, and the rank id of the first rank which stores a particular block range is
     //     fid, the block is stored on fid, fid+s and fid+2s.
+    template <typename MPIContext = ReStoreMPI::MPIContext>
     class BlockDistribution {
         public:
         // BlockRange
@@ -81,7 +86,9 @@ class ReStore {
                     length = blocksPerRange;
                 }
 
-                assert(start < numBlocks);
+                if (start >= numBlocks) {
+                    throw std::runtime_error("This range does not exists (id too large).");
+                }
                 assert(length == blocksPerRange || length == blocksPerRange + 1);
             }
 
@@ -91,11 +98,32 @@ class ReStore {
             bool contains(block_id_t block) {
                 return block >= this->start && block < this->start + this->length;
             }
+
+            // Comparison Operator
+            //
+            // We assume that both block ranges belong to the same BlockDistribution.
+            bool operator==(const BlockRange& that) const {
+                assert(this->id != that.id || this->start == that.start);
+                assert(this->id == that.id || this->start != that.start);
+                return this->id == that.id;
+            }
+            bool operator!=(const BlockRange& that) const {
+                return !(*this == that);
+            }
+
+            // How to print a BlockRange
+            //
+            // Writes "<BlockRange(id=0,start=1,length=2)>" to the ostream object.
+            friend std::ostream& operator<<(std::ostream& os, const BlockRange& blockRange) {
+                return os << "<BlockRange(id=" << blockRange.id << ",start=" << blockRange.start
+                          << ",length=" << blockRange.length << ")>";
+            }
         };
 
-        BlockDistribution(
-            uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, ReStoreMPI::MPIContext& mpiContext)
-            : _numRanks(numRanks),
+        BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
+            : _constructorArgumentsValid(
+                validateConstructorArguments(numRanks, numBlocks, replicationLevel, mpiContext)),
+              _numRanks(numRanks),
               _numBlocks(numBlocks),
               _replicationLevel(replicationLevel),
               _numRanges(numRanks),
@@ -103,13 +131,6 @@ class ReStore {
               _numRangesWithAdditionalBlock(numBlocks - _blocksPerRange * _numRanges),
               _mpiContext(mpiContext),
               _shiftWidth(determineShiftWidth(numRanks, replicationLevel)) {
-            if (numRanks <= 0) {
-                throw std::runtime_error("There has to be at least one rank.");
-            } else if (numBlocks == 0) {
-                throw std::runtime_error("There has to be at least one block.");
-            } else if (replicationLevel == 0) {
-                throw std::runtime_error("A replication level of 0 is probably not what you want.");
-            }
             assert(_numRanges > 0);
             assert(_blocksPerRange > 0);
             assert(_blocksPerRange <= _numBlocks);
@@ -118,15 +139,32 @@ class ReStore {
             assert(_shiftWidth * (replicationLevel - 1) < _numRanks);
         }
 
-        // rangeForBlock()
+        // blockRangeById()
+        //
+        // A factory method to build a BlockRange by it's id.
+        BlockRange blockRangeById(block_id_t rangeId) const {
+            return BlockRange(rangeId, _numBlocks, _numRanges);
+        }
+
+        // rangeOfBlock()
         //
         // Computes the block range the given block is in.
-        BlockRange rangeForBlock(block_id_t block) const {
+        BlockRange rangeOfBlock(block_id_t block) const {
+            if (block >= _numBlocks) {
+                throw std::runtime_error("Block id is greater than (or equal to) the number of blocks.");
+            }
+            assert(_blocksPerRange > 0);
+            assert(_blocksPerRange < _numBlocks);
+            assert(_numRangesWithAdditionalBlock < _numRanges);
+
             if (block < (_blocksPerRange + 1) * _numRangesWithAdditionalBlock) {
-                return block / (_blocksPerRange + 1);
+                size_t blockId = block / (_blocksPerRange + 1);
+                return blockRangeById(blockId);
             } else {
                 assert((block - (_blocksPerRange * _numRangesWithAdditionalBlock)) >= 0);
-                return (block - (_blocksPerRange * _numRangesWithAdditionalBlock)) / _blocksPerRange;
+                size_t rangeId = _numRangesWithAdditionalBlock
+                                 + (block - ((_blocksPerRange + 1) * _numRangesWithAdditionalBlock)) / _blocksPerRange;
+                return blockRangeById(rangeId);
             }
         }
 
@@ -135,14 +173,14 @@ class ReStore {
         // Returns the ranks the given block is stored on. The ranks are identified by their original rank id.
         std::vector<ReStoreMPI::original_rank_t> ranksBlockIsStoredOn(block_id_t block) const {
             assert(block < _numBlocks);
-            BlockRange range = rangeForBlock(block);
-            assert(range.start.id < _numBlocks);
-            assert(range.start.globalId + range.length < _numBlocks);
+            BlockRange range = rangeOfBlock(block);
+            assert(range.start < _numBlocks);
+            assert(range.start + range.length <= _numBlocks);
             assert(range.id < _numRanges);
             assert(range.id < _numRanks);
 
             // The range is located on the rank with the same id ...
-            auto                     rankIds   = std::vector<ReStoreMPI::original_rank_t>();
+            auto                        rankIds   = std::vector<ReStoreMPI::original_rank_t>();
             ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id);
             if (_mpiContext.isAlive(firstRank)) {
                 rankIds.push_back(firstRank);
@@ -165,35 +203,61 @@ class ReStore {
         //
         //  Returns the block ranges residing on the given rank
         std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::original_rank_t rankId) const {
-            assert(static_cast<int>(rankId) >= 0);
-            assert(static_cast<int>(rankId) < _numRanks);
+            // TODO remove the static_casts
+            if (rankId < 0) {
+                throw std::runtime_error("Invalid rank id: Less than zero.");
+            } else if (rankId > _numRanks) {
+                throw std::runtime_error("Invalid rank id: lower than the number of ranks.");
+            }
 
             // The range with the same id as this rank is stored on this rank ...
-            auto       rangeIds   = std::vector<BlockRange>();
-            BlockRange firstRange = BlockRange(static_cast<size_t>(rankId));
+            auto rangeIds = std::vector<BlockRange>();
+            assert(rankId >= 0);
+            BlockRange firstRange = blockRangeById(static_cast<size_t>(rankId));
+            rangeIds.push_back(firstRange);
 
             // ... as are <replication level> - 1 further ranges, all <shift width> apart
             for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
-                BlockRange nextRange = static_cast<BlockRange>((firstRange.id - _shiftWidth * replica) % _numRanks);
+                assert(firstRange.id <= std::numeric_limits<int64_t>::max());
+                assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
+                assert(_numRanges < std::numeric_limits<int64_t>::max());
+                assert(_numRanges > 0);
+
+                int64_t rangeId = firstRange.id - _shiftWidth * replica;
+                if (rangeId < 0) {
+                    rangeId = _numRanges + rangeId % static_cast<int64_t>(_numRanges);
+                }
+                BlockRange nextRange = blockRangeById(rangeId);
                 assert(nextRange.id < _numRanges);
+                rangeIds.push_back(nextRange);
             }
+
+            return rangeIds;
         }
 
         // isStoredOn()
         //
         // Returns true if the given block or block range is stored on the given rank
         bool isStoredOn(BlockRange blockRange, ReStoreMPI::original_rank_t rankId) const {
-            assert(static_cast<int>(rankId) >= 0);
-            assert(static_cast<int>(rankId) < _numRanks);
+            if (blockRange.id > _numRanges) {
+                throw std::runtime_error("The given ranges id is too large.");
+            } else if (rankId < 0 || rankId > _numRanks) {
+                throw std::runtime_error("The given rank id is either negative or too large.");
+            }
 
             // I tried to find a closed form solution for this, it quickly grow to an angry beast.
             // Let's try this and think about a more clever solution once we actually _measure_ a performance
             // bottleneck.
-            for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
-                int nextBlockId = (static_cast<int>(rankId) - _shiftWidth * replica) % _numRanges;
-                assert(nextBlockId < _numBlocks);
-                assert(nextBlockId >= 0);
-                if (nextBlockId == blockRange.id) {
+            for (uint16_t replica = 0; replica < _replicationLevel; replica++) {
+                assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
+                assert(_numRanges < std::numeric_limits<int64_t>::max());
+                assert(_numRanges > 0);
+
+                int64_t rangeId = rankId - _shiftWidth * replica;
+                if (rangeId < 0) {
+                    rangeId = _numRanges + rangeId % static_cast<int64_t>(_numRanges);
+                }
+                if (rangeId == blockRange.id) {
                     return true;
                 }
             }
@@ -201,7 +265,59 @@ class ReStore {
         }
 
         bool isStoredOn(block_id_t block, ReStoreMPI::original_rank_t rankId) const {
-            return isStoredOn(rangeForBlock(block), rankId);
+            return isStoredOn(rangeOfBlock(block), rankId);
+        }
+
+        // shiftWidth()
+        //
+        // Return the shift width. That is, if a block range is stored on rank i, it is also stored on rank i = shift
+        // width (until the replication level is reached).
+        size_t shiftWidth() const {
+            assert(_shiftWidth < _numRanks);
+            return _shiftWidth;
+        }
+
+        // numBlocks()
+        //
+        // Return the number of blocks.
+        size_t numBlocks() const {
+            return _numBlocks;
+        }
+
+        // numRanks()
+        //
+        // Return the number of ranks.
+        size_t numRanks() const {
+            return _numRanks;
+        }
+
+        // replicationLevel()
+        //
+        // Return the replicationLevel.
+        uint16_t replicationLevel() const {
+            return _replicationLevel;
+        }
+
+        // blocksPerRange()
+        //
+        // Return the number of blocks in each range. The first numRangesWithAdditionalBlock() ranges will have a single
+        // additional range.
+        size_t blocksPerRange() const {
+            return _blocksPerRange;
+        }
+
+        // numRangesWithAdditionalBlock()
+        //
+        // Return the number of ranges that will have one block more than the what blocksPerRange() returns.
+        size_t numRangesWithAdditionalBlock() const {
+            return _numRangesWithAdditionalBlock;
+        }
+
+        // numRanges()
+        //
+        // Return the number of block ranges.
+        size_t numRanges() const {
+            return _numRanges;
         }
 
         private:
@@ -209,14 +325,34 @@ class ReStore {
             return numRanks / replicationLevel;
         }
 
-        const size_t           _numBlocks;
-        const uint32_t         _numRanks;
-        const uint16_t         _replicationLevel;
-        const size_t           _blocksPerRange;
-        const size_t           _numRangesWithAdditionalBlock;
-        const size_t           _numRanges;
-        const size_t           _shiftWidth;
-        ReStoreMPI::MPIContext _mpiContext;
+        bool validateConstructorArguments(
+            uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext) const {
+            if (numRanks <= 0) {
+                throw std::runtime_error("There has to be at least one rank.");
+            } else if (numBlocks == 0) {
+                throw std::runtime_error("There has to be at least one block.");
+            } else if (replicationLevel == 0) {
+                throw std::runtime_error("A replication level of 0 is probably not what you want.");
+            } else if (replicationLevel > numRanks) {
+                throw std::runtime_error(
+                    "A replication level that is greater than the number of ranks cannot be fulfilled.");
+            } else if (numBlocks < numRanks) {
+                throw std::runtime_error("Having less blocks than ranks is unsupported.");
+            }
+            UNUSED(mpiContext);
+
+            return true;
+        }
+
+        const bool        _constructorArgumentsValid;
+        const size_t      _numBlocks;
+        const uint32_t    _numRanks;
+        const uint16_t    _replicationLevel;
+        const size_t      _numRanges;
+        const size_t      _blocksPerRange;
+        const size_t      _numRangesWithAdditionalBlock;
+        const size_t      _shiftWidth;
+        const MPIContext& _mpiContext;
     };
 
     // Constructor
@@ -296,7 +432,7 @@ class ReStore {
     // canBeParallelized: Indicates if multiple serializeFunc calls can happen on different blocks
     //      concurrently. Also assumes that the blocks do not have to be serialized in the order they
     //      are emitted by nextBlock.
-    void submitBlocks(
+    /*void submitBlocks(
         std::function<size_t(const BlockType&, void*)>                          serializeFunc,
         std::function<std::optional<std::pair<block_id_t, const BlockType&>>()> nextBlock,
         bool canBeParallelized = false // not supported yet
@@ -318,7 +454,7 @@ class ReStore {
         std::vector<ReStoreMPI::Message> messages;
         _mpiContext.SparseAllToAll(messages);
     }
-
+    */
     // pullBlocks()
     //
     // Pulls blocks from other ranks in the replicated storage. That is, the caller provides the global
