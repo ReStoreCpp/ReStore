@@ -175,7 +175,7 @@ class ReStore {
             assert(block < _numBlocks);
             BlockRange range = rangeOfBlock(block);
             assert(range.start < _numBlocks);
-            assert(range.start + range.length < _numBlocks);
+            assert(range.start + range.length <= _numBlocks);
             assert(range.id < _numRanges);
             assert(range.id < _numRanks);
 
