@@ -163,7 +163,7 @@ class ReStore {
             } else {
                 assert((block - (_blocksPerRange * _numRangesWithAdditionalBlock)) >= 0);
                 size_t rangeId = _numRangesWithAdditionalBlock
-                                 + (block - (_blocksPerRange * _numRangesWithAdditionalBlock)) / _blocksPerRange;
+                                 + (block - ((_blocksPerRange + 1) * _numRangesWithAdditionalBlock)) / _blocksPerRange;
                 return blockRangeById(rangeId);
             }
         }
