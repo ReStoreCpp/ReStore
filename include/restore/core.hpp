@@ -171,6 +171,7 @@ class ReStore {
         // ranksBlockIsStoredOn()
         //
         // Returns the ranks the given block is stored on. The ranks are identified by their original rank id.
+        // Dead ranks are filtered from the result list.
         std::vector<ReStoreMPI::original_rank_t> ranksBlockIsStoredOn(block_id_t block) const {
             assert(block < _numBlocks);
             BlockRange range = rangeOfBlock(block);
