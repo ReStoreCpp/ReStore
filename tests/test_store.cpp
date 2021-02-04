@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <mpi/mpi.h>
+#include <mpi.h>
 
 #include "restore/core.hpp"
 #include "restore/helpers.hpp"
