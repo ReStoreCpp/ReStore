@@ -37,6 +37,7 @@ function(add_mpi_test name no_mpi_proc)
   target_link_libraries(${name} gtest gmock ${MPI_LIBRARIES} ${LIBRARIES})
   set(test_parameters -np ${no_mpi_proc} "./${name}")
   add_test(NAME ${name} COMMAND mpirun ${test_parameters})
+  target_compile_options(${name} PRIVATE -g -Og -Wall -Wextra -Wcast-align -Wconversion -Wnoexcept -Wnon-virtual-dtor -Wnull-dereference -Woverloaded-virtual -Wpedantic -Wsuggest-attribute=const -Wsuggest-attribute=noreturn -Wshadow -Wsign-conversion -Wsuggest-override -Wundef -Wunreachable-code -Wunused)
 endfunction(add_mpi_test)
 
 package_add_test(test_store "ReStore::ReStore;cppitertools" test_store.cpp)

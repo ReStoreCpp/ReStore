@@ -143,7 +143,7 @@ TEST(MPIContext, RankConversion) {
     }
 
     for (int rank = 0; rank < currentSize; ++rank) {
-        EXPECT_EQ(currentToOriginal[rank], context.getOriginalRank(rank));
+        EXPECT_EQ(currentToOriginal[(size_t)rank], context.getOriginalRank(rank));
     }
 
     std::vector<std::optional<ReStoreMPI::current_rank_t>> originalToCurrent;
@@ -168,17 +168,17 @@ TEST(MPIContext, RankConversion) {
     }
 
     for (int rank = 0; rank < originalSize; ++rank) {
-        EXPECT_EQ(originalToCurrent[rank], context.getCurrentRank(rank));
-        if (originalToCurrent[rank] == std::nullopt) {
+        EXPECT_EQ(originalToCurrent[(size_t)rank], context.getCurrentRank(rank));
+        if (originalToCurrent[(size_t)rank] == std::nullopt) {
             EXPECT_EQ(false, context.isAlive(rank));
         } else {
             EXPECT_EQ(true, context.isAlive(rank));
         }
     }
 
-    std::vector<ReStoreMPI::original_rank_t> allRanksOriginal(originalSize);
+    std::vector<ReStoreMPI::original_rank_t> allRanksOriginal((size_t)originalSize);
     std::iota(allRanksOriginal.begin(), allRanksOriginal.end(), ReStoreMPI::original_rank_t(0));
-    std::vector<ReStoreMPI::current_rank_t> allRanksCurrentExpected(currentSize);
+    std::vector<ReStoreMPI::current_rank_t> allRanksCurrentExpected((size_t)currentSize);
     std::iota(allRanksCurrentExpected.begin(), allRanksCurrentExpected.end(), ReStoreMPI::current_rank_t(0));
 
     auto allRanksCurrent = context.getAliveCurrentRanks(allRanksOriginal);
