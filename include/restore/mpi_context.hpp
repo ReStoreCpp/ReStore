@@ -87,7 +87,8 @@ void receiveNewMessage(std::vector<Message>& result, const MPI_Comm comm, const 
         assert(receiveStatus.MPI_TAG == tag);
         int size;
         MPI_Get_count(&receiveStatus, MPI_BYTE, &size);
-        result.emplace_back(Message{std::shared_ptr<uint8_t>(new uint8_t[size]), size, receiveStatus.MPI_SOURCE});
+        result.emplace_back(
+            Message{std::shared_ptr<uint8_t>(new uint8_t[(size_t)size]), size, receiveStatus.MPI_SOURCE});
         MPI_Recv(
             result.back().data.get(), size, MPI_BYTE, receiveStatus.MPI_SOURCE, receiveStatus.MPI_TAG, comm,
             &receiveStatus);
