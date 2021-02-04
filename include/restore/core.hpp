@@ -123,14 +123,14 @@ class ReStore {
         BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
             : _constructorArgumentsValid(
                 validateConstructorArguments(numRanks, numBlocks, replicationLevel, mpiContext)),
-              _numRanks(numRanks),
               _numBlocks(numBlocks),
+              _numRanks(numRanks),
               _replicationLevel(replicationLevel),
-              _numRanges(numRanks),
+              _numRanges(static_cast<size_t>(numRanks)),
               _blocksPerRange(numBlocks / _numRanges),
               _numRangesWithAdditionalBlock(numBlocks - _blocksPerRange * _numRanges),
-              _mpiContext(mpiContext),
-              _shiftWidth(determineShiftWidth(numRanks, replicationLevel)) {
+              _shiftWidth(determineShiftWidth(numRanks, replicationLevel)),
+              _mpiContext(mpiContext) {
             assert(_numRanges > 0);
             assert(_blocksPerRange > 0);
             assert(_blocksPerRange <= _numBlocks);
@@ -181,15 +181,19 @@ class ReStore {
             assert(range.id < _numRanks);
 
             // The range is located on the rank with the same id ...
-            auto                        rankIds   = std::vector<ReStoreMPI::original_rank_t>();
+            auto rankIds = std::vector<ReStoreMPI::original_rank_t>();
+            assert(range.id <= std::numeric_limits<ReStoreMPI::original_rank_t>::max());
+            assert(range.id >= 0);
             ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id);
             rankIds.push_back(firstRank);
 
             // ... and on <replication level> - 1 further ranks, all <shift width> apart.
             for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
+                assert(firstRank >= 0);
                 ReStoreMPI::original_rank_t nextRank = static_cast<ReStoreMPI::original_rank_t>(
-                    (static_cast<int>(firstRank) + _shiftWidth * replica) % _numRanks);
-                assert(static_cast<int>(nextRank) < _numRanks);
+                    (static_cast<uint64_t>(firstRank) + _shiftWidth * replica) % _numRanks);
+                assert(nextRank >= 0);
+                assert(static_cast<size_t>(nextRank) < _numRanks);
                 rankIds.push_back(nextRank);
             }
 
@@ -205,10 +209,9 @@ class ReStore {
                 return std::vector<BlockRange>();
             }
 
-            // TODO remove the static_casts
             if (rankId < 0) {
                 throw std::runtime_error("Invalid rank id: Less than zero.");
-            } else if (rankId > _numRanks) {
+            } else if (static_cast<size_t>(rankId) > _numRanks) {
                 throw std::runtime_error("Invalid rank id: lower than the number of ranks.");
             }
 
@@ -225,11 +228,17 @@ class ReStore {
                 assert(_numRanges < std::numeric_limits<int64_t>::max());
                 assert(_numRanges > 0);
 
-                int64_t rangeId = firstRange.id - _shiftWidth * replica;
+                assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
+                assert(_shiftWidth <= std::numeric_limits<int64_t>::max());
+                static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
+                int64_t rangeId = static_cast<int64_t>(firstRange.id) - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
                 if (rangeId < 0) {
-                    rangeId = _numRanges + rangeId % static_cast<int64_t>(_numRanges);
+                    assert(_numRanges < std::numeric_limits<int64_t>::max());
+                    rangeId = static_cast<int64_t>(_numRanges)
+                              + static_cast<int64_t>(rangeId % static_cast<int64_t>(_numRanges));
                 }
-                BlockRange nextRange = blockRangeById(rangeId);
+                assert(rangeId >= 0);
+                BlockRange nextRange = blockRangeById(static_cast<size_t>(rangeId));
                 assert(nextRange.id < _numRanges);
                 rangeIds.push_back(nextRange);
             }
@@ -242,10 +251,12 @@ class ReStore {
         // Returns true if the given block or block range is stored on the given rank.
         // If the given rank is dead, this will return false.
         bool isStoredOn(BlockRange blockRange, ReStoreMPI::original_rank_t rankId) const {
-            if (blockRange.id > _numRanges) {
-                throw std::runtime_error("The given ranges id is too large.");
-            } else if (rankId < 0 || rankId > _numRanks) {
-                throw std::runtime_error("The given rank id is either negative or too large.");
+            if (rankId < 0) {
+                throw std::runtime_error("A rank id cannot be negative.");
+            } else if (static_cast<size_t>(rankId) >= _numRanks) {
+                throw std::runtime_error("Rank id larger than (or equal to) the number of ranks.");
+            } else  if (blockRange.id > _numRanges) {
+                throw std::runtime_error("The given block range's id is too large.");
             }
 
             // If the given rank is dead, return false (it does not store anything).
@@ -261,11 +272,17 @@ class ReStore {
                 assert(_numRanges < std::numeric_limits<int64_t>::max());
                 assert(_numRanges > 0);
 
-                int64_t rangeId = rankId - _shiftWidth * replica;
+                assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
+                assert(_shiftWidth <= std::numeric_limits<int64_t>::max());
+                static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
+                int64_t rangeId = rankId - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
                 if (rangeId < 0) {
-                    rangeId = _numRanges + rangeId % static_cast<int64_t>(_numRanges);
+                    assert(_numRanges < std::numeric_limits<int64_t>::max());
+                    rangeId = static_cast<int64_t>(_numRanges)
+                              + static_cast<int64_t>(rangeId % static_cast<int64_t>(_numRanges));
                 }
-                if (rangeId == blockRange.id) {
+                assert(rankId >= 0);
+                if (static_cast<size_t>(rangeId) == blockRange.id) {
                     return true;
                 }
             }
@@ -330,7 +347,10 @@ class ReStore {
 
         private:
         uint32_t determineShiftWidth(uint32_t numRanks, uint16_t replicationLevel) const {
-            return numRanks / replicationLevel;
+            assert(numRanks > 0);
+            assert(replicationLevel > 0);
+            assert(replicationLevel <= numRanks);
+            return static_cast<uint32_t>(numRanks) / replicationLevel;
         }
 
         bool validateConstructorArguments(

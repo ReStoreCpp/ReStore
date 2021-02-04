@@ -27,8 +27,7 @@ macro(package_add_test TESTNAME LIBRARIES)
         PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_DIR}"
     )
     set_target_properties(${TESTNAME} PROPERTIES FOLDER tests)
-    target_compile_options(${TESTNAME} INTERFACE "-g")
-    target_compile_options(${TESTNAME} INTERFACE "-Og")
+    target_compile_options(${TESTNAME} PRIVATE -g -Og -Wall -Wextra -Wcast-align -Wconversion -Wnoexcept -Wnon-virtual-dtor -Wnull-dereference -Woverloaded-virtual -Wpedantic -Wsuggest-attribute=const -Wsuggest-attribute=noreturn -Wshadow -Wsign-conversion -Wsuggest-override -Wundef -Wunreachable-code -Wunused)
 endmacro()
 
 function(add_mpi_test name no_mpi_proc)

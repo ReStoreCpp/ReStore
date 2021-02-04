@@ -246,6 +246,7 @@ TEST(StoreTest, ReStore_BlockRange) {
 TEST(StoreTest, ReStore_BlockDistribution_Basic) {
     using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore<uint16_t>::block_id_t;
+    using original_rank_t   = ReStoreMPI::original_rank_t;
 
     // Mock MPI context to pass to the block distribution
     auto mpiContext = MPIContextMock();
@@ -311,11 +312,13 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(9), 7));
 
         // ... and so should the blocks 10..19, 40..49 and 70..79
-        for (block_id_t blockId: iter::chain(iter::range(10, 20), iter::range(40, 50), iter::range(70, 80))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(10, 20), iter::range<block_id_t>(40, 50), iter::range<block_id_t>(70, 80))) {
             ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 7));
         }
-        for (block_id_t blockId:
-             iter::chain(iter::range(0, 10), iter::range(20, 40), iter::range(50, 70), iter::range(80, 100))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(0, 10), iter::range<block_id_t>(20, 40), iter::range<block_id_t>(50, 70),
+                 iter::range<block_id_t>(80, 100))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 7));
         }
 
@@ -338,11 +341,13 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(9), 1));
 
         // ... and so should the blocks 10..19, 50..59 and 80..89
-        for (block_id_t blockId: iter::chain(iter::range(10, 20), iter::range(50, 60), iter::range(80, 90))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(10, 20), iter::range<block_id_t>(50, 60), iter::range<block_id_t>(80, 90))) {
             ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 1));
         }
-        for (block_id_t blockId:
-             iter::chain(iter::range(0, 10), iter::range(20, 50), iter::range(60, 80), iter::range(90, 100))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(0, 10), iter::range<block_id_t>(20, 50), iter::range<block_id_t>(60, 80),
+                 iter::range<block_id_t>(90, 100))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 1));
         }
 
@@ -379,9 +384,9 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
-        for (block_id_t blockId: iter::range(0, 100)) {
+        for (block_id_t blockId: iter::range<block_id_t>(0, 100)) {
             auto ranksOfThisBlock = blockDistribution.ranksBlockIsStoredOn(blockId);
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 10)) {
+            for (auto rankId: iter::range<original_rank_t>(0, 10)) {
                 if (std::find(ranksOfThisBlock.begin(), ranksOfThisBlock.end(), rankId) != ranksOfThisBlock.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -391,9 +396,9 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
         }
 
         // rangesStoredOnRank() and isStoredOn() yield consistent results
-        for (ReStoreMPI::original_rank_t rankId: iter::range(0, 10)) {
+        for (auto rankId: iter::range<original_rank_t>(0, 10)) {
             auto rangesOnThisRank = blockDistribution.rangesStoredOnRank(rankId);
-            for (block_id_t blockId: iter::range(0, 10)) {
+            for (block_id_t blockId: iter::range<block_id_t>(0, 10)) {
                 auto blockRange = blockDistribution.blockRangeById(blockId);
                 if (std::find(rangesOnThisRank.begin(), rangesOnThisRank.end(), blockRange) != rangesOnThisRank.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockRange, rankId));
@@ -408,6 +413,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
 TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
     using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore<uint16_t>::block_id_t;
+    using original_rank_t   = ReStoreMPI::original_rank_t;
 
     // Mock MPI context to pass to the block distribution
     auto mpiContext = MPIContextMock();
@@ -469,10 +475,12 @@ TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
         ASSERT_TRUE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(19), 19));
 
         // ... and so should the blocks 28..31, 52..55, 77..81
-        for (block_id_t blockId: iter::chain(iter::range(29, 33), iter::range(53, 57), iter::range(77, 81))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(29, 33), iter::range<block_id_t>(53, 57), iter::range<block_id_t>(77, 81))) {
             ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 19));
         }
-        for (block_id_t blockId: iter::chain(iter::range(0, 29), iter::range(33, 53), iter::range(57, 77))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(0, 29), iter::range<block_id_t>(33, 53), iter::range<block_id_t>(57, 77))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 19));
         }
 
@@ -505,10 +513,12 @@ TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(19), 0));
 
         // ... and so should the blocks 0..4, 57..60 and 33..36
-        for (block_id_t blockId: iter::chain(iter::range(0, 5), iter::range(57, 61), iter::range(33, 37))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(0, 5), iter::range<block_id_t>(57, 61), iter::range<block_id_t>(33, 37))) {
             ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 0));
         }
-        for (block_id_t blockId: iter::chain(iter::range(5, 33), iter::range(37, 57), iter::range(61, 81))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(5, 33), iter::range<block_id_t>(37, 57), iter::range<block_id_t>(61, 81))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 0));
         }
 
@@ -527,7 +537,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
 
         // The blocks 77..80 should be on rank 19, 5 and 11 but not on any other ranks
         for (auto blockId: iter::range<block_id_t>(77, 81)) {
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+            for (auto rankId: iter::range(0, 20)) {
                 if (rankId == 19 || rankId == 5 || rankId == 11) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -539,9 +549,9 @@ TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
-        for (block_id_t blockId: iter::range(0, 81)) {
+        for (block_id_t blockId: iter::range<block_id_t>(0, 81)) {
             auto ranksOfThisBlock = blockDistribution.ranksBlockIsStoredOn(blockId);
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+            for (auto rankId: iter::range<original_rank_t>(0, 20)) {
                 if (std::find(ranksOfThisBlock.begin(), ranksOfThisBlock.end(), rankId) != ranksOfThisBlock.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -551,9 +561,9 @@ TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
         }
 
         // rangesStoredOnRank() and isStoredOn() yield consistent results
-        for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+        for (auto rankId: iter::range<original_rank_t>(0, 20)) {
             auto rangesOnThisRank = blockDistribution.rangesStoredOnRank(rankId);
-            for (block_id_t blockId: iter::range(0, 20)) {
+            for (block_id_t blockId: iter::range<block_id_t>(0, 20)) {
                 auto blockRange = blockDistribution.blockRangeById(blockId);
                 if (std::find(rangesOnThisRank.begin(), rangesOnThisRank.end(), blockRange) != rangesOnThisRank.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockRange, rankId));
@@ -613,17 +623,19 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(9), 7));
 
         // ... and so should the blocks 10..19, 40..49 and 70..79
-        for (block_id_t blockId: iter::chain(iter::range(10, 20), iter::range(40, 50), iter::range(70, 80))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(10, 20), iter::range<block_id_t>(40, 50), iter::range<block_id_t>(70, 80))) {
             ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 7));
         }
-        for (block_id_t blockId:
-             iter::chain(iter::range(0, 10), iter::range(20, 40), iter::range(50, 70), iter::range(80, 100))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(0, 10), iter::range<block_id_t>(20, 40), iter::range<block_id_t>(50, 70),
+                 iter::range<block_id_t>(80, 100))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 7));
         }
 
         // Rank 1 stores ranges 1, 8, and 5, but rank 1 failed, so it should store no more blocks/blockRanges
         // all other ranks should still store 3 elements.
-        for (original_rank_t rankId: iter::range(0, 10)) {
+        for (original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
             if (rankId == 1) {
                 ASSERT_THAT(blockDistribution.rangesStoredOnRank(rankId), IsEmpty());
             } else {
@@ -642,7 +654,7 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(8), 1));
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(9), 1));
 
-        for (block_id_t blockId: iter::chain(iter::range(0, 100))) {
+        for (block_id_t blockId: iter::chain(iter::range<block_id_t>(0, 100))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 1));
         }
 
@@ -698,9 +710,9 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
-        for (block_id_t blockId: iter::range(0, 100)) {
+        for (block_id_t blockId: iter::range<block_id_t>(0, 100)) {
             auto ranksOfThisBlock = blockDistribution.ranksBlockIsStoredOn(blockId);
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 10)) {
+            for (ReStoreMPI::original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
                 if (std::find(ranksOfThisBlock.begin(), ranksOfThisBlock.end(), rankId) != ranksOfThisBlock.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -710,9 +722,9 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
         }
 
         // rangesStoredOnRank() and isStoredOn() yield consistent results
-        for (ReStoreMPI::original_rank_t rankId: iter::range(0, 10)) {
+        for (ReStoreMPI::original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
             auto rangesOnThisRank = blockDistribution.rangesStoredOnRank(rankId);
-            for (block_id_t blockId: iter::range(0, 10)) {
+            for (block_id_t blockId: iter::range<block_id_t>(0, 10)) {
                 auto blockRange = blockDistribution.blockRangeById(blockId);
                 if (std::find(rangesOnThisRank.begin(), rangesOnThisRank.end(), blockRange) != rangesOnThisRank.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockRange, rankId));
@@ -751,11 +763,11 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
         // Rank 19 stores ranges 7, 13, and 19, but rank 19 is dead, it should not store anything.
         ASSERT_THAT(blockDistribution.rangesStoredOnRank(19), IsEmpty());
 
-        for (size_t rangeId: iter::range(0, 20)) {
+        for (size_t rangeId: iter::range<size_t>(0, 20)) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(rangeId), 19));
         }
 
-        for (block_id_t blockId: iter::range(0, 81)) {
+        for (block_id_t blockId: iter::range<size_t>(0, 81)) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 19));
         }
 
@@ -788,17 +800,19 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(19), 0));
 
         // ... and so should the blocks 0..4, 57..60 and 33..36
-        for (block_id_t blockId: iter::chain(iter::range(0, 5), iter::range(57, 61), iter::range(33, 37))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(0, 5), iter::range<block_id_t>(57, 61), iter::range<block_id_t>(33, 37))) {
             ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 0));
         }
-        for (block_id_t blockId: iter::chain(iter::range(5, 33), iter::range(37, 57), iter::range(61, 81))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(5, 33), iter::range<block_id_t>(37, 57), iter::range<block_id_t>(61, 81))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 0));
         }
 
         // The first five blocks should be on rank 0, 6 and 12 but not on any other ranks.
         // None of these ranks is affected by a failure, so this should not change.
         for (auto blockId: iter::range<block_id_t>(0, 5)) {
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+            for (original_rank_t rankId: iter::range<original_rank_t>(0, 20)) {
                 if (rankId == 0 || rankId == 6 || rankId == 12) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -812,7 +826,7 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
         // The blocks 77..80 should be on rank 19, 5 and 11 but not on any other ranks
         // Rank 19 failed, it should not be listed as storing anything.
         for (auto blockId: iter::range<block_id_t>(77, 81)) {
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+            for (auto rankId: iter::range<original_rank_t>(0, 20)) {
                 if (rankId == 5 || rankId == 11) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -824,9 +838,9 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
-        for (block_id_t blockId: iter::range(0, 81)) {
+        for (block_id_t blockId: iter::range<block_id_t>(0, 81)) {
             auto ranksOfThisBlock = blockDistribution.ranksBlockIsStoredOn(blockId);
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+            for (auto rankId: iter::range<original_rank_t>(0, 20)) {
                 if (std::find(ranksOfThisBlock.begin(), ranksOfThisBlock.end(), rankId) != ranksOfThisBlock.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -836,9 +850,9 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
         }
 
         // rangesStoredOnRank() and isStoredOn() yield consistent results
-        for (ReStoreMPI::original_rank_t rankId: iter::range(0, 20)) {
+        for (auto rankId: iter::range<original_rank_t>(0, 20)) {
             auto rangesOnThisRank = blockDistribution.rangesStoredOnRank(rankId);
-            for (block_id_t blockId: iter::range(0, 20)) {
+            for (block_id_t blockId: iter::range<block_id_t>(0, 20)) {
                 auto blockRange = blockDistribution.blockRangeById(blockId);
                 if (std::find(rangesOnThisRank.begin(), rangesOnThisRank.end(), blockRange) != rangesOnThisRank.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockRange, rankId));
@@ -890,17 +904,19 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
         ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(9), 7));
 
         // ... and so should the blocks 10..19, 40..49 and 70..79
-        for (block_id_t blockId: iter::chain(iter::range(10, 20), iter::range(40, 50), iter::range(70, 80))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(10, 20), iter::range<block_id_t>(40, 50), iter::range<block_id_t>(70, 80))) {
             ASSERT_TRUE(blockDistribution.isStoredOn(blockId, 7));
         }
-        for (block_id_t blockId:
-             iter::chain(iter::range(0, 10), iter::range(20, 40), iter::range(50, 70), iter::range(80, 100))) {
+        for (block_id_t blockId: iter::chain(
+                 iter::range<block_id_t>(0, 10), iter::range<block_id_t>(20, 40), iter::range<block_id_t>(50, 70),
+                 iter::range<block_id_t>(80, 100))) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockId, 7));
         }
 
         // Ranks 0, 3, 5, 6 and 8 failed, they should not store any elements. All other ranks should still store 3
         // elements.
-        for (original_rank_t rankId: iter::range(0, 10)) {
+        for (original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
             if (rankId == 0 || rankId == 3 || rankId == 5 || rankId == 6 || rankId == 8) {
                 ASSERT_THAT(blockDistribution.rangesStoredOnRank(rankId), IsEmpty());
             } else {
@@ -908,17 +924,21 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
             }
         }
 
-        for (auto [rankId, blockId]: iter::product(std::vector<original_rank_t> {0, 3, 5, 6, 8}, iter::range(0, 81))) {
-            ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+        for (original_rank_t rankId: {0, 3, 5, 6, 8}) {
+            for (block_id_t blockId: iter::range<block_id_t>(0, 81)) {
+                ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+            }
         }
 
         // The first ten blocks should be on rank 0, 3 and 6 but not on any other ranks.
         // All of these ranks failed, so the first ten blocks should be stored nowere.
-        for (auto [rankId, blockId]: iter::product(iter::range(0, 10), iter::range(0, 10))) {
-            ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+        for (original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
+            for (block_id_t blockId: iter::range<block_id_t>(0, 10)) {
+                    ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+                }
         }
         // as should range 0
-        for (original_rank_t rankId: iter::range(0, 10)) {
+        for (original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
             ASSERT_FALSE(blockDistribution.isStoredOn(blockDistribution.blockRangeById(0), rankId));
         }
 
@@ -956,9 +976,9 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
-        for (block_id_t blockId: iter::range(0, 100)) {
+        for (block_id_t blockId: iter::range<block_id_t>(0, 100)) {
             auto ranksOfThisBlock = blockDistribution.ranksBlockIsStoredOn(blockId);
-            for (ReStoreMPI::original_rank_t rankId: iter::range(0, 10)) {
+            for (ReStoreMPI::original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
                 if (std::find(ranksOfThisBlock.begin(), ranksOfThisBlock.end(), rankId) != ranksOfThisBlock.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockId, rankId));
                 } else {
@@ -968,9 +988,9 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
         }
 
         // rangesStoredOnRank() and isStoredOn() yield consistent results
-        for (ReStoreMPI::original_rank_t rankId: iter::range(0, 10)) {
+        for (ReStoreMPI::original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
             auto rangesOnThisRank = blockDistribution.rangesStoredOnRank(rankId);
-            for (block_id_t blockId: iter::range(0, 10)) {
+            for (block_id_t blockId: iter::range<block_id_t>(0, 10)) {
                 auto blockRange = blockDistribution.blockRangeById(blockId);
                 if (std::find(rangesOnThisRank.begin(), rangesOnThisRank.end(), blockRange) != rangesOnThisRank.end()) {
                     ASSERT_TRUE(blockDistribution.isStoredOn(blockRange, rankId));
