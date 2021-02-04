@@ -46,12 +46,12 @@ class StoreTest : public ::testing::Environment {
     // If the constructor and destructor are not enough for setting up
     // and cleaning up each test, you can define the following methods:
 
-    virtual void SetUp() {
+    virtual void SetUp() override {
         // Code here will be called immediately after the constructor (right
         // before each test).
     }
 
-    virtual void TearDown() {
+    virtual void TearDown() override {
         // Code here will be called immediately after each test (right
         // before the destructor).
     }
@@ -585,7 +585,7 @@ getAliveOnlyFake(std::vector<ReStoreMPI::original_rank_t> deadRanks, std::vector
         ranks.begin(), ranks.end(), deadRanks.begin(), deadRanks.end(), std::inserter(aliveRanks, aliveRanks.begin()));
 
     return aliveRanks;
-};
+}
 
 TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
     using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
@@ -934,8 +934,8 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
         // All of these ranks failed, so the first ten blocks should be stored nowere.
         for (original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {
             for (block_id_t blockId: iter::range<block_id_t>(0, 10)) {
-                    ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
-                }
+                ASSERT_FALSE(blockDistribution.isStoredOn(blockId, rankId));
+            }
         }
         // as should range 0
         for (original_rank_t rankId: iter::range<original_rank_t>(0, 10)) {

@@ -161,7 +161,7 @@ class ReStore {
                 size_t blockId = block / (_blocksPerRange + 1);
                 return blockRangeById(blockId);
             } else {
-                assert((block - (_blocksPerRange * _numRangesWithAdditionalBlock)) >= 0);
+                assert(block >= _blocksPerRange * _numRangesWithAdditionalBlock);
                 size_t rangeId = _numRangesWithAdditionalBlock
                                  + (block - ((_blocksPerRange + 1) * _numRangesWithAdditionalBlock)) / _blocksPerRange;
                 return blockRangeById(rangeId);
@@ -231,7 +231,8 @@ class ReStore {
                 assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
                 assert(_shiftWidth <= std::numeric_limits<int64_t>::max());
                 static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
-                int64_t rangeId = static_cast<int64_t>(firstRange.id) - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
+                int64_t rangeId = static_cast<int64_t>(firstRange.id)
+                                  - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
                 if (rangeId < 0) {
                     assert(_numRanges < std::numeric_limits<int64_t>::max());
                     rangeId = static_cast<int64_t>(_numRanges)
@@ -255,7 +256,7 @@ class ReStore {
                 throw std::runtime_error("A rank id cannot be negative.");
             } else if (static_cast<size_t>(rankId) >= _numRanks) {
                 throw std::runtime_error("Rank id larger than (or equal to) the number of ranks.");
-            } else  if (blockRange.id > _numRanges) {
+            } else if (blockRange.id > _numRanges) {
                 throw std::runtime_error("The given block range's id is too large.");
             }
 

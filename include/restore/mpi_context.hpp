@@ -52,7 +52,7 @@ class RankManager {
 
     std::vector<original_rank_t> getOnlyAlive(const std::vector<original_rank_t>& in) const {
         std::vector<current_rank_t> out(in.size());
-        MPI_Group_translate_ranks(_originalGroup, in.size(), in.data(), _currentGroup, out.data());
+        MPI_Group_translate_ranks(_originalGroup, (int)in.size(), in.data(), _currentGroup, out.data());
         for (size_t i = 0; i < in.size(); ++i) {
             out[i] = out[i] == MPI_UNDEFINED ? MPI_UNDEFINED : in[i];
         }
@@ -65,7 +65,7 @@ class RankManager {
     std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
         std::vector<current_rank_t> currentRanks(originalRanks.size());
         MPI_Group_translate_ranks(
-            _originalGroup, originalRanks.size(), originalRanks.data(), _currentGroup, currentRanks.data());
+            _originalGroup, (int)originalRanks.size(), originalRanks.data(), _currentGroup, currentRanks.data());
         currentRanks.erase(
             std::remove_if(
                 currentRanks.begin(), currentRanks.end(),
@@ -109,7 +109,7 @@ std::vector<Message> SparseAllToAll(const std::vector<Message>& messages, const 
     while (!allSendsFinished) {
         receiveNewMessage(result, comm, tag);
         // This might be improved by using the status and removing all finished requests
-        MPI_Testall(requests.size(), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
+        MPI_Testall((int)requests.size(), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
     }
 
     // Enter a barrier. Once all PEs are here, we know that all messages have been received
