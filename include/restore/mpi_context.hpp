@@ -1,10 +1,10 @@
 #ifndef MPI_CONTEXT_H
 #define MPI_CONTEXT_H
 
-
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <mpi.h>
 #include <optional>
@@ -23,6 +23,19 @@ struct Message {
     std::shared_ptr<uint8_t> data;
     int                      size;
     current_rank_t           rank;
+};
+
+class FaultException : public std::exception {
+    virtual const char* what() const throw() override {
+        return "A rank in the communicator failed";
+    }
+};
+
+class RevokedException : public std::exception {
+    virtual const char* what() const throw() override {
+        return "The communicator used has been revoked. Call updateComm with the new communicator before trying to "
+               "communicate again.";
+    }
 };
 
 class RankManager {
@@ -79,19 +92,34 @@ class RankManager {
     MPI_Group _currentGroup;
 };
 
+template <class F>
+void successOrThrowMpiCall(const F& mpiCall) {
+    int rc, ec;
+    rc = mpiCall();
+    MPI_Error_class(rc, &ec);
+    if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_PROC_FAILED_PENDING) {
+        throw FaultException();
+    }
+    if (ec == MPI_ERR_REVOKED) {
+        throw RevokedException();
+    }
+}
+
 void receiveNewMessage(std::vector<Message>& result, const MPI_Comm comm, const int tag) {
     int        newMessageReceived = false;
     MPI_Status receiveStatus;
-    MPI_Iprobe(MPI_ANY_SOURCE, tag, comm, &newMessageReceived, &receiveStatus);
+    successOrThrowMpiCall([&]() { return MPI_Iprobe(MPI_ANY_SOURCE, tag, comm, &newMessageReceived, &receiveStatus); });
     if (newMessageReceived) {
         assert(receiveStatus.MPI_TAG == tag);
         int size;
         MPI_Get_count(&receiveStatus, MPI_BYTE, &size);
         result.emplace_back(
             Message{std::shared_ptr<uint8_t>(new uint8_t[(size_t)size]), size, receiveStatus.MPI_SOURCE});
-        MPI_Recv(
-            result.back().data.get(), size, MPI_BYTE, receiveStatus.MPI_SOURCE, receiveStatus.MPI_TAG, comm,
-            &receiveStatus);
+        successOrThrowMpiCall([&]() {
+            return MPI_Recv(
+                result.back().data.get(), size, MPI_BYTE, receiveStatus.MPI_SOURCE, receiveStatus.MPI_TAG, comm,
+                &receiveStatus);
+        });
     }
 }
 
@@ -101,7 +129,9 @@ std::vector<Message> SparseAllToAll(const std::vector<Message>& messages, const 
     for (size_t i = 0; i < messages.size(); ++i) {
         const auto&  message    = messages[i];
         MPI_Request* requestPtr = &requests[i];
-        MPI_Issend(message.data.get(), message.size, MPI_BYTE, message.rank, tag, comm, requestPtr);
+        successOrThrowMpiCall([&]() {
+            return MPI_Issend(message.data.get(), message.size, MPI_BYTE, message.rank, tag, comm, requestPtr);
+        });
     }
 
     // Receive messages until all messages sent have been received
@@ -110,12 +140,14 @@ std::vector<Message> SparseAllToAll(const std::vector<Message>& messages, const 
     while (!allSendsFinished) {
         receiveNewMessage(result, comm, tag);
         // This might be improved by using the status and removing all finished requests
-        MPI_Testall((int)requests.size(), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
+        successOrThrowMpiCall([&]() {
+            return MPI_Testall((int)requests.size(), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
+        });
     }
 
     // Enter a barrier. Once all PEs are here, we know that all messages have been received
     MPI_Request barrierRequest;
-    MPI_Ibarrier(comm, &barrierRequest);
+    successOrThrowMpiCall([&]() { return MPI_Ibarrier(comm, &barrierRequest); });
 
     // Continue receiving messages until the barrier completes
     // (and thus all messages from all PEs have been received)
@@ -123,7 +155,7 @@ std::vector<Message> SparseAllToAll(const std::vector<Message>& messages, const 
     while (!barrierFinished) {
         receiveNewMessage(result, comm, tag);
         MPI_Status barrierStatus;
-        MPI_Test(&barrierRequest, &barrierFinished, &barrierStatus);
+        successOrThrowMpiCall([&]() { return MPI_Test(&barrierRequest, &barrierFinished, &barrierStatus); });
     }
     return result;
 }
