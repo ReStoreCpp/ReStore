@@ -348,3 +348,6 @@ zsdoc/data
 .clangd
 clangbuild
 
+.vscode/launch.json
+.vscode/tasks.json
+.demian-clang-format
