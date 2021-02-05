@@ -136,7 +136,7 @@ class ReStore {
             assert(_blocksPerRange <= _numBlocks);
             assert(_blocksPerRange * _numRanges + _numRangesWithAdditionalBlock == _numBlocks);
             assert(_shiftWidth > 0);
-            assert(_shiftWidth * (replicationLevel - 1) < _numRanks);
+            assert(_shiftWidth * (replicationLevel - 1u) < _numRanks);
         }
 
         // blockRangeById()
