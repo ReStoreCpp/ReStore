@@ -505,13 +505,18 @@ class ReStore {
     // canBeParallelized: Indicates if multiple serializeFunc calls can happen on different blocks
     //      concurrently. Also assumes that the blocks do not have to be serialized in the order they
     //      are emitted by nextBlock.
-    template <class SerializeFuncCallbackFunction, class NextBlockCallbackFunction>
+    template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction>
     void submitBlocks(
-        SerializeFuncCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
-        // std::function<size_t(const BlockType&, std::function<void(uint8_t)>)>   serializeFunc,
-        // std::function<std::optional<std::pair<block_id_t, const BlockType&>>()> nextBlock,
+        SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
+        static_assert(
+            std::is_invocable_r<size_t, SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
+            "serializeFunc must be invocable as size_t(const BlockType&, SerializedBlockStoreStream");
+        static_assert(
+            std::is_invocable_r<std::optional<std::pair<block_id_t, const BlockType&>>, NextBlockCallbackFunction>(),
+            "serializeFunc must be invocable as std::optional<std::pair<block_id_t, const BlockType&>>()");
+
         SerializedBlockStoreStream stream;
         bool                       done = false;
         do {
