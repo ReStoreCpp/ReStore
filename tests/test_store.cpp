@@ -60,6 +60,15 @@ class StoreTest : public ::testing::Environment {
 };
 
 TEST(StoreTest, ReStore_Constructor) {
+    ReStore<int>     store(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, sizeof(int));
+    unsigned         counter = 0;
+    std::vector<int> data{0, 1, 2, 3, 42, 1337};
+    store.submitBlocks(
+        [](const int& value, ReStore<int>::SerializedBlockStoreStream stream) { stream << value; },
+        [&counter, &data]() -> std::optional<std::pair<ReStore<int>::block_id_t, const int&>> {
+            return data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter++]));
+        });
+
     // Construction of a ReStore object
     ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::lookUpTable));
     ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, sizeof(int)));

@@ -142,7 +142,7 @@ class ReStore {
         // blockRangeById()
         //
         // A factory method to build a BlockRange by it's id.
-        BlockRange blockRangeById(block_id_t rangeId) const {
+        BlockRange blockRangeById(size_t rangeId) const {
             return BlockRange(rangeId, _numBlocks, _numRanges);
         }
 
@@ -384,6 +384,49 @@ class ReStore {
         const MPIContext& _mpiContext;
     };
 
+    class SerializedBlockStoreStream {
+        public:
+        std::vector<int>            data;
+        SerializedBlockStoreStream& operator<<(int val) {
+            data.push_back(val);
+            return *this;
+        }
+    };
+
+    class SerializedBlockLoadStream {
+        public:
+        std::vector<int>           data;
+        SerializedBlockLoadStream& operator<<(int val) {
+            data.push_back(val);
+            return *this;
+        }
+    };
+
+    class SerializedBlockStorage {
+        public:
+        SerializedBlockStorage(OffsetMode offsetMode, size_t constOffset = 0)
+            : _offsetMode(offsetMode),
+              _constOffset(constOffset) {
+            if (_offsetMode == OffsetMode::constant && _constOffset == 0) {
+                throw std::runtime_error("If constant offset mode is used, the offset has to be greater than 0.");
+            } else if (_offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
+                throw std::runtime_error("You've specified LUT as the offset mode and an constant offset.");
+            }
+        }
+
+        template <class HandleBlockFunction>
+        void forAllBlocks(std::pair<block_id_t, size_t> blockRange, HandleBlockFunction handleBlock);
+
+        private:
+        using BlockRange = typename BlockDistribution<>::BlockRange;
+
+        const OffsetMode                  _offsetMode;
+        const size_t                      _constOffset; // only in ConstOffset mode
+        std::vector<BlockRange>           _ranges;      // For all outer vectors, the indices correspond
+        std::vector<std::vector<size_t>>  _offsets;     // A sentinel points to last elem + 1, only in LUT mode
+        std::vector<std::vector<uint8_t>> _data;
+    };
+
     // Constructor
     //
     // mpiCommunicator: The MPI Communicator to use.
@@ -400,7 +443,8 @@ class ReStore {
         : _replicationLevel(replicationLevel),
           _offsetMode(offsetMode),
           _constOffset(constOffset),
-          _mpiContext(mpiCommunicator) {
+          _mpiContext(mpiCommunicator),
+          _serializedBlocks(offsetMode, constOffset) {
         if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
             throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
         } else if (offsetMode == OffsetMode::constant && constOffset == 0) {
@@ -454,20 +498,30 @@ class ReStore {
     // submitBlocks() also performs the replication and is therefore blocking until all ranks called it.
     // Even if there are multiple receivers for a single block, serialize will be called only once per block.
     //
-    // serializeFunc: gets a reference to a block to serialize and a void * pointing to the destination
-    //      (where to write the serialized block). it should return the number of bytes written.
+    // serializeFunc: gets a reference to a block to serialize and a push_back function which can be used
+    //      to append the next byte of the serialized byte stream.
     // nextBlock: a generator function which should return <globalBlockId, const reference to block>
     //      on each call. If there are no more blocks getNextBlock should return {}
     // canBeParallelized: Indicates if multiple serializeFunc calls can happen on different blocks
     //      concurrently. Also assumes that the blocks do not have to be serialized in the order they
     //      are emitted by nextBlock.
-    /*void submitBlocks(
-        std::function<size_t(const BlockType&, void*)>                          serializeFunc,
-        std::function<std::optional<std::pair<block_id_t, const BlockType&>>()> nextBlock,
+    template <class SerializeFuncCallbackFunction, class NextBlockCallbackFunction>
+    void submitBlocks(
+        SerializeFuncCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
+        // std::function<size_t(const BlockType&, std::function<void(uint8_t)>)>   serializeFunc,
+        // std::function<std::optional<std::pair<block_id_t, const BlockType&>>()> nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
-        _assertInvariants();
-
+        SerializedBlockStoreStream stream;
+        bool                       done = false;
+        do {
+            std::optional<std::pair<block_id_t, const BlockType&>> next = nextBlock();
+            if (next) {
+                serializeFunc(next.value().second, stream);
+            } else {
+                done = true;
+            }
+        } while (!done);
         // Determine which rank will get which block range
 
         // Allocate one send buffer per block range. That is, those ranks which get the same blocks share a common
@@ -480,10 +534,10 @@ class ReStore {
         // Call serialize once, instructing it to write the serialization to one buffer
 
         // All blocks have been serialized, send & receive replicas
-        std::vector<ReStoreMPI::Message> messages;
-        _mpiContext.SparseAllToAll(messages);
+        // std::vector<ReStoreMPI::Message> messages;
+        //_mpiContext.SparseAllToAll(messages);
     }
-    */
+
     // pullBlocks()
     //
     // Pulls blocks from other ranks in the replicated storage. That is, the caller provides the global
@@ -496,11 +550,13 @@ class ReStore {
     //      byte stream, a length in bytes of this encoding and the global id of this block.
     // canBeParallelized: Indicates if multiple handleSerializedBlock calls can happen on different
     //      inputs concurrently.
+    template <class HandleSerializedBlockFunction>
     void pullBlocks(
-        std::vector<std::pair<size_t, size_t>>     blockRanges,
-        std::function<void(void*, size_t, size_t)> handleSerializedBlock,
-        bool                                       canBeParallelized = false // not supported yet
-    ) {}
+        std::vector<std::pair<block_id_t, size_t>> blockRanges, HandleSerializedBlockFunction handleSerializedBlock,
+        bool canBeParallelized = false // not supported yet
+    ) {
+        // HandleSerializedBlockFunction void(SerializedBlockOutStream, size_t lengthOfStreamInBytes, block_id_t)
+    }
 
     // pushBlocks()
     //
@@ -518,12 +574,10 @@ class ReStore {
     //      byte stream, a length in bytes of this encoding and the global id of this block.
     // canBeParallelized: Indicates if multiple handleSerializedBlock calls can happen on different
     //      inputs concurrently.
-    // TODO Rename Block, which contains only the globalId. As the struct does not really store the block
-    // this might be confusing when appearing in the interface.
     void pushBlocks(
-        std::vector<std::pair<std::pair<size_t, size_t>, int>> blockRanges,
-        std::function<void(void*, size_t, block_id_t)>         handleSerializedBlock,
-        bool                                                   canBeParallelized = false // not supported yet
+        std::vector<std::pair<std::pair<block_id_t, size_t>, int>> blockRanges,
+        std::function<void(void*, size_t, block_id_t)>             handleSerializedBlock,
+        bool                                                       canBeParallelized = false // not supported yet
     ) {}
 
     private:
@@ -531,6 +585,7 @@ class ReStore {
     const OffsetMode       _offsetMode;
     const size_t           _constOffset;
     ReStoreMPI::MPIContext _mpiContext;
+    SerializedBlockStorage _serializedBlocks;
 
     void _assertInvariants() const {
         assert(
