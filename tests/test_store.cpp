@@ -64,8 +64,11 @@ TEST(StoreTest, ReStore_Constructor) {
     unsigned         counter = 0;
     std::vector<int> data{0, 1, 2, 3, 42, 1337};
     store.submitBlocks(
-        [](const int& value, ReStore<int>::SerializedBlockStoreStream stream) { stream << value; },
-        [&counter, &data]() -> std::optional<std::pair<ReStore<int>::block_id_t, const int&>> {
+        [](const int& value, ReStore<int>::SerializedBlockStoreStream stream) {
+            stream << value;
+            return sizeof(int);
+        },
+        [&counter, &data]() {
             return data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter++]));
         });
 
