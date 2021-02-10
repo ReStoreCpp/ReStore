@@ -57,6 +57,7 @@ class RankManager {
     }
 
     void resetOriginalCommToCurrentComm() {
+        MPI_Group_free(&_originalGroup);
         _originalGroup = _currentGroup;
     }
 
