@@ -131,7 +131,9 @@ TEST(MPIContext, RankConversion) {
     assert(currentSize >= 1);
     context.updateComm(comm);
 
+    EXPECT_EQ(originalSize, context.getOriginalSize());
     EXPECT_EQ(originalRank, context.getMyOriginalRank());
+    EXPECT_EQ(currentSize, context.getCurrentSize());
     EXPECT_EQ(currentRank, context.getMyCurrentRank());
 
     std::vector<ReStoreMPI::original_rank_t> currentToOriginal;

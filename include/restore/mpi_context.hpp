@@ -54,10 +54,22 @@ class RankManager {
         _originalGroup = _currentGroup;
     }
 
+    original_rank_t getOriginalSize() {
+        original_rank_t size;
+        MPI_Group_size(_originalGroup, &size);
+        return size;
+    }
+
     original_rank_t getMyOriginalRank() {
         original_rank_t rank;
         MPI_Group_rank(_originalGroup, &rank);
         return rank;
+    }
+
+    current_rank_t getCurrentSize() {
+        current_rank_t size;
+        MPI_Group_size(_currentGroup, &size);
+        return size;
     }
 
     current_rank_t getMyCurrentRank() {
@@ -189,8 +201,16 @@ class MPIContext {
         _rankManager.resetOriginalCommToCurrentComm();
     }
 
+    original_rank_t getOriginalSize() {
+        return _rankManager.getOriginalSize();
+    }
+
     original_rank_t getMyOriginalRank() {
         return _rankManager.getMyOriginalRank();
+    }
+
+    current_rank_t getCurrentSize() {
+        return _rankManager.getCurrentSize();
     }
 
     current_rank_t getMyCurrentRank() {
