@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <functional>
+#include <sstream>
 
 #include "itertools.hpp"
 #include <gmock/gmock.h>
@@ -61,27 +62,14 @@ class StoreTest : public ::testing::Environment {
 };
 
 TEST(StoreTest, ReStore_Constructor) {
-    ReStore<int>     store(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, sizeof(int));
-    unsigned         counter = 0;
-    std::vector<int> data{0, 1, 2, 3, 42, 1337};
-    store.submitBlocks(
-        [](const int& value, ReStore<int>::SerializedBlockStoreStream stream) {
-            stream << value;
-            return sizeof(int);
-        },
-        [&counter, &data]() {
-            return data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter++]));
-        },
-        data.size());
-
     // Construction of a ReStore object
-    ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::lookUpTable));
-    ASSERT_NO_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, sizeof(int)));
+    ASSERT_NO_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::lookUpTable));
+    ASSERT_NO_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int)));
 
-    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::lookUpTable, sizeof(int)));
-    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 3, ReStore<int>::OffsetMode::constant, 0));
-    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 0, ReStore<int>::OffsetMode::lookUpTable));
-    ASSERT_ANY_THROW(ReStore<int>(MPI_COMM_WORLD, 0, ReStore<int>::OffsetMode::constant, sizeof(int)));
+    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::lookUpTable, sizeof(int)));
+    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, 0));
+    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 0, ReStore::OffsetMode::lookUpTable));
+    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 0, ReStore::OffsetMode::constant, sizeof(int)));
 
     // TODO Test a replication level that is larger than the number of ranks
     // TODO Test a replication level that cannot be archived because of memory
@@ -89,41 +77,27 @@ TEST(StoreTest, ReStore_Constructor) {
 
     // Replication level and offset mode getters
     {
-        auto store = ReStore<uint8_t>(MPI_COMM_WORLD, 3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
+        auto store = ReStore::ReStore<uint8_t>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(uint8_t));
         ASSERT_EQ(store.replicationLevel(), 3);
         auto [offsetMode, constOffset] = store.offsetMode();
-        ASSERT_EQ(offsetMode, ReStore<uint8_t>::OffsetMode::constant);
+        ASSERT_EQ(offsetMode, ReStore::OffsetMode::constant);
         ASSERT_EQ(constOffset, sizeof(uint8_t));
     }
 
     {
-        auto store = ReStore<uint8_t>(MPI_COMM_WORLD, 10, ReStore<uint8_t>::OffsetMode::lookUpTable);
+        auto store = ReStore::ReStore<uint8_t>(MPI_COMM_WORLD, 10, ReStore::OffsetMode::lookUpTable);
         ASSERT_EQ(store.replicationLevel(), 10);
         auto [offsetMode, constOffset] = store.offsetMode();
-        ASSERT_EQ(offsetMode, ReStore<uint8_t>::OffsetMode::lookUpTable);
+        ASSERT_EQ(offsetMode, ReStore::OffsetMode::lookUpTable);
         ASSERT_EQ(constOffset, 0);
     }
 }
 
-/*
-TEST(StoreTest, ReStore_submitBlocks) {
-    auto store         = ReStore<uint8_t>(MPI_COMM_WORLD, 3, ReStore<uint8_t>::OffsetMode::constant, sizeof(uint8_t));
-    auto serializeFunc = [](const ReStore<uint8_t>::block_id_t& block, void* buffer) {
-        UNUSED(block);
-        UNUSED(buffer);
-        return size_t(1);
-    };
-    auto nextBlock = []() {
-        return std::optional<std::pair<ReStore<uint8_t>::block_id_t, const uint8_t&>>();
-    };
-    store.submitBlocks(serializeFunc, nextBlock);
-}
-*/
-
 TEST(StoreTest, ReStore_BlockRange) {
     // BlockRange(size_t range_id, size_t numBlocks, size_t numRanges) {
     // bool includes(block_id_t block) {
-    typedef ReStore<u_int8_t>::BlockDistribution<MPIContextMock>::BlockRange BlockRange;
+    using BlockRange = ReStore::BlockDistribution<MPIContextMock>::BlockRange;
+    using block_id_t = ReStore::block_id_t;
 
     ASSERT_ANY_THROW(BlockRange(100, 1, 10)); // Range id greater than the number of ranges
     ASSERT_ANY_THROW(BlockRange(0, 1, 2));    // More ranges than blocks
@@ -134,10 +108,10 @@ TEST(StoreTest, ReStore_BlockRange) {
         ASSERT_EQ(range.start, 0);
         ASSERT_EQ(range.length, 10);
 
-        for (ReStore<uint8_t>::block_id_t blockId = 0; blockId < 10; blockId++) {
+        for (block_id_t blockId = 0; blockId < 10; blockId++) {
             ASSERT_TRUE(range.contains(blockId));
         }
-        for (ReStore<uint8_t>::block_id_t blockId = 10; blockId < 100; blockId++) {
+        for (block_id_t blockId = 10; blockId < 100; blockId++) {
             ASSERT_FALSE(range.contains(blockId));
         }
 
@@ -150,13 +124,13 @@ TEST(StoreTest, ReStore_BlockRange) {
         ASSERT_EQ(range.start, 20);
         ASSERT_EQ(range.length, 10);
 
-        for (ReStore<uint8_t>::block_id_t blockId = 0; blockId < 20; blockId++) {
+        for (block_id_t blockId = 0; blockId < 20; blockId++) {
             ASSERT_FALSE(range.contains(blockId));
         }
-        for (ReStore<uint8_t>::block_id_t blockId = 20; blockId < 30; blockId++) {
+        for (block_id_t blockId = 20; blockId < 30; blockId++) {
             ASSERT_TRUE(range.contains(blockId));
         }
-        for (ReStore<uint8_t>::block_id_t blockId = 30; blockId < 100; blockId++) {
+        for (block_id_t blockId = 30; blockId < 100; blockId++) {
             ASSERT_FALSE(range.contains(blockId));
         }
 
@@ -258,8 +232,8 @@ TEST(StoreTest, ReStore_BlockRange) {
 }
 
 TEST(StoreTest, ReStore_BlockDistribution_Basic) {
-    using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
-    using block_id_t        = ReStore<uint16_t>::block_id_t;
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
 
     // Mock MPI context to pass to the block distribution
@@ -425,8 +399,8 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
 }
 
 TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
-    using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
-    using block_id_t        = ReStore<uint16_t>::block_id_t;
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
 
     // Mock MPI context to pass to the block distribution
@@ -602,8 +576,8 @@ getAliveOnlyFake(std::vector<ReStoreMPI::original_rank_t> deadRanks, std::vector
 }
 
 TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
-    using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
-    using block_id_t        = ReStore<uint16_t>::block_id_t;
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
 
     {
@@ -751,8 +725,8 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
 }
 
 TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
-    using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
-    using block_id_t        = ReStore<uint16_t>::block_id_t;
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
 
     {
@@ -879,8 +853,8 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
 }
 
 TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
-    using BlockDistribution = ReStore<uint16_t>::BlockDistribution<MPIContextMock>;
-    using block_id_t        = ReStore<uint16_t>::block_id_t;
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
 
     {
@@ -1014,6 +988,21 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
             }
         }
     }
+}
+
+TEST(StoreTest, ReStore_submitBlocks) {
+    ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
+    unsigned              counter = 0;
+    std::vector<int>      data{0, 1, 2, 3, 42, 1337};
+    store.submitBlocks(
+        [](const int& value, ReStore::SerializedBlockStoreStream stream) {
+            stream << value;
+            return sizeof(int);
+        },
+        [&counter, &data]() {
+            return data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter++]));
+        },
+        data.size());
 }
 
 int main(int argc, char** argv) {
