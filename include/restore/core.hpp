@@ -5,8 +5,11 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <optional>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -402,11 +405,45 @@ class ReStore {
 
     class SerializedBlockStoreStream {
         public:
-        std::vector<int>            data;
-        SerializedBlockStoreStream& operator<<(int val) {
-            data.push_back(val);
+        SerializedBlockStoreStream(
+            std::shared_ptr<std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>> buffers,
+            std::shared_ptr<std::vector<ReStoreMPI::current_rank_t>>                    ranks)
+            : _buffers(buffers),
+              _ranks(ranks),
+              _bytesWritten(0) {
+            if (!buffers || !ranks) {
+                throw std::runtime_error("buffers and ranks have to point to a valid object.");
+            }
+        }
+
+        template <class T>
+        SerializedBlockStoreStream& operator<<(const T& value) {
+            static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
+            assert(_buffers);
+            assert(_ranks);
+
+            auto src = reinterpret_cast<const uint8_t*>(&value);
+            for (auto rank: *_ranks) {
+                if (_buffers->find(rank) == _buffers->end()) {
+                    (*_buffers)[rank] = std::vector<uint8_t>();
+                }
+                assert(rank > 0);
+                assert(static_cast<size_t>(rank) < _buffers->size());
+                (*_buffers)[rank].insert((*_buffers)[static_cast<size_t>(rank)].end(), src, src + sizeof(T));
+            }
+            _bytesWritten += sizeof(T);
+
             return *this;
         }
+
+        size_t bytesWritten() const noexcept {
+            return _bytesWritten;
+        }
+
+        private:
+        std::shared_ptr<std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>> _buffers; // One buffer per rank
+        std::shared_ptr<std::vector<ReStoreMPI::current_rank_t>>                    _ranks;   // Which ranks to send to
+        size_t                                                                      _bytesWritten;
     };
 
     class SerializedBlockLoadStream {
@@ -420,14 +457,47 @@ class ReStore {
 
     class SerializedBlockStorage {
         public:
-        SerializedBlockStorage(OffsetMode offsetMode, size_t constOffset = 0)
+        SerializedBlockStorage(OffsetMode offsetMode, BlockDistribution<>& blockDistribution, size_t constOffset = 0)
             : _offsetMode(offsetMode),
-              _constOffset(constOffset) {
+              _constOffset(constOffset),
+              _blockDistribution(blockDistribution) {
             if (_offsetMode == OffsetMode::constant && _constOffset == 0) {
                 throw std::runtime_error("If constant offset mode is used, the offset has to be greater than 0.");
             } else if (_offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
                 throw std::runtime_error("You've specified LUT as the offset mode and an constant offset.");
             }
+        }
+
+        void registerRanges(std::vector<typename BlockDistribution<>::BlockRange>&& ranges) {
+            if (ranges.size() == 0) {
+                throw std::runtime_error("You have to register some ranges.");
+            }
+
+            _ranges = std::move(ranges);
+            _data   = std::vector<std::vector<uint8_t>>(_ranges.size());
+
+            for (size_t index = 0; index < _ranges.size(); index++) {
+                _rangeIndices[_ranges[index].id] = index;
+            }
+
+            // TODO implement LUT mode
+            assert(_ranges.size() == _data.size());
+            assert(_offsets.size() == 0);
+            assert(_rangeIndices.size() == _ranges.size());
+        }
+
+        void writeBlock(block_id_t blockId, uint8_t* data) {
+            // TODO implement LUT mode
+            assert(_offsetMode == OffsetMode::constant);
+
+            if (data == nullptr) {
+                throw std::runtime_error("The data argument might not be a nullptr.");
+            }
+
+            auto  rangeOfBlock = _blockDistribution.rangeBlockIsStoredIn(blockId);
+            auto& rangeData    = _data[indexOf(rangeOfBlock)];
+            assert(_constOffset > 0);
+            _data[rangeData].insert(rangeData.end(), data, data + _constOffset);
         }
 
         template <class HandleBlockFunction>
@@ -437,10 +507,20 @@ class ReStore {
         using BlockRange = typename BlockDistribution<>::BlockRange;
 
         const OffsetMode                  _offsetMode;
-        const size_t                      _constOffset; // only in ConstOffset mode
-        std::vector<BlockRange>           _ranges;      // For all outer vectors, the indices correspond
-        std::vector<std::vector<size_t>>  _offsets;     // A sentinel points to last elem + 1, only in LUT mode
+        const size_t                      _constOffset;  // only in ConstOffset mode
+        std::map<size_t, size_t>          _rangeIndices; // Maps a rangeId to its indices in following vectors
+        std::vector<BlockRange>           _ranges;       // For all outer vectors, the indices correspond
+        std::vector<std::vector<size_t>>  _offsets;      // A sentinel points to last elem + 1; only in LUT mode
         std::vector<std::vector<uint8_t>> _data;
+        const BlockDistribution<>&        _blockDistribution;
+
+        // Return the index this range has in the outer vectors
+        void indexOf(BlockRange blockRange) const {
+            // If we want to get rid of this map, we could sort the _ranges vector and use a binary_search instead
+            auto index = _rangeIndices[blockRange.id];
+            assert(index < _data.size());
+            assert(_ranges.size() == _data.size());
+        }
     };
 
     // Constructor
@@ -460,7 +540,8 @@ class ReStore {
           _offsetMode(offsetMode),
           _constOffset(constOffset),
           _mpiContext(mpiCommunicator),
-          _serializedBlocks(offsetMode, constOffset) {
+          _blockDistribution(nullptr),
+          _serializedBlocks(offsetMode, *_blockDistribution, constOffset) { // TODO obviously not a good idea
         if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
             throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
         } else if (offsetMode == OffsetMode::constant && constOffset == 0) {
@@ -494,7 +575,7 @@ class ReStore {
     // replicationLevel()
     //
     // Get the replication level, that is how many copies of each block are scattered over the ranks.
-    uint32_t replicationLevel() const {
+    uint32_t replicationLevel() const noexcept {
         _assertInvariants();
         return this->_replicationLevel;
     }
@@ -502,7 +583,7 @@ class ReStore {
     // offsetMode()
     //
     // Get the offset mode that defines how the serialized blocks are aligned in memory.
-    std::pair<OffsetMode, size_t> offsetMode() const {
+    std::pair<OffsetMode, size_t> offsetMode() const noexcept {
         _assertInvariants();
         return std::make_pair(this->_offsetMode, this->_constOffset);
     }
@@ -514,18 +595,22 @@ class ReStore {
     // submitBlocks() also performs the replication and is therefore blocking until all ranks called it.
     // Even if there are multiple receivers for a single block, serialize will be called only once per block.
     //
-    // serializeFunc: gets a reference to a block to serialize and a push_back function which can be used
-    //      to append the next byte of the serialized byte stream.
+    // serializeFunc: gets a reference to a block to serialize and a stream which can be used
+    //      to append a flat representation of the current block to the serialized data's byte stream.
     // nextBlock: a generator function which should return <globalBlockId, const reference to block>
-    //      on each call. If there are no more blocks getNextBlock should return {}
+    //      on each call. If there are no more blocks getNextBlock should return {}.
+    // totalNumberOfBlocks: The total number of blocks across all ranks. // TODO quickly discuss with Demian
     // canBeParallelized: Indicates if multiple serializeFunc calls can happen on different blocks
     //      concurrently. Also assumes that the blocks do not have to be serialized in the order they
     //      are emitted by nextBlock.
+    // If a rank failure happens during this call, it will be propagated to the caller which can then handle it. This
+    // includes updating the communicator of MPIContext.
     template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction>
     void submitBlocks(
-        SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
+        SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock, size_t totalNumberOfBlocks,
         bool canBeParallelized = false // not supported yet
     ) {
+        UNUSED(canBeParallelized);
         static_assert(
             std::is_invocable_r<size_t, SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
             "serializeFunc must be invocable as size_t(const BlockType&, SerializedBlockStoreStream");
@@ -533,30 +618,78 @@ class ReStore {
             std::is_invocable_r<std::optional<std::pair<block_id_t, const BlockType&>>, NextBlockCallbackFunction>(),
             "serializeFunc must be invocable as std::optional<std::pair<block_id_t, const BlockType&>>()");
 
-        SerializedBlockStoreStream stream;
-        bool                       done = false;
-        do {
-            std::optional<std::pair<block_id_t, const BlockType&>> next = nextBlock();
-            if (next) {
-                serializeFunc(next.value().second, stream);
-            } else {
-                done = true;
+        if (totalNumberOfBlocks == 0) {
+            throw std::runtime_error("Invalid number of blocks: 0.");
+        }
+
+        try { // Ranks failures might be detected during this block
+            // We define original rank ids to be the rank ids during this function call
+            _mpiContext.resetOriginalCommToCurrentComm();
+
+            // Initialize the Block Distribution
+            if (!_blockDistribution) {
+                throw std::runtime_error("You shall not call submitBlocks twice!");
             }
-        } while (!done);
-        // Determine which rank will get which block range
+            _blockDistribution = std::make_shared<BlockDistribution<>>(
+                _mpiContext.getOriginalSize(), totalNumberOfBlocks, _replicationLevel, _mpiContext);
+            assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
 
-        // Allocate one send buffer per block range. That is, those ranks which get the same blocks share a common
-        // sendbuffer.
+            // Allocate one send buffer per destination rank
+            // If the user did his homework and designed a BlockDistribution which requires few messages to be send
+            // we do not want to allocate all those unneeded send buffers... that's why we use a map here instead
+            // of a vector.
+            auto sendBuffers = std::make_shared<std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>>();
 
-        // Loop over the nextBlock generator to fetch all block we need to serialize
+            bool noMoreBlocksToSerialize = false;
+            // Loop over the nextBlock generator to fetch all block we need to serialize
+            do {
+                std::optional<std::pair<block_id_t, const BlockType&>> next = nextBlock();
+                if (!next) {
+                    noMoreBlocksToSerialize = true;
+                } else {
+                    block_id_t       blockId = next.value().first;
+                    const BlockType& block   = next.value().second;
 
-        // Determine the receivers of copies of this block
+                    // Determine which ranks will get this block
+                    assert(_blockDistribution);
+                    auto ranks = std::make_shared<std::vector<ReStoreMPI::current_rank_t>>(
+                        _mpiContext.getAliveCurrentRanks(_blockDistribution->ranksBlockIsStoredOn(blockId)));
 
-        // Call serialize once, instructing it to write the serialization to one buffer
+                    // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
+                    // operator and automatically copies the written bytes to every destination rank's send buffer.
+                    auto storeStream = SerializedBlockStoreStream(sendBuffers, ranks);
 
-        // All blocks have been serialized, send & receive replicas
-        // std::vector<ReStoreMPI::Message> messages;
-        //_mpiContext.SparseAllToAll(messages);
+                    // Write the block's id to the stream
+                    storeStream << blockId;
+                    // TODO implement LUT mode
+
+                    // Call the user-defined serialization function to serialize the block to a flat byte stream
+                    serializeFunc(block, storeStream);
+                }
+            } while (!noMoreBlocksToSerialize);
+
+            // All blocks have been serialized, send & receive replicas
+            std::vector<ReStoreMPI::Message> sendMessages;
+
+            for (auto&& [rankId, buffer]: *sendBuffers) {
+                sendMessages.emplace_back(std::shared_ptr<uint8_t>(buffer.data()), buffer.size(), rankId);
+            }
+            auto receiveMessages = _mpiContext.SparseAllToAll(sendMessages);
+
+            // Store the received blocks into our local block storage
+            // TODO implement LUT mode
+
+            assert(_mpiContext.getMyOriginalRank() == _mpiContext.getMyCurrentRank());
+            _serializedBlocks.registerRanges(_blockDistribution->rangesStoredOnRank(_mpiContext.getMyOriginalRank()));
+
+            for (auto&& message: receiveMessages) {
+            }
+
+        } catch (ReStoreMPI::FaultException& e) {
+            // Reset BlockDistribution
+            _blockDistribution = nullptr;
+            throw e;
+        }
     }
 
     // pullBlocks()
@@ -602,11 +735,12 @@ class ReStore {
     ) {}
 
     private:
-    const uint16_t         _replicationLevel;
-    const OffsetMode       _offsetMode;
-    const size_t           _constOffset;
-    ReStoreMPI::MPIContext _mpiContext;
-    SerializedBlockStorage _serializedBlocks;
+    const uint16_t                       _replicationLevel;
+    const OffsetMode                     _offsetMode;
+    const size_t                         _constOffset;
+    ReStoreMPI::MPIContext               _mpiContext;
+    std::shared_ptr<BlockDistribution<>> _blockDistribution;
+    SerializedBlockStorage               _serializedBlocks;
 
     void _assertInvariants() const {
         assert(
