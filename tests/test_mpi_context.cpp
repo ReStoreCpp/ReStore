@@ -203,6 +203,8 @@ TEST(MPIContext, RankConversion) {
     }
 
     context.resetOriginalCommToCurrentComm();
+    // Do it twice to make sure that freeing the original group does not also destroy the current group
+    context.resetOriginalCommToCurrentComm();
 
     for (ReStoreMPI::current_rank_t rank = 0; rank < currentSize; ++rank) {
         EXPECT_EQ((ReStoreMPI::original_rank_t)rank, context.getOriginalRank(rank));
