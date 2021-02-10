@@ -54,6 +54,18 @@ class RankManager {
         _originalGroup = _currentGroup;
     }
 
+    original_rank_t getMyOriginalRank() {
+        original_rank_t rank;
+        MPI_Group_rank(_originalGroup, &rank);
+        return rank;
+    }
+
+    current_rank_t getMyCurrentRank() {
+        current_rank_t rank;
+        MPI_Group_rank(_currentGroup, &rank);
+        return rank;
+    }
+
     original_rank_t getOriginalRank(const current_rank_t currentRank) const {
         int originalRank;
         MPI_Group_translate_ranks(_currentGroup, 1, &currentRank, _originalGroup, &originalRank);
@@ -175,6 +187,14 @@ class MPIContext {
 
     void resetOriginalCommToCurrentComm() {
         _rankManager.resetOriginalCommToCurrentComm();
+    }
+
+    original_rank_t getMyOriginalRank() {
+        return _rankManager.getMyOriginalRank();
+    }
+
+    current_rank_t getMyCurrentRank() {
+        return _rankManager.getMyCurrentRank();
     }
 
     original_rank_t getOriginalRank(const current_rank_t rank) const {

@@ -125,9 +125,14 @@ TEST(MPIContext, RankConversion) {
     MPI_Comm comm;
     MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
     int currentSize;
+    int currentRank;
     MPI_Comm_size(comm, &currentSize);
+    MPI_Comm_rank(comm, &currentRank);
     assert(currentSize >= 1);
     context.updateComm(comm);
+
+    EXPECT_EQ(originalRank, context.getMyOriginalRank());
+    EXPECT_EQ(currentRank, context.getMyCurrentRank());
 
     std::vector<ReStoreMPI::original_rank_t> currentToOriginal;
     if (originalRank == 1 || originalRank == 2) {
