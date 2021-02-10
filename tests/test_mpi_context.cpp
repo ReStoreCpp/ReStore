@@ -194,6 +194,12 @@ TEST(MPIContext, RankConversion) {
     for (size_t i = 0; i < currentToOriginal.size(); ++i) {
         EXPECT_EQ(currentToOriginal[i], allAliveRanks[i]);
     }
+
+    context.resetOriginalCommToCurrentComm();
+
+    for (ReStoreMPI::current_rank_t rank = 0; rank < currentSize; ++rank) {
+        EXPECT_EQ((ReStoreMPI::original_rank_t)rank, context.getOriginalRank(rank));
+    }
 }
 
 int main(int argc, char** argv) {

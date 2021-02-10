@@ -50,6 +50,10 @@ class RankManager {
         MPI_Comm_group(newComm, &_currentGroup);
     }
 
+    void resetOriginalCommToCurrentComm() {
+        _originalGroup = _currentGroup;
+    }
+
     original_rank_t getOriginalRank(const current_rank_t currentRank) const {
         int originalRank;
         MPI_Group_translate_ranks(_currentGroup, 1, &currentRank, _originalGroup, &originalRank);
@@ -167,6 +171,10 @@ class MPIContext {
     void updateComm(MPI_Comm newComm) {
         _comm = newComm;
         _rankManager.updateComm(newComm);
+    }
+
+    void resetOriginalCommToCurrentComm() {
+        _rankManager.resetOriginalCommToCurrentComm();
     }
 
     original_rank_t getOriginalRank(const current_rank_t rank) const {
