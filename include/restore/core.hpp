@@ -92,6 +92,14 @@ class ReStore {
                 assert(length == blocksPerRange || length == blocksPerRange + 1);
             }
 
+            // Copying and copy assignment is fine ...
+            BlockRange(const BlockRange&) = default;
+            BlockRange& operator=(const BlockRange&) = default;
+
+            // ... as is moving and move assignment
+            BlockRange(BlockRange&&) = default;
+            BlockRange& operator=(BlockRange&&) = default;
+
             // contains()
             //
             // Returns true if the given block is part of this range; false otherwise
@@ -138,6 +146,14 @@ class ReStore {
             assert(_shiftWidth > 0);
             assert(_shiftWidth * (replicationLevel - 1u) < _numRanks);
         }
+
+        // Copying is not okay, because we cannot copy the MPIContext class
+        BlockDistribution(const BlockDistribution&) = delete;
+        BlockDistribution& operator=(const BlockDistribution&) = delete;
+
+        // Moving is fine
+        BlockDistribution(BlockDistribution&&) = default;
+        BlockDistribution& operator=(BlockDistribution&&) = default;
 
         // blockRangeById()
         //
