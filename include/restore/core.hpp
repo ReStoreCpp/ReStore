@@ -213,7 +213,7 @@ class ReStore {
                 rankIds.push_back(nextRank);
             }
 
-            return _mpiContext.getAliveOnly(rankIds);
+            return _mpiContext.getOnlyAlive(rankIds);
         }
 
         // rangesStoredOnRank()
