@@ -37,7 +37,7 @@ class SerializedBlockStoreStream {
             }
             assert(rank > 0);
             assert(static_cast<size_t>(rank) < _buffers->size());
-            (*_buffers)[rank].insert((*_buffers)[static_cast<size_t>(rank)].end(), src, src + sizeof(T));
+            (*_buffers)[rank].insert((*_buffers)[rank].end(), src, src + sizeof(T));
         }
         _bytesWritten += sizeof(T);
 
