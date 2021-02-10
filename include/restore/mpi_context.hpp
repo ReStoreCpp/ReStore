@@ -23,6 +23,12 @@ struct Message {
     std::shared_ptr<uint8_t> data;
     int                      size;
     current_rank_t           rank;
+
+    // We need a constructor to emplace_back a new message into a vector
+    Message(std::shared_ptr<uint8_t> argData, int argSize, current_rank_t argRank) noexcept
+        : data(argData),
+          size(argSize),
+          rank(argRank) {}
 };
 
 class FaultException : public std::exception {
