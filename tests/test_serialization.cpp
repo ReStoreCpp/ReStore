@@ -64,11 +64,11 @@ TEST(SerializedBlockStorageTest, forAllBlocks) {
 }
 
 TEST(SerializedBlockStoreStream, Constructor) {
-    using BuffersType = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
+    using BuffersType    = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
     using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
 
     auto buffers = std::make_shared<BuffersType>();
-    auto ranks = std::make_shared<RanksArrayType>();
+    auto ranks   = std::make_shared<RanksArrayType>();
 
     // nullptr arguments
     ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, ranks));
@@ -77,26 +77,26 @@ TEST(SerializedBlockStoreStream, Constructor) {
 
     // no ranks
     ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
-    
+
     // all fine
-    ranks->push_back(0);    
+    ranks->push_back(0);
     ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
-    ranks->push_back(1);    
-    ranks->push_back(2);    
+    ranks->push_back(1);
+    ranks->push_back(2);
     ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
-    
+
     // for completeness
     ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, ranks));
 }
 
 TEST(SerializedBlockStoreStream, InStream) {
-    using BuffersType = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
+    using BuffersType    = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
     using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
 
     auto buffers = std::make_shared<BuffersType>();
-    auto ranks = std::make_shared<RanksArrayType>();
-    ranks->push_back(0);    
-    ranks->push_back(3);    
+    auto ranks   = std::make_shared<RanksArrayType>();
+    ranks->push_back(0);
+    ranks->push_back(3);
 
     ReStore::SerializedBlockStoreStream stream(buffers, ranks);
 
