@@ -242,7 +242,7 @@ class ReStore {
     const size_t                         _constOffset;
     ReStoreMPI::MPIContext               _mpiContext;
     std::shared_ptr<BlockDistribution<>> _blockDistribution;
-    SerializedBlockStorage               _serializedBlocks;
+    SerializedBlockStorage<>             _serializedBlocks;
 
     void _assertInvariants() const {
         assert(

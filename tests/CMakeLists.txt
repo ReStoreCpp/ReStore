@@ -41,4 +41,5 @@ function(add_mpi_test name no_mpi_proc)
 endfunction(add_mpi_test)
 
 package_add_test(test_store "ReStore::ReStore;cppitertools" test_store.cpp)
+package_add_test(test_serialization "ReStore::ReStore;cppitertools" test_serialization.cpp)
 add_mpi_test(mpi_context 4)

@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "restore/common.hpp"
+#include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
 
 namespace ReStore {
@@ -82,7 +83,7 @@ class BlockDistribution {
         // contains()
         //
         // Returns true if the given block is part of this range; false otherwise
-        bool contains(block_id_t block) {
+        bool contains(block_id_t block) const {
             return block >= this->start && block < this->start + this->length;
         }
 
