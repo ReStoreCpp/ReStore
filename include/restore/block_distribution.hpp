@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "restore/common.hpp"
+#include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
 
 namespace ReStore {

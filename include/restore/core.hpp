@@ -134,7 +134,8 @@ class ReStore {
             }
             _blockDistribution = std::make_shared<BlockDistribution<>>(
                 _mpiContext.getOriginalSize(), totalNumberOfBlocks, _replicationLevel, _mpiContext);
-            _serializedBlocks = std::make_shared<SerializedBlockStorage>(_blockDistribution, _offsetMode, _constOffset);
+            _serializedBlocks =
+                std::make_shared<SerializedBlockStorage<>>(_blockDistribution, _offsetMode, _constOffset);
             assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
 
             // Allocate one send buffer per destination rank
@@ -239,12 +240,12 @@ class ReStore {
     ) {}
 
     private:
-    const uint16_t                          _replicationLevel;
-    const OffsetMode                        _offsetMode;
-    const size_t                            _constOffset;
-    ReStoreMPI::MPIContext                  _mpiContext;
-    std::shared_ptr<BlockDistribution<>>    _blockDistribution;
-    std::shared_ptr<SerializedBlockStorage> _serializedBlocks;
+    const uint16_t                            _replicationLevel;
+    const OffsetMode                          _offsetMode;
+    const size_t                              _constOffset;
+    ReStoreMPI::MPIContext                    _mpiContext;
+    std::shared_ptr<BlockDistribution<>>      _blockDistribution;
+    std::shared_ptr<SerializedBlockStorage<>> _serializedBlocks;
 
     void _assertInvariants() const {
         assert(
