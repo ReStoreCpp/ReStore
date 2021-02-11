@@ -23,6 +23,8 @@ class SerializedBlockStoreStream {
           _bytesWritten(0) {
         if (!buffers || !ranks) {
             throw std::runtime_error("buffers and ranks have to point to a valid object.");
+        } else if (_ranks->size() == 0) {
+            throw std::runtime_error("The ranks array is empty.");
         }
     }
 
@@ -38,7 +40,6 @@ class SerializedBlockStoreStream {
                 (*_buffers)[rank] = std::vector<uint8_t>();
             }
             assert(rank >= 0);
-            assert(static_cast<size_t>(rank) < _buffers->size());
             (*_buffers)[rank].insert((*_buffers)[rank].end(), src, src + sizeof(T));
         }
         _bytesWritten += sizeof(T);

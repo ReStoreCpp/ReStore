@@ -63,6 +63,61 @@ TEST(SerializedBlockStorageTest, forAllBlocks) {
                  , std::invalid_argument);
 }
 
+TEST(SerializedBlockStoreStream, Constructor) {
+    using BuffersType = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
+    using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
+
+    auto buffers = std::make_shared<BuffersType>();
+    auto ranks = std::make_shared<RanksArrayType>();
+
+    // nullptr arguments
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, ranks));
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, nullptr));
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, nullptr));
+
+    // no ranks
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
+    
+    // all fine
+    ranks->push_back(0);    
+    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
+    ranks->push_back(1);    
+    ranks->push_back(2);    
+    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
+    
+    // for completeness
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, ranks));
+}
+
+TEST(SerializedBlockStoreStream, InStream) {
+    using BuffersType = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
+    using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
+
+    auto buffers = std::make_shared<BuffersType>();
+    auto ranks = std::make_shared<RanksArrayType>();
+    ranks->push_back(0);    
+    ranks->push_back(3);    
+
+    ReStore::SerializedBlockStoreStream stream(buffers, ranks);
+
+    stream << 0x42_byte;
+    ASSERT_EQ(buffers->at(0)[0], 0x42_byte);
+    ASSERT_EQ(buffers->find(1), buffers->end());
+    ASSERT_EQ(buffers->find(2), buffers->end());
+    ASSERT_EQ(buffers->at(3)[0], 0x42_byte);
+    ASSERT_EQ(stream.bytesWritten(), 1);
+
+    stream << 0x00_uint8;
+    ASSERT_EQ(buffers->at(0)[0], 0x42_byte);
+    ASSERT_EQ(buffers->find(1), buffers->end());
+    ASSERT_EQ(buffers->find(2), buffers->end());
+    ASSERT_EQ(buffers->at(3)[0], 0x42_byte);
+
+    ASSERT_EQ(buffers->at(0)[1], 0x00_byte);
+    ASSERT_EQ(buffers->at(3)[1], 0x00_byte);
+    ASSERT_EQ(stream.bytesWritten(), 2);
+}
+
 int main(int argc, char** argv) {
     // Filter out Google Test arguments
     ::testing::InitGoogleTest(&argc, argv);
