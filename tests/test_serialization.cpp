@@ -53,14 +53,15 @@ TEST(SerializedBlockStorageTest, forAllBlocks) {
     });
     EXPECT_EQ(50, expected);
 
-    ASSERT_THROW(storage.forAllBlocks(
-        rangeInvalid,
-        [&expected](const uint8_t* ptr, size_t size) {
-            ++expected;
-            UNUSED(ptr);
-            UNUSED(size);
-        });
-                 , std::invalid_argument);
+    ASSERT_THROW(
+        storage.forAllBlocks(
+            rangeInvalid,
+            [&expected](const uint8_t* ptr, size_t size) {
+                ++expected;
+                UNUSED(ptr);
+                UNUSED(size);
+            }),
+        std::invalid_argument);
 }
 
 TEST(SerializedBlockStoreStream, Constructor) {
