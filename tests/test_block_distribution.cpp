@@ -1,3 +1,4 @@
+
 #include <algorithm>
 #include <functional>
 #include <sstream>
@@ -10,90 +11,11 @@
 #include "restore/core.hpp"
 #include "restore/helpers.hpp"
 
+#include "mocks.hpp"
+
 using namespace ::testing;
 
-class MPIContextMock {
-    using original_rank_t = ReStoreMPI::original_rank_t;
-    using current_rank_t  = ReStoreMPI::current_rank_t;
-
-    public:
-    MOCK_METHOD(original_rank_t, getOriginalRank, (const current_rank_t), (const));
-    MOCK_METHOD(current_rank_t, getCurrentRank, (const original_rank_t), (const));
-    MOCK_METHOD(bool, isAlive, (const original_rank_t), (const));
-    MOCK_METHOD(std::vector<original_rank_t>, getOnlyAlive, (const std::vector<original_rank_t>&), (const));
-
-
-    /*
-    std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
-        return _rankManager.getAliveCurrentRanks(originalRanks);
-    }
-
-    std::vector<Message>
-    SparseAllToAll(const std::vector<Message>& messages, const int tag = RESTORE_SPARSE_ALL_TO_ALL_TAG) const {
-        return ReStoreMPI::SparseAllToAll(messages, _comm, tag);
-    }
-    */
-};
-
-class StoreTest : public ::testing::Environment {
-    // You can remove any or all of the following functions if its body
-    // is empty.
-
-    StoreTest(){};
-
-    virtual ~StoreTest() {
-        // You can do clean-up work that doesn't throw exceptions here.
-    }
-
-    // If the constructor and destructor are not enough for setting up
-    // and cleaning up each test, you can define the following methods:
-
-    virtual void SetUp() override {
-        // Code here will be called immediately after the constructor (right
-        // before each test).
-    }
-
-    virtual void TearDown() override {
-        // Code here will be called immediately after each test (right
-        // before the destructor).
-    }
-
-    // Objects declared here can be used by all tests in the test case for Foo.
-};
-
-TEST(StoreTest, ReStore_Constructor) {
-    // Construction of a ReStore object
-    ASSERT_NO_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::lookUpTable));
-    ASSERT_NO_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int)));
-
-    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::lookUpTable, sizeof(int)));
-    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, 0));
-    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 0, ReStore::OffsetMode::lookUpTable));
-    ASSERT_ANY_THROW(ReStore::ReStore<int>(MPI_COMM_WORLD, 0, ReStore::OffsetMode::constant, sizeof(int)));
-
-    // TODO Test a replication level that is larger than the number of ranks
-    // TODO Test a replication level that cannot be archived because of memory
-    // constraints
-
-    // Replication level and offset mode getters
-    {
-        auto store = ReStore::ReStore<uint8_t>(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(uint8_t));
-        ASSERT_EQ(store.replicationLevel(), 3);
-        auto [offsetMode, constOffset] = store.offsetMode();
-        ASSERT_EQ(offsetMode, ReStore::OffsetMode::constant);
-        ASSERT_EQ(constOffset, sizeof(uint8_t));
-    }
-
-    {
-        auto store = ReStore::ReStore<uint8_t>(MPI_COMM_WORLD, 10, ReStore::OffsetMode::lookUpTable);
-        ASSERT_EQ(store.replicationLevel(), 10);
-        auto [offsetMode, constOffset] = store.offsetMode();
-        ASSERT_EQ(offsetMode, ReStore::OffsetMode::lookUpTable);
-        ASSERT_EQ(constOffset, 0);
-    }
-}
-
-TEST(StoreTest, ReStore_BlockRange) {
+TEST(BlockDistributionTest, BlockRange) {
     // BlockRange(size_t range_id, size_t numBlocks, size_t numRanges) {
     // bool includes(block_id_t block) {
     using BlockRange = ReStore::BlockDistribution<MPIContextMock>::BlockRange;
@@ -285,7 +207,7 @@ TEST(StoreTest, ReStore_BlockRange) {
     }
 }
 
-TEST(StoreTest, ReStore_BlockDistribution_Basic) {
+TEST(BlockDistributionTest, Basic) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
@@ -324,7 +246,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
 
         ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(10, 1001, 4, mpiContext));
         ASSERT_NE(BlockDistribution(10, 1001, 4, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
-        
+
         ASSERT_NE(BlockDistribution(11, 1001, 1, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
         ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(11, 1001, 1, mpiContext));
     }
@@ -476,7 +398,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
     }
 }
 
-TEST(StoreTest, ReStore_BlockDistribution_Advanced) {
+TEST(BlockDistributionTest, Advanced) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
@@ -653,7 +575,7 @@ getAliveOnlyFake(std::vector<ReStoreMPI::original_rank_t> deadRanks, std::vector
     return aliveRanks;
 }
 
-TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
+TEST(BlockDistributionTest, Basic_with_failures) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
@@ -802,7 +724,7 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresBasic) {
     }
 }
 
-TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
+TEST(BlockDistributionTest, Advanced_with_failure) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
@@ -930,7 +852,7 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresAdvanced) {
     }
 }
 
-TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
+TEST(BlockDistributionTest, Multiple_failures) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore::block_id_t;
     using original_rank_t   = ReStoreMPI::original_rank_t;
@@ -1066,31 +988,4 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
             }
         }
     }
-}
-
-TEST(StoreTest, ReStore_submitBlocks) {
-    ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
-    unsigned              counter = 0;
-    std::vector<int>      data{0, 1, 2, 3, 42, 1337};
-    store.submitBlocks(
-        [](const int& value, ReStore::SerializedBlockStoreStream stream) {
-            stream << value;
-            return sizeof(int);
-        },
-        [&counter, &data]() {
-            return data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter++]));
-        },
-        data.size());
-}
-
-int main(int argc, char** argv) {
-    // Filter out Google Test arguments
-    ::testing::InitGoogleTest(&argc, argv);
-
-    // Initialize MPI
-    MPI_Init(&argc, &argv);
-
-    int result = RUN_ALL_TESTS();
-
-    return result;
 }

@@ -12,8 +12,7 @@ set_target_properties(gtest_main PROPERTIES FOLDER extern)
 set_target_properties(gmock PROPERTIES FOLDER extern)
 set_target_properties(gmock_main PROPERTIES FOLDER extern)
 
-# TODO Move to module
-macro(package_add_test TESTNAME LIBRARIES)
+macro(restore_add_test TESTNAME LIBRARIES)
     # create an exectuable in which the tests will be stored
     add_executable(${TESTNAME} ${ARGN})
     # link the Google test infrastructure, mocking library, and a default main fuction to
@@ -40,6 +39,8 @@ function(add_mpi_test name no_mpi_proc)
   target_compile_options(${name} PRIVATE -g -Og -Wall -Wextra -Wcast-align -Wconversion -Wnoexcept -Wnon-virtual-dtor -Wnull-dereference -Woverloaded-virtual -Wpedantic -Wsuggest-attribute=const -Wsuggest-attribute=noreturn -Wshadow -Wsign-conversion -Wsuggest-override -Wundef -Wunreachable-code -Wunused)
 endfunction(add_mpi_test)
 
-package_add_test(test_store "ReStore::ReStore;cppitertools" test_store.cpp)
-package_add_test(test_serialization "ReStore::ReStore;cppitertools" test_serialization.cpp)
+# Register our tests
+restore_add_test(test_restore "ReStore::ReStore;cppitertools" test_restore.cpp)
+restore_add_test(test_block_distribution "ReStore::ReStore;cppitertools" test_block_distribution.cpp)
+restore_add_test(test_serialization "ReStore::ReStore;cppitertools" test_serialization.cpp)
 add_mpi_test(mpi_context 4)

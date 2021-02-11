@@ -196,7 +196,7 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
             throw std::runtime_error("Block id is greater than (or equal to) the number of blocks.");
         }
         assert(_blocksPerRange > 0);
-        assert(_blocksPerRange < _numBlocks);
+        assert(_blocksPerRange <= _numBlocks);
         assert(_numRangesWithAdditionalBlock < _numRanges);
 
         if (block < (_blocksPerRange + 1) * _numRangesWithAdditionalBlock) {

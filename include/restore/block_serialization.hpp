@@ -37,7 +37,7 @@ class SerializedBlockStoreStream {
             if (_buffers->find(rank) == _buffers->end()) {
                 (*_buffers)[rank] = std::vector<uint8_t>();
             }
-            assert(rank > 0);
+            assert(rank >= 0);
             assert(static_cast<size_t>(rank) < _buffers->size());
             (*_buffers)[rank].insert((*_buffers)[rank].end(), src, src + sizeof(T));
         }
@@ -135,9 +135,9 @@ class SerializedBlockStorage {
                 || _data[blockRangeIndex].size() == blockRangeInternal.length() * _constOffset);
             const size_t beginIndexInBlockRange = currentBlockId - blockRangeInternal.start();
             assert(beginIndexInBlockRange < blockRangeInternal.length());
-            const size_t lenghtRemaining = blockRange.second - (currentBlockId - blockRange.first);
+            const size_t lengthRemaining = blockRange.second - (currentBlockId - blockRange.first);
             const size_t endIndexInBlockRange =
-                std::min(beginIndexInBlockRange + lenghtRemaining, blockRangeInternal.length());
+                std::min(beginIndexInBlockRange + lengthRemaining, blockRangeInternal.length());
             assert(endIndexInBlockRange <= blockRangeInternal.length());
             for (size_t currentIndexInBlockRange = beginIndexInBlockRange;
                  currentIndexInBlockRange < endIndexInBlockRange; ++currentIndexInBlockRange) {
