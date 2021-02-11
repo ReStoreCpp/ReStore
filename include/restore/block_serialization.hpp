@@ -135,9 +135,9 @@ class SerializedBlockStorage {
                 || _data[blockRangeIndex].size() == blockRangeInternal.length() * _constOffset);
             const size_t beginIndexInBlockRange = currentBlockId - blockRangeInternal.start();
             assert(beginIndexInBlockRange < blockRangeInternal.length());
-            const size_t lenghtRemaining = blockRange.second - (currentBlockId - blockRange.first);
+            const size_t lengthRemaining = blockRange.second - (currentBlockId - blockRange.first);
             const size_t endIndexInBlockRange =
-                std::min(beginIndexInBlockRange + lenghtRemaining, blockRangeInternal.length());
+                std::min(beginIndexInBlockRange + lengthRemaining, blockRangeInternal.length());
             assert(endIndexInBlockRange <= blockRangeInternal.length());
             for (size_t currentIndexInBlockRange = beginIndexInBlockRange;
                  currentIndexInBlockRange < endIndexInBlockRange; ++currentIndexInBlockRange) {
