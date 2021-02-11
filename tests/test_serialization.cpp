@@ -18,6 +18,7 @@ TEST(SerializedBlockStorageTest, forAllBlocks) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     auto mpiContext         = MPIContextMock();
     auto blockDistribution  = std::make_shared<BlockDistribution>(BlockDistribution(10, 100, 3, mpiContext));
+    // TODO: Test LUT mode when that is implemented in the rest of the class
     ReStore::SerializedBlockStorage<MPIContextMock> storage(blockDistribution, ReStore::OffsetMode::constant, 1);
     auto                                            blockrange0 = blockDistribution->blockRangeById(0);
     auto                                            blockrange1 = blockDistribution->blockRangeById(1);
