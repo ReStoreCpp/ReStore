@@ -65,7 +65,8 @@ class SerializedBlockLoadStream {
 
 class SerializedBlockStorage {
     public:
-    SerializedBlockStorage(OffsetMode offsetMode, BlockDistribution<>& blockDistribution, size_t constOffset = 0)
+    SerializedBlockStorage(
+        std::shared_ptr<const BlockDistribution<>> blockDistribution, OffsetMode offsetMode, size_t constOffset = 0)
         : _offsetMode(offsetMode),
           _constOffset(constOffset),
           _blockDistribution(blockDistribution) {
@@ -85,7 +86,7 @@ class SerializedBlockStorage {
         _data   = std::vector<std::vector<uint8_t>>(_ranges.size());
 
         for (size_t index = 0; index < _ranges.size(); index++) {
-            _rangeIndices[_ranges[index].id] = index;
+            _rangeIndices[_ranges[index].id()] = index;
         }
 
         // TODO implement LUT mode
@@ -102,7 +103,7 @@ class SerializedBlockStorage {
             throw std::runtime_error("The data argument might not be a nullptr.");
         }
 
-        auto  rangeOfBlock = _blockDistribution.rangeOfBlock(blockId);
+        auto  rangeOfBlock = _blockDistribution->rangeOfBlock(blockId);
         auto& rangeData    = _data[indexOf(rangeOfBlock)];
         assert(_constOffset > 0);
         rangeData.insert(rangeData.end(), data, data + _constOffset);
@@ -120,12 +121,12 @@ class SerializedBlockStorage {
     std::vector<BlockRange>           _ranges;       // For all outer vectors, the indices correspond
     std::vector<std::vector<size_t>>  _offsets;      // A sentinel points to last elem + 1; only in LUT mode
     std::vector<std::vector<uint8_t>> _data;
-    const BlockDistribution<>&        _blockDistribution;
+    const std::shared_ptr<const BlockDistribution<>> _blockDistribution;
 
     // Return the index this range has in the outer vectors
     size_t indexOf(BlockRange blockRange) {
         // If we want to get rid of this map, we could sort the _ranges vector and use a binary_search instead
-        size_t index = _rangeIndices[blockRange.id];
+        size_t index = _rangeIndices[blockRange.id()];
         assert(index < _data.size());
         assert(_ranges.size() == _data.size());
         return index;

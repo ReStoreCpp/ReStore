@@ -42,8 +42,8 @@ class ReStore {
           _offsetMode(offsetMode),
           _constOffset(constOffset),
           _mpiContext(mpiCommunicator),
-          _blockDistribution(nullptr),
-          _serializedBlocks(offsetMode, *_blockDistribution, constOffset) { // TODO obviously not a good idea
+          _blockDistribution(nullptr), // Depends on the number of blocks which are submitted in submitBlocks.
+          _serializedBlocks(nullptr) { // Depends on _blockDistribution
         if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
             throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
         } else if (offsetMode == OffsetMode::constant && constOffset == 0) {
@@ -134,6 +134,7 @@ class ReStore {
             }
             _blockDistribution = std::make_shared<BlockDistribution<>>(
                 _mpiContext.getOriginalSize(), totalNumberOfBlocks, _replicationLevel, _mpiContext);
+            _serializedBlocks = std::make_shared<SerializedBlockStorage>(_blockDistribution, _offsetMode, _constOffset);
             assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
 
             // Allocate one send buffer per destination rank
@@ -182,7 +183,7 @@ class ReStore {
             // TODO implement LUT mode
 
             assert(_mpiContext.getMyOriginalRank() == _mpiContext.getMyCurrentRank());
-            _serializedBlocks.registerRanges(_blockDistribution->rangesStoredOnRank(_mpiContext.getMyOriginalRank()));
+            _serializedBlocks->registerRanges(_blockDistribution->rangesStoredOnRank(_mpiContext.getMyOriginalRank()));
 
             for (auto&& message: receiveMessages) {
             }
@@ -237,12 +238,12 @@ class ReStore {
     ) {}
 
     private:
-    const uint16_t                       _replicationLevel;
-    const OffsetMode                     _offsetMode;
-    const size_t                         _constOffset;
-    ReStoreMPI::MPIContext               _mpiContext;
-    std::shared_ptr<BlockDistribution<>> _blockDistribution;
-    SerializedBlockStorage               _serializedBlocks;
+    const uint16_t                          _replicationLevel;
+    const OffsetMode                        _offsetMode;
+    const size_t                            _constOffset;
+    ReStoreMPI::MPIContext                  _mpiContext;
+    std::shared_ptr<BlockDistribution<>>    _blockDistribution;
+    std::shared_ptr<SerializedBlockStorage> _serializedBlocks;
 
     void _assertInvariants() const {
         assert(
