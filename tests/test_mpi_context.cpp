@@ -65,7 +65,7 @@ TEST(MPIContext, SparseAllToAll) {
         EXPECT_EQ(targetExpected, targetReceived);
     }
     for (auto message: sendMessages) {
-        delete reinterpret_cast<const int*>(message.data);
+        delete[] reinterpret_cast<const int*>(message.data);
     }
 }
 
@@ -125,7 +125,7 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
         EXPECT_EQ(targetExpected, targetReceived);
     }
     for (auto message: sendMessages) {
-        delete reinterpret_cast<const int*>(message.data);
+        delete[] reinterpret_cast<const int*>(message.data);
     }
 }
 
