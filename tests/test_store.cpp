@@ -267,7 +267,6 @@ TEST(StoreTest, ReStore_BlockRange) {
             mpiContext);
 
         // Different block distributions
-        // TODO Test block distribution comparison        
         ASSERT_NE(BlockRange(0, blockDistribution1), BlockRange(1, blockDistribution2));
         ASSERT_NE(BlockRange(1, blockDistribution1), BlockRange(0, blockDistribution2));
 
@@ -305,6 +304,30 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
     ASSERT_ANY_THROW(BlockDistribution(2, 1, 1, mpiContext));     // Less blocks than ranks
     ASSERT_ANY_THROW(BlockDistribution(1, 1, 0, mpiContext));     // Replication level of zero
     ASSERT_ANY_THROW(BlockDistribution(10, 100, 11, mpiContext)); // replication level > #ranks
+
+    // Comparison of BlockDistribution objects
+    {
+        // The mpiContext is not checked for equality
+        ASSERT_EQ(BlockDistribution(1, 1, 1, mpiContext), BlockDistribution(1, 1, 1, mpiContext));
+        ASSERT_EQ(BlockDistribution(12, 1000, 2, mpiContext), BlockDistribution(12, 1000, 2, mpiContext));
+        ASSERT_EQ(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
+        ASSERT_EQ(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
+
+        ASSERT_NE(BlockDistribution(11, 1000, 3, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
+        ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(11, 1000, 3, mpiContext));
+
+        ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(10, 1001, 3, mpiContext));
+        ASSERT_NE(BlockDistribution(10, 1001, 3, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
+
+        ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(10, 1000, 4, mpiContext));
+        ASSERT_NE(BlockDistribution(10, 1000, 4, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
+
+        ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(10, 1001, 4, mpiContext));
+        ASSERT_NE(BlockDistribution(10, 1001, 4, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
+        
+        ASSERT_NE(BlockDistribution(11, 1001, 1, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
+        ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(11, 1001, 1, mpiContext));
+    }
 
     {
         // 10 ranks, 100 blocks, (replication level) k = 3
