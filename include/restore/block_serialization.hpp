@@ -35,7 +35,7 @@ class SerializedBlockStoreStream {
             if (_buffers->find(rank) == _buffers->end()) {
                 (*_buffers)[rank] = std::vector<uint8_t>();
             }
-            assert(rank > 0);
+            assert(rank >= 0);
             assert(static_cast<size_t>(rank) < _buffers->size());
             (*_buffers)[rank].insert((*_buffers)[rank].end(), src, src + sizeof(T));
         }

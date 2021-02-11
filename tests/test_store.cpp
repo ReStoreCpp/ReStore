@@ -324,7 +324,7 @@ TEST(StoreTest, ReStore_BlockDistribution_Basic) {
 
         ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(10, 1001, 4, mpiContext));
         ASSERT_NE(BlockDistribution(10, 1001, 4, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
-        
+
         ASSERT_NE(BlockDistribution(11, 1001, 1, mpiContext), BlockDistribution(10, 1000, 3, mpiContext));
         ASSERT_NE(BlockDistribution(10, 1000, 3, mpiContext), BlockDistribution(11, 1001, 1, mpiContext));
     }
@@ -1069,16 +1069,17 @@ TEST(StoreTest, ReStore_BlockDistribution_FailuresMulti) {
 }
 
 TEST(StoreTest, ReStore_submitBlocks) {
-    ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
+    ReStore::ReStore<int> store(MPI_COMM_WORLD, 1, ReStore::OffsetMode::constant, sizeof(int));
     unsigned              counter = 0;
     std::vector<int>      data{0, 1, 2, 3, 42, 1337};
     store.submitBlocks(
-        [](const int& value, ReStore::SerializedBlockStoreStream stream) {
-            stream << value;
-            return sizeof(int);
-        },
+        [](const int& value, ReStore::SerializedBlockStoreStream stream) { stream << value; },
         [&counter, &data]() {
-            return data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter++]));
+            auto ret =
+                data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter]));
+            counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair is
+                       // bound before or after the increment.
+            return ret;
         },
         data.size());
 }

@@ -114,8 +114,8 @@ class ReStore {
     ) {
         UNUSED(canBeParallelized);
         static_assert(
-            std::is_invocable_r<size_t, SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
-            "serializeFunc must be invocable as size_t(const BlockType&, SerializedBlockStoreStream");
+            std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
+            "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream");
         static_assert(
             std::is_invocable_r<std::optional<std::pair<block_id_t, const BlockType&>>, NextBlockCallbackFunction>(),
             "serializeFunc must be invocable as std::optional<std::pair<block_id_t, const BlockType&>>()");
@@ -129,7 +129,7 @@ class ReStore {
             _mpiContext.resetOriginalCommToCurrentComm();
 
             // Initialize the Block Distribution
-            if (!_blockDistribution) {
+            if (_blockDistribution) {
                 throw std::runtime_error("You shall not call submitBlocks twice!");
             }
             _blockDistribution = std::make_shared<BlockDistribution<>>(
@@ -143,15 +143,16 @@ class ReStore {
             // of a vector.
             auto sendBuffers = std::make_shared<std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>>();
 
-            bool noMoreBlocksToSerialize = false;
+            bool doneSerializingBlocks = false;
             // Loop over the nextBlock generator to fetch all block we need to serialize
             do {
                 std::optional<std::pair<block_id_t, const BlockType&>> next = nextBlock();
-                if (!next) {
-                    noMoreBlocksToSerialize = true;
+                if (!next.has_value()) {
+                    doneSerializingBlocks = true;
                 } else {
                     block_id_t       blockId = next.value().first;
                     const BlockType& block   = next.value().second;
+                    assert(blockId < totalNumberOfBlocks);
 
                     // Determine which ranks will get this block
                     assert(_blockDistribution);
@@ -169,7 +170,7 @@ class ReStore {
                     // Call the user-defined serialization function to serialize the block to a flat byte stream
                     serializeFunc(block, storeStream);
                 }
-            } while (!noMoreBlocksToSerialize);
+            } while (!doneSerializingBlocks);
 
             // All blocks have been serialized, send & receive replicas
             std::vector<ReStoreMPI::Message> sendMessages;
