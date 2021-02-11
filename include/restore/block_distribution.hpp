@@ -2,6 +2,7 @@
 #define RESTORE_BLOCK_DISTRIBUTION_H
 
 #include <iostream>
+#include <memory>
 
 #include "restore/common.hpp"
 #include "restore/helpers.hpp"
@@ -27,49 +28,25 @@ namespace ReStore {
 //   - If the replication level is 3, and the rank id of the first rank which stores a particular block range is
 //     fid, the block is stored on fid, fid+s and fid+2s.
 template <typename MPIContext = ReStoreMPI::MPIContext>
-class BlockDistribution {
+class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<MPIContext>> {
     public:
     // BlockRange
     //
-    // Represents a range of blocks. All blocks in this range have consecutive ids. For now, we store the ranges's
-    // id, start block and number of blocks (length) explicitely. This uses more space than necessary+ but decreases
-    // the dependency between BlockRange and BlockDistribution.
-    // + We could compute the length and start from the id using the information in the corresponding
-    // BlockDistribution object.
-    struct BlockRange {
-        block_id_t start;
-        size_t     length;
-        size_t     id;
-
+    // Represents a range of blocks. All blocks in this range have consecutive ids. We store only the range's id and a
+    // reference to its correpsonding BlockDistribution object. We can then compute the start block and number of blocks
+    // from that.
+    class BlockRange {
+        public:
         // Constructor
         //
         // Build a block range from the given block id. We need to know the number of blocks and the number ranges
         // to compute the starting block and number of block in this BlockRange.
-        BlockRange(size_t range_id, size_t numBlocks, size_t numRanges) : id(range_id) {
-            if (numRanges > numBlocks) {
-                throw std::runtime_error("There cannot be more block ranges than blocks.");
-            }
-
-            size_t blocksPerRange               = numBlocks / numRanges;
-            size_t numRangesWithAdditionalBlock = numBlocks - blocksPerRange * numRanges;
-
-            assert(blocksPerRange > 0);
-            assert(blocksPerRange <= numBlocks);
-            assert(blocksPerRange * numRanges + numRangesWithAdditionalBlock == numBlocks);
-
-            // Do we - and all blocks with a lower id than us - have an additional block?
-            if (range_id < numRangesWithAdditionalBlock) {
-                start  = range_id * (blocksPerRange + 1);
-                length = blocksPerRange + 1;
-            } else {
-                start  = blocksPerRange * range_id + numRangesWithAdditionalBlock;
-                length = blocksPerRange;
-            }
-
-            if (start >= numBlocks) {
+        BlockRange(size_t range_id, const std::shared_ptr<const BlockDistribution> blockDistribution)
+            : _id(range_id),
+              _blockDistribution(blockDistribution) {
+            if (range_id > _blockDistribution->numRanges()) {
                 throw std::runtime_error("This range does not exists (id too large).");
             }
-            assert(length == blocksPerRange || length == blocksPerRange + 1);
         }
 
         // Copying and copy assignment is fine ...
@@ -80,20 +57,68 @@ class BlockDistribution {
         BlockRange(BlockRange&&) = default;
         BlockRange& operator=(BlockRange&&) = default;
 
+        block_id_t start() const {
+            assert(_blockDistribution);
+
+            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
+            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
+            size_t numBlocks                    = _blockDistribution->numBlocks();
+
+            assert(blocksPerRange > 0);
+            assert(blocksPerRange <= _blockDistribution->numBlocks());
+            assert(blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock == numBlocks);
+
+            // Do we - and all blocks with a lower id than us - have an additional block?
+            size_t start = std::numeric_limits<size_t>::max();
+            if (_id < numRangesWithAdditionalBlock) {
+                start = _id * (blocksPerRange + 1);
+            } else {
+                start = blocksPerRange * _id + numRangesWithAdditionalBlock;
+            }
+
+            return start;
+        }
+
+        size_t length() const {
+            assert(_blockDistribution);
+
+            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
+            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
+            size_t numBlocks                    = _blockDistribution->numBlocks();
+
+            assert(blocksPerRange > 0);
+            assert(blocksPerRange <= _blockDistribution->numBlocks());
+            assert(blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock == numBlocks);
+
+            // Do we - and all blocks with a lower id than us - have an additional block?
+            size_t length = std::numeric_limits<size_t>::max();
+            if (_id < numRangesWithAdditionalBlock) {
+                length = blocksPerRange + 1;
+            } else {
+                length = blocksPerRange;
+            }
+
+            assert(length == blocksPerRange || length == blocksPerRange + 1);
+
+            return length;
+        }
+
+        size_t id() const noexcept {
+            return _id;
+        }
+
         // contains()
         //
         // Returns true if the given block is part of this range; false otherwise
         bool contains(block_id_t block) const {
-            return block >= this->start && block < this->start + this->length;
+            return block >= this->start() && block < this->start() + this->length();
         }
 
         // Comparison Operator
         //
         // We assume that both block ranges belong to the same BlockDistribution.
         bool operator==(const BlockRange& that) const {
-            assert(this->id != that.id || this->start == that.start);
-            assert(this->id == that.id || this->start != that.start);
-            return this->id == that.id;
+            return this->_id == that._id && this->_blockDistribution == that._blockDistribution;
         }
         bool operator!=(const BlockRange& that) const {
             return !(*this == that);
@@ -103,9 +128,13 @@ class BlockDistribution {
         //
         // Writes "<BlockRange(id=0,start=1,length=2)>" to the ostream object.
         friend std::ostream& operator<<(std::ostream& os, const BlockRange& blockRange) {
-            return os << "<BlockRange(id=" << blockRange.id << ",start=" << blockRange.start
-                      << ",length=" << blockRange.length << ")>";
+            return os << "<BlockRange(id=" << blockRange.id() << ",start=" << blockRange.start()
+                      << ",length=" << blockRange.length() << ")>";
         }
+
+        private:
+        size_t                                         _id;
+        const std::shared_ptr<const BlockDistribution> _blockDistribution;
     };
 
     BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
@@ -134,11 +163,29 @@ class BlockDistribution {
     BlockDistribution(BlockDistribution&&) = default;
     BlockDistribution& operator=(BlockDistribution&&) = default;
 
+    // Comparison operators
+    bool operator==(const BlockDistribution& that) const noexcept {
+        return this->_numBlocks == that._numBlocks && this->_numRanks == that._numRanks
+               && this->_replicationLevel == that._replicationLevel && this->_numRanges == that._numRanges
+               && this->_blocksPerRange == that._blocksPerRange
+               && this->_numRangesWithAdditionalBlock == that._numRangesWithAdditionalBlock
+               && this->_shiftWidth == that._shiftWidth;
+    }
+
+    bool operator!=(const BlockDistribution& that) const noexcept {
+        return !(*this == that);
+    }
+
+
     // blockRangeById()
     //
-    // A factory method to build a BlockRange by it's id.
+    // A factory method to build a BlockRange by its id.
     BlockRange blockRangeById(size_t rangeId) const {
-        return BlockRange(rangeId, _numBlocks, _numRanges);
+        try {
+            return BlockRange(rangeId, this->shared_from_this());
+        } catch (std::bad_weak_ptr const&) {
+            throw std::runtime_error("The BlockDistribution object must be owned by smart pointer.");
+        }
     }
 
     // rangeOfBlock()
@@ -170,16 +217,16 @@ class BlockDistribution {
     std::vector<ReStoreMPI::original_rank_t> ranksBlockIsStoredOn(block_id_t block) const {
         assert(block < _numBlocks);
         BlockRange range = rangeOfBlock(block);
-        assert(range.start < _numBlocks);
-        assert(range.start + range.length <= _numBlocks);
-        assert(range.id < _numRanges);
-        assert(range.id < _numRanks);
+        assert(range.start() < _numBlocks);
+        assert(range.start() + range.length() <= _numBlocks);
+        assert(range.id() < _numRanges);
+        assert(range.id() < _numRanks);
 
         // The range is located on the rank with the same id ...
         auto rankIds = std::vector<ReStoreMPI::original_rank_t>();
-        assert(range.id <= std::numeric_limits<ReStoreMPI::original_rank_t>::max());
-        assert(range.id >= 0);
-        ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id);
+        assert(range.id() <= std::numeric_limits<ReStoreMPI::original_rank_t>::max());
+        assert(range.id() >= 0);
+        ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id());
         rankIds.push_back(firstRank);
 
         // ... and on <replication level> - 1 further ranks, all <shift width> apart.
@@ -219,7 +266,7 @@ class BlockDistribution {
 
         // ... as are <replication level> - 1 further ranges, all <shift width> apart
         for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
-            assert(firstRange.id <= std::numeric_limits<int64_t>::max());
+            assert(firstRange.id() <= std::numeric_limits<int64_t>::max());
             assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
             assert(_numRanges < std::numeric_limits<int64_t>::max());
             assert(_numRanges > 0);
@@ -227,8 +274,8 @@ class BlockDistribution {
             assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
             assert(_shiftWidth <= std::numeric_limits<int64_t>::max());
             static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
-            int64_t rangeId =
-                static_cast<int64_t>(firstRange.id) - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
+            int64_t rangeId = static_cast<int64_t>(firstRange.id())
+                              - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
             if (rangeId < 0) {
                 assert(_numRanges < std::numeric_limits<int64_t>::max());
                 rangeId =
@@ -236,7 +283,7 @@ class BlockDistribution {
             }
             assert(rangeId >= 0);
             BlockRange nextRange = blockRangeById(static_cast<size_t>(rangeId));
-            assert(nextRange.id < _numRanges);
+            assert(nextRange.id() < _numRanges);
             rangeIds.push_back(nextRange);
         }
         // TODO Assert there are replication many
@@ -253,7 +300,7 @@ class BlockDistribution {
             throw std::runtime_error("A rank id cannot be negative.");
         } else if (static_cast<size_t>(rankId) >= _numRanks) {
             throw std::runtime_error("Rank id larger than (or equal to) the number of ranks.");
-        } else if (blockRange.id > _numRanges) {
+        } else if (blockRange.id() > _numRanges) {
             throw std::runtime_error("The given block range's id is too large.");
         }
 
@@ -280,7 +327,7 @@ class BlockDistribution {
                     static_cast<int64_t>(_numRanges) + static_cast<int64_t>(rangeId % static_cast<int64_t>(_numRanges));
             }
             assert(rankId >= 0);
-            if (static_cast<size_t>(rangeId) == blockRange.id) {
+            if (static_cast<size_t>(rangeId) == blockRange.id()) {
                 return true;
             }
         }

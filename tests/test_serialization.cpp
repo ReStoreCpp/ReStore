@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <memory>
 #include <mpi.h>
 #include <stdexcept>
 
@@ -35,15 +36,15 @@ class MPIContextMock {
 };
 
 TEST(SerializedBlockStorageTest, forAllBlocks) {
-    using BlockDistribution                           = ReStore::BlockDistribution<MPIContextMock>;
-    auto                            mpiContext        = MPIContextMock();
-    auto                            blockDistribution = BlockDistribution(10, 100, 3, mpiContext);
-    ReStore::SerializedBlockStorage storage(ReStore::OffsetMode::constant, blockDistribution, 1);
-    auto                            blockrange0   = blockDistribution.blockRangeById(0);
-    auto                            blockrange1   = blockDistribution.blockRangeById(1);
-    auto                            blockrange2   = blockDistribution.blockRangeById(2);
-    auto                            blockrange4   = blockDistribution.blockRangeById(4);
-    auto                            blockRangeVec = {blockrange0, blockrange1, blockrange2, blockrange4};
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    auto mpiContext         = MPIContextMock();
+    auto blockDistribution  = std::make_shared<BlockDistribution>(BlockDistribution(10, 100, 3, mpiContext));
+    ReStore::SerializedBlockStorage<MPIContextMock> storage(blockDistribution, ReStore::OffsetMode::constant, 1);
+    auto                                            blockrange0 = blockDistribution->blockRangeById(0);
+    auto                                            blockrange1 = blockDistribution->blockRangeById(1);
+    auto                                            blockrange2 = blockDistribution->blockRangeById(2);
+    auto                                            blockrange4 = blockDistribution->blockRangeById(4);
+    auto blockRangeVec                                          = {blockrange0, blockrange1, blockrange2, blockrange4};
     storage.registerRanges(blockRangeVec);
     for (uint8_t block = 0; block < 30; ++block) {
         storage.writeBlock(block, &block);

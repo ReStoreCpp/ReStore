@@ -69,7 +69,8 @@ template <typename MPIContext = ReStoreMPI::MPIContext>
 class SerializedBlockStorage {
     public:
     SerializedBlockStorage(
-        OffsetMode offsetMode, BlockDistribution<MPIContext>& blockDistribution, size_t constOffset = 0)
+        std::shared_ptr<const BlockDistribution<MPIContext>> blockDistribution, OffsetMode offsetMode,
+        size_t constOffset = 0)
         : _offsetMode(offsetMode),
           _constOffset(constOffset),
           _blockDistribution(blockDistribution) {
@@ -89,7 +90,7 @@ class SerializedBlockStorage {
         _data   = std::vector<std::vector<uint8_t>>(_ranges.size());
 
         for (size_t index = 0; index < _ranges.size(); index++) {
-            _rangeIndices[_ranges[index].id] = index;
+            _rangeIndices[_ranges[index].id()] = index;
         }
 
         // TODO implement LUT mode
@@ -106,7 +107,7 @@ class SerializedBlockStorage {
             throw std::runtime_error("The data argument might not be a nullptr.");
         }
 
-        auto  rangeOfBlock = _blockDistribution.rangeOfBlock(blockId);
+        auto  rangeOfBlock = _blockDistribution->rangeOfBlock(blockId);
         auto& rangeData    = _data[indexOf(rangeOfBlock)];
         assert(_constOffset > 0);
         rangeData.insert(rangeData.end(), data, data + _constOffset);
@@ -119,25 +120,25 @@ class SerializedBlockStorage {
             "HandleBlockFunction must be invocable as (const uint8_t*, size_t)");
         block_id_t currentBlockId = blockRange.first;
         while (currentBlockId < blockRange.first + blockRange.second) {
-            const BlockRange blockRangeInternal = _blockDistribution.rangeOfBlock(currentBlockId);
+            const BlockRange blockRangeInternal = _blockDistribution->rangeOfBlock(currentBlockId);
             assert(blockRangeInternal.contains(currentBlockId));
-            assert(currentBlockId >= blockRangeInternal.start);
+            assert(currentBlockId >= blockRangeInternal.start());
             const size_t blockRangeIndex = indexOf(blockRangeInternal);
             assert(blockRangeIndex < _ranges.size());
             assert(blockRangeIndex < _data.size());
             assert(_offsetMode == OffsetMode::constant || blockRangeIndex < _offsets.size());
             assert(
                 _offsetMode == OffsetMode::constant
-                || _offsets[blockRangeIndex].size() == blockRangeInternal.length + 1);
+                || _offsets[blockRangeIndex].size() == blockRangeInternal.length() + 1);
             assert(
                 _offsetMode == OffsetMode::lookUpTable
-                || _data[blockRangeIndex].size() == blockRangeInternal.length * _constOffset);
-            const size_t beginIndexInBlockRange = currentBlockId - blockRangeInternal.start;
-            assert(beginIndexInBlockRange < blockRangeInternal.length);
+                || _data[blockRangeIndex].size() == blockRangeInternal.length() * _constOffset);
+            const size_t beginIndexInBlockRange = currentBlockId - blockRangeInternal.start();
+            assert(beginIndexInBlockRange < blockRangeInternal.length());
             const size_t lenghtRemaining = blockRange.second - (currentBlockId - blockRange.first);
             const size_t endIndexInBlockRange =
-                std::min(beginIndexInBlockRange + lenghtRemaining, blockRangeInternal.length);
-            assert(endIndexInBlockRange <= blockRangeInternal.length);
+                std::min(beginIndexInBlockRange + lenghtRemaining, blockRangeInternal.length());
+            assert(endIndexInBlockRange <= blockRangeInternal.length());
             for (size_t currentIndexInBlockRange = beginIndexInBlockRange;
                  currentIndexInBlockRange < endIndexInBlockRange; ++currentIndexInBlockRange) {
                 const size_t begin = _offsetMode == OffsetMode::constant
@@ -157,22 +158,21 @@ class SerializedBlockStorage {
     private:
     using BlockRange = typename BlockDistribution<MPIContext>::BlockRange;
 
-    // TODO: If checking for offset mode takes too long: Make it a template parameter?
-    const OffsetMode                     _offsetMode;
-    const size_t                         _constOffset;  // only in ConstOffset mode
-    std::map<size_t, size_t>             _rangeIndices; // Maps a rangeId to its indices in following vectors
-    std::vector<BlockRange>              _ranges;       // For all outer vectors, the indices correspond
-    std::vector<std::vector<size_t>>     _offsets;      // A sentinel points to last elem + 1; only in LUT mode
-    std::vector<std::vector<uint8_t>>    _data;
-    const BlockDistribution<MPIContext>& _blockDistribution;
+    const OffsetMode                  _offsetMode;
+    const size_t                      _constOffset;  // only in ConstOffset mode
+    std::map<size_t, size_t>          _rangeIndices; // Maps a rangeId to its indices in following vectors
+    std::vector<BlockRange>           _ranges;       // For all outer vectors, the indices correspond
+    std::vector<std::vector<size_t>>  _offsets;      // A sentinel points to last elem + 1; only in LUT mode
+    std::vector<std::vector<uint8_t>> _data;
+    const std::shared_ptr<const BlockDistribution<MPIContext>> _blockDistribution;
 
     // Return the index this range has in the outer vectors
     size_t indexOf(BlockRange blockRange) {
         // If we want to get rid of this map, we could sort the _ranges vector and use a binary_search instead
-        if (_rangeIndices.find(blockRange.id) == _rangeIndices.end()) {
+        if (_rangeIndices.find(blockRange.id()) == _rangeIndices.end()) {
             throw std::invalid_argument("BlockRange not stored");
         }
-        size_t index = _rangeIndices[blockRange.id];
+        size_t index = _rangeIndices[blockRange.id()];
         assert(index < _data.size());
         assert(_ranges.size() == _data.size());
         return index;
