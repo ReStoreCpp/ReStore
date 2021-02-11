@@ -173,10 +173,10 @@ class ReStore {
             } while (!noMoreBlocksToSerialize);
 
             // All blocks have been serialized, send & receive replicas
-            std::vector<ReStoreMPI::Message> sendMessages;
+            std::vector<ReStoreMPI::SendMessage> sendMessages;
 
             for (auto&& [rankId, buffer]: *sendBuffers) {
-                sendMessages.emplace_back(std::shared_ptr<uint8_t>(buffer.data()), buffer.size(), rankId);
+                sendMessages.emplace_back(ReStoreMPI::SendMessage{buffer.data(), (int)buffer.size(), rankId});
             }
             auto receiveMessages = _mpiContext.SparseAllToAll(sendMessages);
 
