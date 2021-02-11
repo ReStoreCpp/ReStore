@@ -256,14 +256,14 @@ TEST(StoreTest, ReStore_BlockRange) {
 
     {
         auto blockDistribution1 = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
-            50, // number of ranks
+            50,   // number of ranks
             6000, // number of blocks
-            2, // replication level,
+            2,    // replication level,
             mpiContext);
         auto blockDistribution2 = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
-            60, // number of ranks
+            60,   // number of ranks
             6000, // number of blocks
-            2, // replication level,
+            2,    // replication level,
             mpiContext);
 
         // Different block distributions
