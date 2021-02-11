@@ -19,16 +19,15 @@ namespace ReStoreMPI {
 typedef int current_rank_t;
 typedef int original_rank_t;
 
-struct Message {
-    std::shared_ptr<uint8_t> data;
-    int                      size;
-    current_rank_t           rank;
+struct SendMessage {
+    const uint8_t* data;
+    int            size;
+    current_rank_t destRank;
+};
 
-    // We need a constructor to emplace_back a new message into a vector
-    Message(std::shared_ptr<uint8_t> argData, int argSize, current_rank_t argRank) noexcept
-        : data(argData),
-          size(argSize),
-          rank(argRank) {}
+struct RecvMessage {
+    std::vector<uint8_t> data;
+    current_rank_t       srcRank;
 };
 
 class FaultException : public std::exception {
@@ -140,7 +139,7 @@ void successOrThrowMpiCall(const F& mpiCall) {
     }
 }
 
-void receiveNewMessage(std::vector<Message>& result, const MPI_Comm comm, const int tag) {
+void receiveNewMessage(std::vector<RecvMessage>& result, const MPI_Comm comm, const int tag) {
     int        newMessageReceived = false;
     MPI_Status receiveStatus;
     successOrThrowMpiCall([&]() { return MPI_Iprobe(MPI_ANY_SOURCE, tag, comm, &newMessageReceived, &receiveStatus); });
@@ -148,30 +147,29 @@ void receiveNewMessage(std::vector<Message>& result, const MPI_Comm comm, const 
         assert(receiveStatus.MPI_TAG == tag);
         int size;
         MPI_Get_count(&receiveStatus, MPI_BYTE, &size);
-        result.emplace_back(
-            Message{std::shared_ptr<uint8_t>(new uint8_t[(size_t)size]), size, receiveStatus.MPI_SOURCE});
+        result.emplace_back(RecvMessage{std::vector<uint8_t>((size_t)size), receiveStatus.MPI_SOURCE});
         successOrThrowMpiCall([&]() {
             return MPI_Recv(
-                result.back().data.get(), size, MPI_BYTE, receiveStatus.MPI_SOURCE, receiveStatus.MPI_TAG, comm,
+                result.back().data.data(), size, MPI_BYTE, receiveStatus.MPI_SOURCE, receiveStatus.MPI_TAG, comm,
                 &receiveStatus);
         });
     }
 }
 
-std::vector<Message> SparseAllToAll(const std::vector<Message>& messages, const MPI_Comm& comm, const int tag) {
+std::vector<RecvMessage> SparseAllToAll(const std::vector<SendMessage>& messages, const MPI_Comm& comm, const int tag) {
     // Send all messages
     std::vector<MPI_Request> requests(messages.size());
     for (size_t i = 0; i < messages.size(); ++i) {
         const auto&  message    = messages[i];
         MPI_Request* requestPtr = &requests[i];
         successOrThrowMpiCall([&]() {
-            return MPI_Issend(message.data.get(), message.size, MPI_BYTE, message.rank, tag, comm, requestPtr);
+            return MPI_Issend(message.data, message.size, MPI_BYTE, message.destRank, tag, comm, requestPtr);
         });
     }
 
     // Receive messages until all messages sent have been received
-    int                  allSendsFinished = false;
-    std::vector<Message> result;
+    int                      allSendsFinished = false;
+    std::vector<RecvMessage> result;
     while (!allSendsFinished) {
         receiveNewMessage(result, comm, tag);
         // This might be improved by using the status and removing all finished requests
@@ -244,8 +242,8 @@ class MPIContext {
         return _rankManager.getAliveCurrentRanks(originalRanks);
     }
 
-    std::vector<Message>
-    SparseAllToAll(const std::vector<Message>& messages, const int tag = RESTORE_SPARSE_ALL_TO_ALL_TAG) const {
+    std::vector<RecvMessage>
+    SparseAllToAll(const std::vector<SendMessage>& messages, const int tag = RESTORE_SPARSE_ALL_TO_ALL_TAG) const {
         return ReStoreMPI::SparseAllToAll(messages, _comm, tag);
     }
 
