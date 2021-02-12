@@ -135,14 +135,14 @@ class ReStore {
             _blockDistribution = std::make_shared<BlockDistribution<>>(
                 _mpiContext.getOriginalSize(), totalNumberOfBlocks, _replicationLevel, _mpiContext);
             _serializedBlocks =
-                std::make_shared<SerializedBlockStorage<>>(_blockDistribution, _offsetMode, _constOffset);
+                std::make_unique<SerializedBlockStorage<>>(_blockDistribution, _offsetMode, _constOffset);
             assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
 
             // Allocate one send buffer per destination rank
             // If the user did his homework and designed a BlockDistribution which requires few messages to be send
             // we do not want to allocate all those unneeded send buffers... that's why we use a map here instead
             // of a vector.
-            auto sendBuffers = std::make_shared<std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>>();
+            auto sendBuffers = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>();
 
             bool doneSerializingBlocks = false;
             // Loop over the nextBlock generator to fetch all block we need to serialize
@@ -157,8 +157,7 @@ class ReStore {
 
                     // Determine which ranks will get this block
                     assert(_blockDistribution);
-                    auto ranks = std::make_shared<std::vector<ReStoreMPI::current_rank_t>>(
-                        _mpiContext.getAliveCurrentRanks(_blockDistribution->ranksBlockIsStoredOn(blockId)));
+                    auto ranks = _mpiContext.getAliveCurrentRanks(_blockDistribution->ranksBlockIsStoredOn(blockId));
 
                     // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
                     // operator and automatically copies the written bytes to every destination rank's send buffer.
@@ -176,7 +175,7 @@ class ReStore {
             // All blocks have been serialized, send & receive replicas
             std::vector<ReStoreMPI::SendMessage> sendMessages;
 
-            for (auto&& [rankId, buffer]: *sendBuffers) {
+            for (auto&& [rankId, buffer]: sendBuffers) {
                 sendMessages.emplace_back(ReStoreMPI::SendMessage{buffer.data(), (int)buffer.size(), rankId});
             }
             auto receiveMessages = _mpiContext.SparseAllToAll(sendMessages);
@@ -245,7 +244,7 @@ class ReStore {
     const size_t                              _constOffset;
     ReStoreMPI::MPIContext                    _mpiContext;
     std::shared_ptr<BlockDistribution<>>      _blockDistribution;
-    std::shared_ptr<SerializedBlockStorage<>> _serializedBlocks;
+    std::unique_ptr<SerializedBlockStorage<>> _serializedBlocks;
 
     void _assertInvariants() const {
         assert(

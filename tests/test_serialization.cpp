@@ -5,6 +5,7 @@
 #include <memory>
 #include <mpi.h>
 #include <stdexcept>
+#include <unordered_map>
 
 #include "restore/block_serialization.hpp"
 #include "restore/common.hpp"
@@ -66,58 +67,82 @@ TEST(SerializedBlockStorageTest, forAllBlocks) {
 }
 
 TEST(SerializedBlockStoreStream, Constructor) {
-    using BuffersType    = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
+    using BuffersType    = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
     using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
 
-    auto buffers = std::make_shared<BuffersType>();
-    auto ranks   = std::make_shared<RanksArrayType>();
-
-    // nullptr arguments
-    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, ranks));
-    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, nullptr));
-    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, nullptr));
+    auto buffers = BuffersType();
+    auto ranks   = RanksArrayType();
 
     // no ranks
     ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
 
     // all fine
-    ranks->push_back(0);
+    ranks.push_back(0);
     ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
-    ranks->push_back(1);
-    ranks->push_back(2);
+    ranks.push_back(1);
+    ranks.push_back(2);
     ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
-
-    // for completeness
-    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(nullptr, ranks));
 }
 
 TEST(SerializedBlockStoreStream, InStream) {
-    using BuffersType    = std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
+    using BuffersType    = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
     using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
 
-    auto buffers = std::make_shared<BuffersType>();
-    auto ranks   = std::make_shared<RanksArrayType>();
-    ranks->push_back(0);
-    ranks->push_back(3);
+    auto buffers = BuffersType();
+    auto ranks   = RanksArrayType();
+    ranks.push_back(0);
+    ranks.push_back(3);
 
     ReStore::SerializedBlockStoreStream stream(buffers, ranks);
 
     stream << 0x42_byte;
-    ASSERT_EQ(buffers->at(0)[0], 0x42_byte);
-    ASSERT_EQ(buffers->find(1), buffers->end());
-    ASSERT_EQ(buffers->find(2), buffers->end());
-    ASSERT_EQ(buffers->at(3)[0], 0x42_byte);
+    ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
+    ASSERT_EQ(buffers.find(1), buffers.end());
+    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_EQ(buffers.at(3)[0], 0x42_byte);
     ASSERT_EQ(stream.bytesWritten(), 1);
+    ASSERT_EQ(buffers.at(0).size(), 1);
+    ASSERT_EQ(buffers.at(3).size(), 1);
 
     stream << 0x00_uint8;
-    ASSERT_EQ(buffers->at(0)[0], 0x42_byte);
-    ASSERT_EQ(buffers->find(1), buffers->end());
-    ASSERT_EQ(buffers->find(2), buffers->end());
-    ASSERT_EQ(buffers->at(3)[0], 0x42_byte);
+    ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
+    ASSERT_EQ(buffers.find(1), buffers.end());
+    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_EQ(buffers.at(3)[0], 0x42_byte);
 
-    ASSERT_EQ(buffers->at(0)[1], 0x00_byte);
-    ASSERT_EQ(buffers->at(3)[1], 0x00_byte);
+    ASSERT_EQ(buffers.at(0)[1], 0x00_byte);
+    ASSERT_EQ(buffers.at(3)[1], 0x00_byte);
     ASSERT_EQ(stream.bytesWritten(), 2);
+    ASSERT_EQ(buffers.at(0).size(), 2);
+    ASSERT_EQ(buffers.at(3).size(), 2);
+
+    // I refrain from asserting anything about the order in which bytes are stored in memory
+    // TODO test that read ° store = identity
+
+    stream << 0xFFFF_uint16;
+    ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
+    ASSERT_EQ(buffers.find(1), buffers.end());
+    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_EQ(buffers.at(3)[0], 0x42_byte);
+
+    ASSERT_EQ(buffers.at(0)[1], 0x00_byte);
+    ASSERT_EQ(buffers.at(3)[1], 0x00_byte);
+    ASSERT_EQ(buffers.at(0)[2], 0xFF_byte);
+    ASSERT_EQ(buffers.at(3)[2], 0xFF_byte);
+    ASSERT_EQ(buffers.at(0)[3], 0xFF_byte);
+    ASSERT_EQ(buffers.at(3)[3], 0xFF_byte);
+    ASSERT_EQ(stream.bytesWritten(), 4);
+    ASSERT_EQ(buffers.at(0).size(), 4);
+    ASSERT_EQ(buffers.at(3).size(), 4);
+
+    stream << 0x10133701_uint32;
+    ASSERT_THAT(buffers.at(0), UnorderedElementsAre(0x00, 0x42, 0x01, 0x10, 0x13, 0x37, 0xFF, 0xFF));
+    ASSERT_EQ(buffers.find(1), buffers.end());
+    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_THAT(buffers.at(3), UnorderedElementsAre(0x00, 0x42, 0x01, 0x10, 0x13, 0x37, 0xFF, 0xFF));
+    ASSERT_EQ(stream.bytesWritten(), 8);
+    ASSERT_EQ(buffers.at(0).size(), 8);
+    ASSERT_EQ(buffers.at(3).size(), 8);
 }
 
 int main(int argc, char** argv) {

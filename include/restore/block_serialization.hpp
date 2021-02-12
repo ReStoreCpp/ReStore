@@ -2,9 +2,9 @@
 #define RESTORE_BLOCK_SERIALIZATION_H
 
 #include <algorithm>
-#include <map>
 #include <stdexcept>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #include "restore/block_distribution.hpp"
@@ -16,14 +16,12 @@ namespace ReStore {
 class SerializedBlockStoreStream {
     public:
     SerializedBlockStoreStream(
-        std::shared_ptr<std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>> buffers,
-        std::shared_ptr<std::vector<ReStoreMPI::current_rank_t>>                    ranks)
+        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>& buffers,
+        std::vector<ReStoreMPI::current_rank_t>&                              ranks)
         : _buffers(buffers),
           _ranks(ranks),
           _bytesWritten(0) {
-        if (!buffers || !ranks) {
-            throw std::runtime_error("buffers and ranks have to point to a valid object.");
-        } else if (_ranks->size() == 0) {
+        if (_ranks.size() == 0) {
             throw std::runtime_error("The ranks array is empty.");
         }
     }
@@ -31,16 +29,15 @@ class SerializedBlockStoreStream {
     template <class T>
     ReStore::SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
-        assert(_buffers);
-        assert(_ranks);
 
         auto src = reinterpret_cast<const uint8_t*>(&value);
-        for (auto rank: *_ranks) {
-            if (_buffers->find(rank) == _buffers->end()) {
-                (*_buffers)[rank] = std::vector<uint8_t>();
+        for (auto&& rank: _ranks) {
+            if (_buffers.find(rank) == _buffers.end()) {
+                _buffers[rank] = std::vector<uint8_t>();
             }
             assert(rank >= 0);
-            (*_buffers)[rank].insert((*_buffers)[rank].end(), src, src + sizeof(T));
+            assert(_buffers.find(rank) != _buffers.end());
+            _buffers[rank].insert(_buffers[rank].end(), src, src + sizeof(T));
         }
         _bytesWritten += sizeof(T);
 
@@ -52,9 +49,9 @@ class SerializedBlockStoreStream {
     }
 
     private:
-    std::shared_ptr<std::map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>> _buffers; // One buffer per rank
-    std::shared_ptr<std::vector<ReStoreMPI::current_rank_t>>                    _ranks;   // Which ranks to send to
-    size_t                                                                      _bytesWritten;
+    std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>& _buffers; // One buffer per rank
+    std::vector<ReStoreMPI::current_rank_t>&                              _ranks;   // Which ranks to send to
+    size_t                                                                _bytesWritten;
 };
 
 class SerializedBlockLoadStream {
@@ -159,12 +156,12 @@ class SerializedBlockStorage {
     private:
     using BlockRange = typename BlockDistribution<MPIContext>::BlockRange;
 
-    const OffsetMode                  _offsetMode;
-    const size_t                      _constOffset;  // only in ConstOffset mode
-    std::map<size_t, size_t>          _rangeIndices; // Maps a rangeId to its indices in following vectors
-    std::vector<BlockRange>           _ranges;       // For all outer vectors, the indices correspond
-    std::vector<std::vector<size_t>>  _offsets;      // A sentinel points to last elem + 1; only in LUT mode
-    std::vector<std::vector<uint8_t>> _data;
+    const OffsetMode                   _offsetMode;
+    const size_t                       _constOffset;  // only in ConstOffset mode
+    std::unordered_map<size_t, size_t> _rangeIndices; // Maps a rangeId to its indices in following vectors
+    std::vector<BlockRange>            _ranges;       // For all outer vectors, the indices correspond
+    std::vector<std::vector<size_t>>   _offsets;      // A sentinel points to last elem + 1; only in LUT mode
+    std::vector<std::vector<uint8_t>>  _data;
     const std::shared_ptr<const BlockDistribution<MPIContext>> _blockDistribution;
 
     // Return the index this range has in the outer vectors
