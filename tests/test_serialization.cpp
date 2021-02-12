@@ -5,6 +5,7 @@
 #include <memory>
 #include <mpi.h>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 #include "restore/block_serialization.hpp"
@@ -88,27 +89,68 @@ TEST(SerializedBlockStorageTest, Writing) {
     assert(blockDistribution->numRangesWithAdditionalBlock() == 0);
     assert(blockDistribution->blocksPerRange() == 3);
 
-    class ForAllBlockCallback {
-        public:
-        MOCK_METHOD(void, call, (const uint8_t*, size_t), ());
-        void operator()(const uint8_t* data, size_t lengthInBytes) {
-            call(data, lengthInBytes);
+    {
+        auto storage = ReStore::SerializedBlockStorage<MPIContextMock>(
+            blockDistribution, ReStore::OffsetMode::constant, sizeof(uint8_t));
+        std::vector<uint8_t> values = {13, 37, 42};
+        for (size_t blockId = 0; blockId < values.size(); blockId++) {
+            storage.writeBlock(blockId, &values[blockId]);
         }
-    };
-    auto forAllBlockCallback = ForAllBlockCallback();
 
-    auto storage = ReStore::SerializedBlockStorage<MPIContextMock>(
-        blockDistribution, ReStore::OffsetMode::constant, sizeof(uint16_t));
-    uint16_t value = 0x1234;
-    storage.writeBlock(0, reinterpret_cast<uint8_t*>(&value));
-    value = 0x5678;
-    storage.writeBlock(0, reinterpret_cast<uint8_t*>(&value));
-    value = 0x9012;
-    storage.writeBlock(0, reinterpret_cast<uint8_t*>(&value));
+        size_t rankId = 0;
+        storage.forAllBlocks(std::make_pair<block_id_t, size_t>(0, 3), [&](const uint8_t* data, size_t lengthInBytes) {
+            EXPECT_EQ(lengthInBytes, 1);
+            EXPECT_EQ(values[rankId++], *data);
+        });
+    }
 
-    storage.forAllBlocks(std::make_pair<block_id_t, size_t>(0, 1), [&](const uint8_t* data, size_t lengthInBytes) {
-        forAllBlockCallback(data, lengthInBytes);
-    });
+    {
+        auto storage = ReStore::SerializedBlockStorage<MPIContextMock>(
+            blockDistribution, ReStore::OffsetMode::constant, sizeof(uint16_t));
+        std::vector<uint16_t> values = {1000, 1001, 1002};
+
+        for (size_t blockId = 0; blockId < values.size(); blockId++) {
+            storage.writeBlock(blockId, reinterpret_cast<const uint8_t*>(&values[blockId]));
+        }
+
+        size_t rankId = 0;
+        storage.forAllBlocks(std::make_pair<block_id_t, size_t>(0, 3), [&](const uint8_t* data, size_t lengthInBytes) {
+            EXPECT_EQ(lengthInBytes, 2);
+            EXPECT_EQ(values[rankId++], *reinterpret_cast<const uint16_t*>(data));
+        });
+    }
+
+    {
+        auto storage = ReStore::SerializedBlockStorage<MPIContextMock>(
+            blockDistribution, ReStore::OffsetMode::constant, sizeof(uint64_t));
+        std::vector<uint64_t> values = {1000, 1001, 1002};
+
+        for (size_t blockId = 0; blockId < values.size(); blockId++) {
+            storage.writeBlock(blockId, reinterpret_cast<const uint8_t*>(&values[blockId]));
+        }
+
+        size_t rankId = 0;
+        storage.forAllBlocks(std::make_pair<block_id_t, size_t>(0, 3), [&](const uint8_t* data, size_t lengthInBytes) {
+            EXPECT_EQ(lengthInBytes, 8);
+            EXPECT_EQ(values[rankId++], *reinterpret_cast<const uint64_t*>(data));
+        });
+    }
+
+    {
+        auto storage = ReStore::SerializedBlockStorage<MPIContextMock>(
+            blockDistribution, ReStore::OffsetMode::constant, sizeof(uint64_t));
+        std::vector<uint64_t> values = {1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009};
+
+        for (size_t blockId = 0; blockId < values.size(); blockId++) {
+            storage.writeBlock(blockId, reinterpret_cast<const uint8_t*>(&values[blockId]));
+        }
+
+        size_t rankId = 0;
+        storage.forAllBlocks(std::make_pair<block_id_t, size_t>(0, 9), [&](const uint8_t* data, size_t lengthInBytes) {
+            EXPECT_EQ(lengthInBytes, 8);
+            EXPECT_EQ(values[rankId++], *reinterpret_cast<const uint64_t*>(data));
+        });
+    }
 }
 
 TEST(SerializedBlockStoreStream, Constructor) {
