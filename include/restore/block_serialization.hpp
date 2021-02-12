@@ -65,6 +65,8 @@ class SerializedBlockLoadStream {
 
 template <typename MPIContext = ReStoreMPI::MPIContext>
 class SerializedBlockStorage {
+    using BlockRange = typename BlockDistribution<MPIContext>::BlockRange;
+
     public:
     SerializedBlockStorage(
         std::shared_ptr<const BlockDistribution<MPIContext>> blockDistribution, OffsetMode offsetMode,
@@ -79,34 +81,41 @@ class SerializedBlockStorage {
         }
     }
 
-    void registerRanges(std::vector<typename BlockDistribution<MPIContext>::BlockRange>&& ranges) {
-        if (ranges.size() == 0) {
-            throw std::runtime_error("You have to register some ranges.");
+    // numBlocks()
+    //
+    // Returns the number of block that are stored in this object.
+    size_t numBlocks() const {
+        // TODO Implement LUT mode
+        size_t numBlocks = 0;
+        for (auto&& rangeData: _data) {
+            assert(_constOffset > 0);
+            numBlocks += rangeData.size() / _constOffset;
         }
-
-        _ranges = std::move(ranges);
-        _data   = std::vector<std::vector<uint8_t>>(_ranges.size());
-
-        for (size_t index = 0; index < _ranges.size(); index++) {
-            _rangeIndices[_ranges[index].id()] = index;
-        }
-
-        // TODO implement LUT mode
-        assert(_ranges.size() == _data.size());
-        assert(_offsets.size() == 0);
-        assert(_rangeIndices.size() == _ranges.size());
+        return numBlocks;
     }
 
-    void writeBlock(block_id_t blockId, uint8_t* data) {
+    // writeBlock()
+    //
+    // Writes the data associated with that block to the storage. The range this block belongs to has to be previously
+    // registered using registerRanges.
+    // blockId and data: The id and data of the block to be written. In this overload we know the length of the data
+    // because it is equal to the constant offset.
+    void writeBlock(block_id_t blockId, const uint8_t* data) {
         // TODO implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
+        // if (_offsetMode == OffsetMode::constant && blockId != numBlocks()) {
+        //    throw std::
+        //}
 
         if (data == nullptr) {
             throw std::runtime_error("The data argument might not be a nullptr.");
         }
 
-        auto  rangeOfBlock = _blockDistribution->rangeOfBlock(blockId);
-        auto& rangeData    = _data[indexOf(rangeOfBlock)];
+        auto rangeOfBlock = _blockDistribution->rangeOfBlock(blockId);
+        if (!hasRange(rangeOfBlock)) {
+            registerRange(rangeOfBlock);
+        }
+        auto& rangeData = _data[indexOf(rangeOfBlock)];
         assert(_constOffset > 0);
         rangeData.insert(rangeData.end(), data, data + _constOffset);
     }
@@ -154,8 +163,6 @@ class SerializedBlockStorage {
     }
 
     private:
-    using BlockRange = typename BlockDistribution<MPIContext>::BlockRange;
-
     const OffsetMode                   _offsetMode;
     const size_t                       _constOffset;  // only in ConstOffset mode
     std::unordered_map<size_t, size_t> _rangeIndices; // Maps a rangeId to its indices in following vectors
@@ -174,6 +181,48 @@ class SerializedBlockStorage {
         assert(index < _data.size());
         assert(_ranges.size() == _data.size());
         return index;
+    }
+
+    // hasRange()
+    //
+    // Returns true if at least one block of the given range has been written to this storage.
+    bool hasRange(const BlockRange& blockRange) const {
+        return hasRange(blockRange.id());
+    }
+
+    bool hasRange(size_t blockId) const {
+        return _rangeIndices.find(blockId) != _rangeIndices.end();
+    }
+
+    // registerRange()
+    //
+    // Registers the block ranges to be stored in this object. May only be called once during the lifetime of this
+    // object. ranges: The block ranges we should reserve storage for. May not be empty.
+    void registerRange(const BlockRange range) {
+        if (_rangeIndices.find(range.id()) != _rangeIndices.end()) {
+            throw std::runtime_error("This range already exists.");
+        }
+
+        size_t numRanges = this->numRanges();
+        _ranges.push_back(std::move(range));
+        _data.push_back(std::vector<uint8_t>());
+        _rangeIndices[range.id()] = numRanges;
+        // TODO implement LUT mode
+
+        assert(_ranges.size() == _data.size());
+        assert(_offsets.size() == 0);
+        assert(_rangeIndices.size() == _ranges.size());
+    }
+
+    // numRanges()
+    //
+    // Returns the number of block ranges that are stored in this object.
+    size_t numRanges() const noexcept {
+        // TODO implement LUT mode
+        assert(_ranges.size() == _data.size());
+        assert(_offsets.size() == 0);
+        assert(_rangeIndices.size() == _ranges.size());
+        return _ranges.size();
     }
 };
 } // end of namespace ReStore

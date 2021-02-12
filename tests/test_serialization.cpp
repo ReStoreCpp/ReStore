@@ -21,12 +21,12 @@ TEST(SerializedBlockStorageTest, forAllBlocks) {
     auto blockDistribution  = std::make_shared<BlockDistribution>(BlockDistribution(10, 100, 3, mpiContext));
     // TODO: Test LUT mode when that is implemented in the rest of the class
     ReStore::SerializedBlockStorage<MPIContextMock> storage(blockDistribution, ReStore::OffsetMode::constant, 1);
-    auto                                            blockrange0 = blockDistribution->blockRangeById(0);
-    auto                                            blockrange1 = blockDistribution->blockRangeById(1);
-    auto                                            blockrange2 = blockDistribution->blockRangeById(2);
-    auto                                            blockrange4 = blockDistribution->blockRangeById(4);
-    auto blockRangeVec                                          = {blockrange0, blockrange1, blockrange2, blockrange4};
-    storage.registerRanges(blockRangeVec);
+    // auto                                            blockrange0 = blockDistribution->blockRangeById(0);
+    // auto                                            blockrange1 = blockDistribution->blockRangeById(1);
+    // auto                                            blockrange2 = blockDistribution->blockRangeById(2);
+    // auto                                            blockrange4 = blockDistribution->blockRangeById(4);
+    // auto blockRangeVec                                          = {blockrange0, blockrange1, blockrange2,
+    // blockrange4}; storage.registerRanges(blockRangeVec);
     for (uint8_t block = 0; block < 30; ++block) {
         storage.writeBlock(block, &block);
     }
@@ -64,6 +64,51 @@ TEST(SerializedBlockStorageTest, forAllBlocks) {
                 UNUSED(size);
             }),
         std::invalid_argument);
+}
+
+TEST(SerializedBlockStorageTest, Constructor) {
+    auto blockDistribution = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(10, 100, 3, MPIContextMock());
+
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStorage<MPIContextMock>(blockDistribution, ReStore::OffsetMode::constant));
+    ASSERT_ANY_THROW(
+        ReStore::SerializedBlockStorage<MPIContextMock>(blockDistribution, ReStore::OffsetMode::constant, 0));
+    ASSERT_ANY_THROW(
+        ReStore::SerializedBlockStorage<MPIContextMock>(blockDistribution, ReStore::OffsetMode::lookUpTable, 1));
+
+    ASSERT_NO_THROW(
+        ReStore::SerializedBlockStorage<MPIContextMock>(blockDistribution, ReStore::OffsetMode::constant, 2));
+    ASSERT_NO_THROW(
+        ReStore::SerializedBlockStorage<MPIContextMock>(blockDistribution, ReStore::OffsetMode::lookUpTable));
+}
+
+TEST(SerializedBlockStorageTest, Writing) {
+    using block_id_t       = ReStore::block_id_t;
+    auto blockDistribution = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(10, 30, 3, MPIContextMock());
+    assert(blockDistribution->numRanges() == 10);
+    assert(blockDistribution->numRangesWithAdditionalBlock() == 0);
+    assert(blockDistribution->blocksPerRange() == 3);
+
+    class ForAllBlockCallback {
+        public:
+        MOCK_METHOD(void, call, (const uint8_t*, size_t), ());
+        void operator()(const uint8_t* data, size_t lengthInBytes) {
+            call(data, lengthInBytes);
+        }
+    };
+    auto forAllBlockCallback = ForAllBlockCallback();
+
+    auto storage = ReStore::SerializedBlockStorage<MPIContextMock>(
+        blockDistribution, ReStore::OffsetMode::constant, sizeof(uint16_t));
+    uint16_t value = 0x1234;
+    storage.writeBlock(0, reinterpret_cast<uint8_t*>(&value));
+    value = 0x5678;
+    storage.writeBlock(0, reinterpret_cast<uint8_t*>(&value));
+    value = 0x9012;
+    storage.writeBlock(0, reinterpret_cast<uint8_t*>(&value));
+
+    storage.forAllBlocks(std::make_pair<block_id_t, size_t>(0, 1), [&](const uint8_t* data, size_t lengthInBytes) {
+        forAllBlockCallback(data, lengthInBytes);
+    });
 }
 
 TEST(SerializedBlockStoreStream, Constructor) {

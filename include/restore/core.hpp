@@ -184,7 +184,7 @@ class ReStore {
             // TODO implement LUT mode
 
             assert(_mpiContext.getMyOriginalRank() == _mpiContext.getMyCurrentRank());
-            _serializedBlocks->registerRanges(_blockDistribution->rangesStoredOnRank(_mpiContext.getMyOriginalRank()));
+            //_serializedBlocks->registerRanges(_blockDistribution->rangesStoredOnRank(_mpiContext.getMyOriginalRank()));
 
             for (auto&& message: receiveMessages) {
             }
