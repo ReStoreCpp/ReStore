@@ -37,4 +37,9 @@ inline constexpr uint64_t operator""_uint64(unsigned long long arg) noexcept {
     return static_cast<uint64_t>(arg);
 }
 
+// Default debug code to not be included
+#ifndef NDEBUG
+    #define DEBUG
+#endif
+
 #endif // Include guard
