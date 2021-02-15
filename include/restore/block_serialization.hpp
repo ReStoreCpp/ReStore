@@ -13,6 +13,9 @@
 
 namespace ReStore {
 
+template <class BlockType>
+class ReStore;
+
 class SerializedBlockStoreStream {
     public:
     SerializedBlockStoreStream(
@@ -27,7 +30,7 @@ class SerializedBlockStoreStream {
     }
 
     template <class T>
-    ReStore::SerializedBlockStoreStream& operator<<(const T& value) {
+    SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
 
         auto src = reinterpret_cast<const uint8_t*>(&value);
@@ -52,15 +55,6 @@ class SerializedBlockStoreStream {
     std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>& _buffers; // One buffer per rank
     std::vector<ReStoreMPI::current_rank_t>&                              _ranks;   // Which ranks to send to
     size_t                                                                _bytesWritten;
-};
-
-class SerializedBlockLoadStream {
-    public:
-    std::vector<int>           data;
-    SerializedBlockLoadStream& operator<<(int val) {
-        data.push_back(val);
-        return *this;
-    }
 };
 
 template <typename MPIContext = ReStoreMPI::MPIContext>
@@ -96,10 +90,9 @@ class SerializedBlockStorage {
 
     // writeBlock()
     //
-    // Writes the data associated with that block to the storage. The range this block belongs to has to be previously
-    // registered using registerRanges.
-    // blockId and data: The id and data of the block to be written. In this overload we know the length of the data
-    // because it is equal to the constant offset.
+    // Writes the data associated with that block to the storage. The range this block belongs to has to be
+    // previously registered using registerRanges. blockId and data: The id and data of the block to be written. In
+    // this overload we know the length of the data because it is equal to the constant offset.
     void writeBlock(block_id_t blockId, const uint8_t* data) {
         // TODO implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
