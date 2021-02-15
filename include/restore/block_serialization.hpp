@@ -13,9 +13,6 @@
 
 namespace ReStore {
 
-template <class BlockType>
-class ReStore;
-
 class SerializedBlockStoreStream {
     public:
     SerializedBlockStoreStream(
