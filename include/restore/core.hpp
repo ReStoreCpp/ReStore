@@ -176,7 +176,7 @@ class ReStore {
             std::vector<ReStoreMPI::SendMessage> sendMessages;
 
             for (auto&& [rankId, buffer]: sendBuffers) {
-                sendMessages.emplace_back(ReStoreMPI::SendMessage{buffer.data(), (int)buffer.size(), rankId});
+                sendMessages.emplace_back(buffer.data(), (int)buffer.size(), rankId);
             }
             auto receiveMessages = _mpiContext.SparseAllToAll(sendMessages);
 

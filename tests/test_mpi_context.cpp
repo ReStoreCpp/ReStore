@@ -22,19 +22,19 @@ TEST(MPIContext, SparseAllToAll) {
     std::vector<ReStoreMPI::SendMessage> sendMessages;
     for (int target = (rank + 2) % size; target != rank && target != (rank + 1) % size; target = (target + 2) % size) {
         sendMessages.emplace_back(
-            ReStoreMPI::SendMessage{reinterpret_cast<const uint8_t*>(new const int[2]{rank, target}), 2 * sizeof(int),
-                                    static_cast<ReStoreMPI::current_rank_t>(target)});
+            reinterpret_cast<const uint8_t*>(new const int[2]{rank, target}), 2 * sizeof(int),
+            static_cast<ReStoreMPI::current_rank_t>(target));
     }
     auto receiveMessages = context.SparseAllToAll(sendMessages);
 
     std::vector<ReStoreMPI::RecvMessage> receiveMessagesExpected;
     for (int source = (rank - 2 + 2 * size) % size; source != rank && source != (rank - 1 + 2 * size) % size;
          source     = (source - 2 + 2 * size) % size) {
-        int                  intMes[] = {source, rank};
-        auto                 uint8Mes = reinterpret_cast<uint8_t*>(intMes);
-        std::vector<uint8_t> mes(uint8Mes, uint8Mes + 2 * sizeof(int));
+        int  intMes[] = {source, rank};
+        auto uint8Mes = reinterpret_cast<uint8_t*>(intMes);
         receiveMessagesExpected.emplace_back(
-            ReStoreMPI::RecvMessage{mes, static_cast<ReStoreMPI::current_rank_t>(source)});
+            std::vector<uint8_t>(uint8Mes, uint8Mes + 2 * sizeof(int)),
+            static_cast<ReStoreMPI::current_rank_t>(source));
     }
 
     std::sort(
@@ -83,18 +83,17 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
     std::vector<ReStoreMPI::SendMessage> sendMessages;
     for (int target = (rank + 2) % size; target != rank && target != (rank + 1) % size; target = (target + 2) % size) {
         sendMessages.emplace_back(
-            ReStoreMPI::SendMessage{reinterpret_cast<const uint8_t*>(new const int[2]{rank, target}), 2 * sizeof(int),
-                                    static_cast<ReStoreMPI::current_rank_t>(target)});
+            reinterpret_cast<const uint8_t*>(new const int[2]{rank, target}), 2 * sizeof(int),
+            static_cast<ReStoreMPI::current_rank_t>(target));
     }
     auto receiveMessages = context.SparseAllToAll(sendMessages);
 
     std::vector<ReStoreMPI::RecvMessage> receiveMessagesExpected;
     for (int source = (rank - 2 + 2 * size) % size; source != rank && source != (rank - 1 + 2 * size) % size;
          source     = (source - 2 + 2 * size) % size) {
-        int                  intMes[] = {source, rank};
-        auto                 uint8Mes = reinterpret_cast<uint8_t*>(intMes);
-        std::vector<uint8_t> mes(uint8Mes, uint8Mes + 2 * sizeof(int));
-        receiveMessagesExpected.emplace_back(ReStoreMPI::RecvMessage{mes, source});
+        int  intMes[] = {source, rank};
+        auto uint8Mes = reinterpret_cast<uint8_t*>(intMes);
+        receiveMessagesExpected.emplace_back(std::vector<uint8_t>(uint8Mes, uint8Mes + 2 * sizeof(int)), source);
     }
 
     std::sort(
