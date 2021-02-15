@@ -101,7 +101,7 @@ class ReStore {
     //      to append a flat representation of the current block to the serialized data's byte stream.
     // nextBlock: a generator function which should return <globalBlockId, const reference to block>
     //      on each call. If there are no more blocks getNextBlock should return {}.
-    // totalNumberOfBlocks: The total number of blocks across all ranks. // TODO quickly discuss with Demian
+    // totalNumberOfBlocks: The total number of blocks across all ranks.
     // canBeParallelized: Indicates if multiple serializeFunc calls can happen on different blocks
     //      concurrently. Also assumes that the blocks do not have to be serialized in the order they
     //      are emitted by nextBlock.
