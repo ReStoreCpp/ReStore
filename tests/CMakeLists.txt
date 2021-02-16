@@ -47,3 +47,5 @@ restore_add_test(test_restore "ReStore::ReStore;cppitertools" test_restore.cpp)
 restore_add_test(test_block_distribution "ReStore::ReStore;cppitertools" test_block_distribution.cpp)
 restore_add_test(test_serialization "ReStore::ReStore;cppitertools" test_serialization.cpp)
 add_mpi_test(mpi_context 4)
+
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --force-new-ctest-process --output-on-failure)
