@@ -121,6 +121,9 @@ class BlockSubmissionCommunication {
         }
     }
 
+    // parseAllIncomingMessages()
+    //
+    // Iterates over the given messages and calls parseIncomingMessage() for each of them.
     template <class HandleBlockDataFunc>
     void parseAllIncomingMessages(
         const std::vector<ReStoreMPI::RecvMessage>& messages, HandleBlockDataFunc handleBlockData,
@@ -130,6 +133,9 @@ class BlockSubmissionCommunication {
         }
     }
 
+    // exchangeData()
+    //
+    // A wrapper around a SparseAllToAll. Transmits the sendBuffers' content and receives data addressed to us.
     std::vector<ReStoreMPI::RecvMessage> exchangeData(const SendBuffers& sendBuffers) {
         std::vector<ReStoreMPI::SendMessage> sendMessages;
         for (auto&& [rankId, buffer]: sendBuffers) {
