@@ -2,6 +2,7 @@
 #define MPI_CONTEXT_H
 
 #include <algorithm>
+#include <bits/stdint-uintn.h>
 #include <cassert>
 #include <cstdint>
 #include <exception>
@@ -23,11 +24,21 @@ struct SendMessage {
     const uint8_t* data;
     int            size;
     current_rank_t destRank;
+
+    SendMessage(const uint8_t* _data, const int _size, const current_rank_t _destRank) noexcept
+        : data(_data),
+          size(_size),
+          destRank(_destRank) {}
 };
 
 struct RecvMessage {
     std::vector<uint8_t> data;
     current_rank_t       srcRank;
+
+    RecvMessage(const size_t size, const current_rank_t _srcRank) : data(size), srcRank(_srcRank) {}
+    RecvMessage(std::vector<uint8_t>&& _data, const current_rank_t _srcRank)
+        : data(std::move(_data)),
+          srcRank(_srcRank) {}
 };
 
 class FaultException : public std::exception {
@@ -147,7 +158,7 @@ void receiveNewMessage(std::vector<RecvMessage>& result, const MPI_Comm comm, co
         assert(receiveStatus.MPI_TAG == tag);
         int size;
         MPI_Get_count(&receiveStatus, MPI_BYTE, &size);
-        result.emplace_back(RecvMessage{std::vector<uint8_t>((size_t)size), receiveStatus.MPI_SOURCE});
+        result.emplace_back(size, receiveStatus.MPI_SOURCE);
         successOrThrowMpiCall([&]() {
             return MPI_Recv(
                 result.back().data.data(), size, MPI_BYTE, receiveStatus.MPI_SOURCE, receiveStatus.MPI_TAG, comm,
