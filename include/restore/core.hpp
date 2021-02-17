@@ -23,6 +23,12 @@
 
 namespace ReStore {
 
+class UnrecoverableDataLossException : public std::exception {
+    virtual const char* what() const throw() {
+        return "Unrecoverable data loss occurred.";
+    }
+};
+
 template <class BlockType>
 class ReStore {
     using Communication = BlockSubmissionCommunication<BlockType>;
