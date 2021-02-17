@@ -125,8 +125,8 @@ class ReStore {
             std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
             "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream");
         static_assert(
-            std::is_invocable_r<std::optional<std::pair<block_id_t, const BlockType&>>, NextBlockCallbackFunction>(),
-            "serializeFunc must be invocable as std::optional<std::pair<block_id_t, const BlockType&>>()");
+            std::is_invocable_r<std::optional<NextBlock<BlockType>>, NextBlockCallbackFunction>(),
+            "serializeFunc must be invocable as ReStore::std::optional<NextBlock<BlockType>>()");
 
         if (totalNumberOfBlocks == 0) {
             throw std::runtime_error("Invalid number of blocks: 0.");

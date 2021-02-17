@@ -4,6 +4,7 @@
 #include "mocks.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/block_submission.hpp"
+#include "restore/core.hpp"
 
 using namespace ::testing;
 
@@ -177,14 +178,15 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
 TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using ReStore::block_id_t;
+    using ReStore::NextBlock;
     using ReStore::OffsetMode;
     using ReStoreMPI::current_rank_t;
     using ReStoreMPI::original_rank_t;
     using ReStoreMPI::RecvMessage;
 
     struct World {
-        bool     useMagic;
-        u_int8_t unicornCount;
+        bool    useMagic;
+        uint8_t unicornCount;
     };
 
     NiceMock<MPIContextMock> mpiContext;
@@ -206,23 +208,24 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
         [](World world, ReStore::SerializedBlockStoreStream stream) {
             stream << world.unicornCount;
             stream << world.useMagic;
+            // if (world.useMagic) {
+            //    stream << 0xFF;
+            //} else {
+            //    stream << 0x00;
+            //}
         },
-        [&worlds, &worldId]() {
-            std::optional<std::pair<block_id_t, World>> ret;
-            if (worldId != worlds.size()) {
-                ret = std::make_optional(std::make_pair(worldId, worlds[worldId]));
-            } else {
-                ret = std::nullopt;
-            }
+        [&worlds, &worldId]() -> std::optional<NextBlock<World>> {
+            auto ret = worldId < worlds.size() ? std::make_optional(NextBlock<World>({worldId, worlds[worldId]}))
+                                               : std::nullopt;
             ++worldId;
             return ret;
         });
 
     // All these three blocks belong to range 0 and are therefore stored on ranks 0, 3 and 6
     std::vector<uint8_t> expectedSendBuffer = {
-        0, 0, 0, 0, 0, 0, 0, 0, 0,  0, // earth
-        1, 0, 0, 0, 0, 0, 0, 0, 10, 1, // narnia
-        2, 0, 0, 0, 0, 0, 0, 0, 0,  1, // middle earth
+        0, 0, 0, 0, 0, 0, 0, 0, 0,  false, // earth
+        1, 0, 0, 0, 0, 0, 0, 0, 10, true,  // narnia
+        2, 0, 0, 0, 0, 0, 0, 0, 0,  true   // middle earth
     };
     ASSERT_EQ(sendBuffers.size(), 3);
     ASSERT_EQ(sendBuffers[0], expectedSendBuffer);

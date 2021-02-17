@@ -34,7 +34,7 @@ class BlockSubmissionCommunication {
     // callback into one send buffer for each rank which gets at least one block.
     // serializeFunc and nextBlock are identical to the parameters described in submitBlocks
     // Allocates and returns the send buffers.
-    // Assumes that no ranks have failed since the creation of BlockDistribution and reset of MPIContext. 
+    // Assumes that no ranks have failed since the creation of BlockDistribution and reset of MPIContext.
     template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction>
     SendBuffers serializeBlocksForTransmission(
         SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
@@ -48,12 +48,12 @@ class BlockSubmissionCommunication {
         bool doneSerializingBlocks = false;
         // Loop over the nextBlock generator to fetch all block we need to serialize
         do {
-            std::optional<std::pair<block_id_t, const BlockType&>> next = nextBlock();
+            std::optional<NextBlock<BlockType>> next = nextBlock();
             if (!next.has_value()) {
                 doneSerializingBlocks = true;
             } else {
-                block_id_t       blockId = next.value().first;
-                const BlockType& block   = next.value().second;
+                block_id_t       blockId = next.value().blockId;
+                const BlockType& block   = next.value().block;
                 assert(blockId < _blockDistribution.numBlocks());
 
                 // Determine which ranks will get this block; assume that no failures occurred
