@@ -69,14 +69,9 @@ class ReStore {
     ReStore(const ReStore& other) = delete;
     ReStore& operator=(const ReStore& other) = delete;
 
-    // Moving a ReStore is fine
-    ReStore(ReStore&& other) {
-        // TODO Implement
-    }
-
-    ReStore& operator=(ReStore&& other) {
-        // TODO implement
-    }
+    // Moving a ReStore is disabled for now, because we do not need it and use const members
+    ReStore(ReStore&& other) = delete;
+    ReStore& operator=(ReStore&& other) = delete;
 
     // Destructor
     ~ReStore() = default;
