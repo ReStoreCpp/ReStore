@@ -229,6 +229,47 @@ TEST(MPIContext, RankConversion) {
     }
 }
 
+TEST(MPIContext, MessageEquality) {
+    using ReStoreMPI::RecvMessage;
+    using ReStoreMPI::SendMessage;
+
+    {
+        uint8_t payload1a[4] = {0, 0, 0, 0};
+        uint8_t payload1b[4] = {0, 0, 0, 0};
+        uint8_t payload2[4]  = {0, 0, 0};
+        uint8_t payload3[4]  = {0, 0, 0, 1};
+
+        ASSERT_EQ(SendMessage(payload1a, 4, 0), SendMessage(payload1a, 4, 0));
+        ASSERT_EQ(SendMessage(payload1b, 4, 0), SendMessage(payload1a, 4, 0));
+        ASSERT_EQ(SendMessage(payload1b, 4, 0), SendMessage(payload1b, 4, 0));
+
+        ASSERT_NE(SendMessage(payload2, 3, 0), SendMessage(payload1a, 4, 0));
+        ASSERT_NE(SendMessage(payload1a, 4, 1), SendMessage(payload1a, 4, 0));
+        ASSERT_NE(SendMessage(payload1a, 4, 1), SendMessage(payload1a, 4, 2));
+        ASSERT_NE(SendMessage(payload3, 4, 1), SendMessage(payload1a, 4, 1));
+        ASSERT_NE(SendMessage(payload2, 3, 1), SendMessage(payload1a, 4, 1));
+        ASSERT_NE(SendMessage(payload3, 4, 1), SendMessage(payload2, 2, 1));
+    }
+
+    {
+        std::vector<uint8_t> payload1a = {0, 0, 0, 0};
+        std::vector<uint8_t> payload1b = {0, 0, 0, 0};
+        std::vector<uint8_t> payload2  = {0, 0, 0};
+        std::vector<uint8_t> payload3  = {0, 0, 0, 1};
+
+        ASSERT_EQ(RecvMessage(std::vector<uint8_t>(payload1a), 0), RecvMessage(std::vector<uint8_t>(payload1a), 0));
+        ASSERT_EQ(RecvMessage(std::vector<uint8_t>(payload1b), 0), RecvMessage(std::vector<uint8_t>(payload1a), 0));
+        ASSERT_EQ(RecvMessage(std::vector<uint8_t>(payload1b), 0), RecvMessage(std::vector<uint8_t>(payload1b), 0));
+
+        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload2), 0), RecvMessage(std::vector<uint8_t>(payload1a), 0));
+        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload1a), 1), RecvMessage(std::vector<uint8_t>(payload1a), 0));
+        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload1a), 1), RecvMessage(std::vector<uint8_t>(payload1a), 2));
+        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload3), 1), RecvMessage(std::vector<uint8_t>(payload1a), 1));
+        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload2), 1), RecvMessage(std::vector<uint8_t>(payload1a), 1));
+        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload3), 1), RecvMessage(std::vector<uint8_t>(payload2), 1));
+    }
+}
+
 int main(int argc, char** argv) {
     // Filter out Google Test arguments
     ::testing::InitGoogleTest(&argc, argv);
