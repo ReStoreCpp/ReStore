@@ -31,13 +31,13 @@ class BlockSubmissionCommunication {
     // serializeBlocksForTransmission()
     //
     // Serializes all blocks enumerated by repeated calls to nextBlock() using the provided serializeFunc()
-    // callback
-    // into one send buffer for each rank which gets at least one block.
-    // serializeFunc, nextBlock, totalNUmberOfBlocks are identical to the parameters described in submitBlocks
+    // callback into one send buffer for each rank which gets at least one block.
+    // serializeFunc and nextBlock are identical to the parameters described in submitBlocks
     // Allocates and returns the send buffers.
+    // Assumes that no ranks have failed since the creation of BlockDistribution and reset of MPIContext. 
     template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction>
     SendBuffers serializeBlocksForTransmission(
-        SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock, size_t totalNumberOfBlocks,
+        SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
         bool canBeParallelized = false // not supported yet
     ) {
         UNUSED(canBeParallelized);
@@ -54,10 +54,11 @@ class BlockSubmissionCommunication {
             } else {
                 block_id_t       blockId = next.value().first;
                 const BlockType& block   = next.value().second;
-                assert(blockId < totalNumberOfBlocks);
+                assert(blockId < _blockDistribution.numBlocks());
 
-                // Determine which ranks will get this block
-                auto ranks = _mpiContext.getAliveCurrentRanks(_blockDistribution.ranksBlockIsStoredOn(blockId));
+                // Determine which ranks will get this block; assume that no failures occurred
+                assert(_mpiContext.numFailuresSinceReset() == 0);
+                auto ranks = _blockDistribution.ranksBlockIsStoredOn(blockId);
 
                 // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
                 // operator and automatically copies the written bytes to every destination rank's send buffer.
@@ -80,16 +81,15 @@ class BlockSubmissionCommunication {
     // This functions iterates over a received message and calls handleBlockData() for each block stored in the
     // messages payload. This functions responsabilities are figuring out where a block starts and ends as well as
     // which id it has. message: The message to be parsed. handleBlockData(block_id_t blockId, const uint8_t* data,
-    // size_t lengthInBytes) the callback function to call for
-    //      each detected block.
+    // size_t lengthInBytes) the callback function to call for each detected block.
     // TODO implement LUT mode
     template <class HandleBlockDataFunc>
     void parseIncomingMessage(
         const ReStoreMPI::RecvMessage& message, HandleBlockDataFunc handleBlockData,
         const std::pair<OffsetMode, size_t>& offsetModeDescriptor) {
         static_assert(
-            std::is_invocable<HandleBlockDataFunc, block_id_t, const uint8_t*, size_t>(),
-            "handleBlockData has to be invocable as _(block_id_t, const uint8_t*, size_t)");
+            std::is_invocable<HandleBlockDataFunc, block_id_t, const uint8_t*, size_t, ReStoreMPI::current_rank_t>(),
+            "handleBlockData has to be invocable as _(block_id_t, const uint8_t*, size_t, current_rank_t)");
 
         assert(offsetModeDescriptor.first == OffsetMode::constant);
         auto constOffset = offsetModeDescriptor.second;
@@ -103,21 +103,20 @@ class BlockSubmissionCommunication {
         size_t numBlocksInThisMessage = message.data.size() / bytesPerBlock;
         assert(numBlocksInThisMessage > 0);
 
-        for (size_t blockIndex = 0; blockIndex < numBlocksInThisMessage; blockIndex++) {
-            auto startOfBlock = blockIndex * bytesPerBlock;
-            auto endOfId      = startOfBlock + sizeof(decltype(currentBlockId));
-            assert(startOfBlock < message.data.size());
-            assert(endOfId < message.data.size());
-            assert(startOfBlock > endOfId);
-            assert(endOfId <= std::numeric_limits<long>::max());
+        for (size_t blockIndex = 0; blockIndex < numBlocksInThisMessage; ++blockIndex) {
+            auto startOfBlockId = blockIndex * bytesPerBlock;
+            auto startOfPayload = startOfBlockId + sizeof(decltype(currentBlockId));
+            assert(startOfBlockId < message.data.size());
+            assert(startOfPayload < message.data.size());
+            assert(startOfBlockId < startOfPayload);
+            assert(startOfPayload <= std::numeric_limits<long>::max());
 
             // Get the block id from the data stream
-            std::copy(
-                message.data.begin() + static_cast<long>(startOfBlock),
-                message.data.begin() + static_cast<long>(endOfId), &currentBlockId);
+            // This const kind of feels like a Cola light with a burger menu ...
+            currentBlockId = *reinterpret_cast<const decltype(currentBlockId)*>(message.data.data() + startOfBlockId);
 
             // Handle the block data
-            handleBlockData(currentBlockId, message.data.data() + endOfId, constOffset);
+            handleBlockData(currentBlockId, message.data.data() + startOfPayload, constOffset, message.srcRank);
         }
     }
 
@@ -147,8 +146,8 @@ class BlockSubmissionCommunication {
     }
 
     private:
-    const MPIContext&        _mpiContext;
-    const BlockDistr&        _blockDistribution;
+    const MPIContext& _mpiContext;
+    const BlockDistr& _blockDistribution;
 };
 } // end of namespace ReStore
 #endif // Include guard

@@ -145,15 +145,16 @@ class ReStore {
             BlockSubmissionCommunication<BlockType> comm(_mpiContext, *_blockDistribution);
 
             // Allocate send buffers and serialize the blocks to be sent
-            auto sendBuffers = comm.serializeBlocksForTransmission(serializeFunc, nextBlock, totalNumberOfBlocks, canBeParallelized);
+            auto sendBuffers = comm.serializeBlocksForTransmission(serializeFunc, nextBlock, canBeParallelized);
 
             // All blocks have been serialized, send & receive replicas
             auto receivedMessages = comm.exchangeData(sendBuffers);
 
             // Store the received blocks into our local block storage
             comm.parseAllIncomingMessages(
-                receivedMessages, [this](block_id_t blockId, const uint8_t* data, size_t lengthInBytes) {
+                receivedMessages, [this](block_id_t blockId, const uint8_t* data, size_t lengthInBytes, ReStoreMPI::current_rank_t srcRank) {
                     UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
+                    UNUSED(srcRank); // We simply do not need this right now
                     this->_serializedBlocks->writeBlock(blockId, data);
                 }, offsetMode());
         } catch (ReStoreMPI::FaultException& e) {

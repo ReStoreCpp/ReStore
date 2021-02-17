@@ -252,24 +252,28 @@ class MPIContext {
         _rankManager.resetOriginalCommToCurrentComm();
     }
 
-    original_rank_t getOriginalSize() {
+    original_rank_t getOriginalSize() const {
         return _rankManager.getOriginalSize();
     }
 
-    original_rank_t getMyOriginalRank() {
+    original_rank_t getMyOriginalRank() const {
         return _rankManager.getMyOriginalRank();
     }
 
-    current_rank_t getCurrentSize() {
+    current_rank_t getCurrentSize() const {
         return _rankManager.getCurrentSize();
     }
 
-    current_rank_t getMyCurrentRank() {
+    current_rank_t getMyCurrentRank() const {
         return _rankManager.getMyCurrentRank();
     }
 
     original_rank_t getOriginalRank(const current_rank_t rank) const {
         return _rankManager.getOriginalRank(rank);
+    }
+
+    original_rank_t numFailuresSinceReset() const {
+        return getOriginalSize() - getCurrentSize();
     }
 
     std::optional<current_rank_t> getCurrentRank(const original_rank_t rank) const {
@@ -294,8 +298,8 @@ class MPIContext {
     }
 
     private:
-    MPI_Comm    _comm;
-    RankManager _rankManager;
+    MPI_Comm            _comm;
+    mutable RankManager _rankManager;
 };
 
 } // namespace ReStoreMPI

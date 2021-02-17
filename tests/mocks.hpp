@@ -15,18 +15,25 @@ class MPIContextMock {
     MOCK_METHOD(current_rank_t, getCurrentRank, (const original_rank_t), (const));
     MOCK_METHOD(bool, isAlive, (const original_rank_t), (const));
     MOCK_METHOD(std::vector<original_rank_t>, getOnlyAlive, (const std::vector<original_rank_t>&), (const));
-
-
-    /*
-    std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
-        return _rankManager.getAliveCurrentRanks(originalRanks);
-    }
-
-    std::vector<Message>
-    SparseAllToAll(const std::vector<Message>& messages, const int tag = RESTORE_SPARSE_ALL_TO_ALL_TAG) const {
-        return ReStoreMPI::SparseAllToAll(messages, _comm, tag);
-    }
-    */
+    MOCK_METHOD(ReStoreMPI::original_rank_t, numFailuresSinceReset, (), (const));
+    MOCK_METHOD(
+        std::vector<ReStoreMPI::RecvMessage>, SparseAllToAll, (const std::vector<ReStoreMPI::SendMessage>& messages),
+        (const));
+    MOCK_METHOD(
+        std::vector<current_rank_t>, getAliveCurrentRanks, (const std::vector<original_rank_t>& originalRanks),
+        (const));
 };
+
+std::vector<ReStoreMPI::original_rank_t>
+getAliveOnlyFake(std::vector<ReStoreMPI::original_rank_t> deadRanks, std::vector<ReStoreMPI::original_rank_t> ranks) {
+    std::vector<ReStoreMPI::original_rank_t> aliveRanks;
+
+    std::sort(ranks.begin(), ranks.end());
+    std::sort(deadRanks.begin(), deadRanks.end());
+    std::set_difference(
+        ranks.begin(), ranks.end(), deadRanks.begin(), deadRanks.end(), std::inserter(aliveRanks, aliveRanks.begin()));
+
+    return aliveRanks;
+}
 
 #endif // Include guard
