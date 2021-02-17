@@ -79,9 +79,7 @@ class ReStore {
     }
 
     // Destructor
-    ~ReStore() {
-        // TODO Free all allocated storage allocated for blocks
-    }
+    ~ReStore() = default;
 
     // replicationLevel()
     //
