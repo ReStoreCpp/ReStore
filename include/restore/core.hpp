@@ -183,6 +183,11 @@ class ReStore {
         std::vector<std::pair<block_id_t, size_t>> blockRanges, HandleSerializedBlockFunction handleSerializedBlock,
         bool canBeParallelized = false // not supported yet
     ) {
+        // TODO implement
+        assert(false);
+        UNUSED(blockRanges);
+        UNUSED(handleSerializedBlock);
+        UNUSED(canBeParallelized);
         // HandleSerializedBlockFunction void(SerializedBlockOutStream, size_t lengthOfStreamInBytes, block_id_t)
     }
 
@@ -206,7 +211,13 @@ class ReStore {
         std::vector<std::pair<std::pair<block_id_t, size_t>, int>> blockRanges,
         std::function<void(void*, size_t, block_id_t)>             handleSerializedBlock,
         bool                                                       canBeParallelized = false // not supported yet
-    ) {}
+    ) {
+        // TODO implement
+        assert(false);
+        UNUSED(blockRanges);
+        UNUSED(handleSerializedBlock);
+        UNUSED(canBeParallelized);
+    }
 
     private:
     const uint16_t                            _replicationLevel;
