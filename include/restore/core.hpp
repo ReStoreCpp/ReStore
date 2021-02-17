@@ -151,11 +151,14 @@ class ReStore {
 
             // Store the received blocks into our local block storage
             comm.parseAllIncomingMessages(
-                receivedMessages, [this](block_id_t blockId, const uint8_t* data, size_t lengthInBytes, ReStoreMPI::current_rank_t srcRank) {
+                receivedMessages,
+                [this](
+                    block_id_t blockId, const uint8_t* data, size_t lengthInBytes, ReStoreMPI::current_rank_t srcRank) {
                     UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
-                    UNUSED(srcRank); // We simply do not need this right now
+                    UNUSED(srcRank);       // We simply do not need this right now
                     this->_serializedBlocks->writeBlock(blockId, data);
-                }, offsetMode());
+                },
+                offsetMode());
         } catch (ReStoreMPI::FaultException& e) {
             // Reset BlockDistribution and SerializedBlockStorage
             _blockDistribution = nullptr;
