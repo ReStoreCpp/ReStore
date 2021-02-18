@@ -1,7 +1,9 @@
 #ifndef RESTORE_CORE_H
 #define RESTORE_CORE_H
 
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -20,6 +22,7 @@
 #include "restore/block_distribution.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/block_submission.hpp"
+#include "restore/common.hpp"
 
 namespace ReStore {
 
@@ -191,6 +194,9 @@ class ReStore {
         // HandleSerializedBlockFunction void(SerializedBlockOutStream, size_t lengthOfStreamInBytes, block_id_t)
     }
 
+    using block_range_external_t = std::pair<block_id_t, size_t>;
+    using block_range_request_t  = std::pair<block_range_external_t, int>;
+
     // pushBlocks()
     //
     // Pushes blocks to other ranks in the replicated storage. That is, the caller provides the global
@@ -207,16 +213,16 @@ class ReStore {
     //      byte stream, a length in bytes of this encoding and the global id of this block.
     // canBeParallelized: Indicates if multiple handleSerializedBlock calls can happen on different
     //      inputs concurrently.
+    template <class HandleSerializedBlockFunction>
     void pushBlocks(
-        std::vector<std::pair<std::pair<block_id_t, size_t>, int>> blockRanges,
-        std::function<void(void*, size_t, block_id_t)>             handleSerializedBlock,
-        bool                                                       canBeParallelized = false // not supported yet
+        const std::vector<std::pair<std::pair<block_id_t, size_t>, int>>& blockRanges,
+        HandleSerializedBlockFunction                                     handleSerializedBlock,
+        bool                                                              canBeParallelized = false // not supported yet
     ) {
-        // TODO implement
-        assert(false);
-        UNUSED(blockRanges);
-        UNUSED(handleSerializedBlock);
         UNUSED(canBeParallelized);
+        const auto [sendBlockRanges, recvBlockRanges] = getSendRecvBlockRanges(blockRanges);
+        const auto recvMessages                       = sparseAllToAll(sendBlockRanges);
+        handleReceivedBlocks(recvMessages, recvBlockRanges, handleSerializedBlock);
     }
 
     private:
@@ -227,13 +233,121 @@ class ReStore {
     std::shared_ptr<BlockDistribution<>>      _blockDistribution;
     std::unique_ptr<SerializedBlockStorage<>> _serializedBlocks;
 
+
+    template <class HandleSerializedBlockFunction>
+    void handleReceivedBlocks(
+        const std::vector<ReStoreMPI::RecvMessage>& recvMessages,
+        const std::vector<block_range_request_t>&   recvBlockRanges,
+        HandleSerializedBlockFunction               handleSerializedBlock) {
+        static_assert(
+            std::is_invocable<HandleSerializedBlockFunction, const void*, size_t, block_id_t>(),
+            "HandleSerializedBlockFunction must be invocable as (const uint8_t*, size_t, "
+            "block_id_t)");
+        size_t currentIndexRecvBlockRanges = 0;
+        for (const ReStoreMPI::RecvMessage& recvMessage: recvMessages) {
+            assert(currentIndexRecvBlockRanges < recvBlockRanges.size());
+            assert(recvMessage.srcRank == recvBlockRanges[currentIndexRecvBlockRanges].second);
+            // TODO: Implement LUT mode
+            assert(_offsetMode == OffsetMode::constant);
+            size_t currentIndexRecvMessage = 0;
+            while (currentIndexRecvBlockRanges < recvBlockRanges.size()
+                   && recvBlockRanges[currentIndexRecvBlockRanges].second == recvMessage.srcRank) {
+                for (block_id_t blockId = recvBlockRanges[currentIndexRecvBlockRanges].first.first;
+                     blockId < recvBlockRanges[currentIndexRecvBlockRanges].first.first
+                                   + recvBlockRanges[currentIndexRecvBlockRanges].first.second;
+                     ++blockId) {
+                    assert(currentIndexRecvMessage < recvMessage.data.size());
+                    assert(currentIndexRecvMessage + +_constOffset < recvMessage.data.size());
+                    handleSerializedBlock(&(recvMessage.data[currentIndexRecvMessage]), _constOffset, blockId);
+                    currentIndexRecvMessage += _constOffset;
+                }
+                currentIndexRecvBlockRanges++;
+            }
+        }
+    }
+
+    std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(const std::vector<block_range_request_t>& sendBlockRanges) {
+        std::vector<std::vector<uint8_t>>    sendData;
+        std::vector<ReStoreMPI::SendMessage> sendMessages;
+        int                                  currentRank = MPI_UNDEFINED;
+        for (const block_range_request_t& sendBlockRange: sendBlockRanges) {
+            if (currentRank != sendBlockRange.second) {
+                assert(currentRank < sendBlockRange.second);
+                if (currentRank != MPI_UNDEFINED) {
+                    assert(sendData.size() > 0);
+                    sendMessages.emplace_back(sendData.back().data(), sendData.back().size(), currentRank);
+                }
+                sendData.emplace_back();
+                currentRank = sendBlockRange.second;
+            }
+            // TODO Implement LUT mode
+            assert(_offsetMode == OffsetMode::constant);
+            _serializedBlocks->forAllBlocks(sendBlockRange.first, [&sendData](uint8_t* ptr, size_t size) {
+                sendData.back().insert(sendData.back().end(), ptr, ptr + size);
+            });
+        }
+        assert(currentRank != MPI_UNDEFINED);
+        assert(sendData.size() > 0);
+        sendMessages.emplace_back(sendData.back().data(), sendData.back().size(), currentRank);
+        auto result = _mpiContext.SparseAllToAll(sendMessages);
+        std::sort(
+            result.begin(), result.end(), [](const ReStoreMPI::RecvMessage& lhs, const ReStoreMPI::RecvMessage& rhs) {
+                return lhs.srcRank < rhs.srcRank;
+            });
+        return result;
+    }
+
+    std::pair<std::vector<block_range_request_t>, std::vector<block_range_request_t>>
+    getSendRecvBlockRanges(const std::vector<block_range_request_t>& blockRanges) {
+        std::vector<block_range_request_t> sendBlockRanges;
+        std::vector<block_range_request_t> recvBlockRanges;
+        for (const auto& blockRange: blockRanges) {
+            for (block_id_t blockId = blockRange.first.first;
+                 blockId < blockRange.first.first + blockRange.first.second;
+                 blockId += _blockDistribution->rangeOfBlock(blockId).length()) {
+                const auto                        blockRangeInternal = _blockDistribution->rangeOfBlock(blockId);
+                const ReStoreMPI::original_rank_t servingRank        = getServingRank(blockRangeInternal);
+                size_t                            size               = blockRangeInternal.length();
+                if (blockRangeInternal.start() + blockRangeInternal.length()
+                    >= blockRange.first.first + blockRange.first.second) {
+                    size = blockRange.first.first + blockRange.first.second - blockRangeInternal.start();
+                }
+                if (servingRank == _mpiContext.getMyOriginalRank()) {
+                    sendBlockRanges.emplace_back(std::make_pair(blockRangeInternal.start(), size), blockRange.second);
+                }
+                if (blockRange.second == _mpiContext.getMyCurrentRank()) {
+                    recvBlockRanges.emplace_back(
+                        std::make_pair(blockRangeInternal.start(), size), _mpiContext.getCurrentRank(servingRank));
+                }
+            }
+        }
+        auto sortByRankAndBegin = [](const block_range_request_t& lhs, const block_range_request_t& rhs) {
+            bool ranksLess   = lhs.second < rhs.second;
+            bool ranksEqual  = lhs.second == rhs.second;
+            bool blockIdLess = lhs.first.first < rhs.first.first;
+            return ranksLess || (ranksEqual && blockIdLess);
+        };
+        std::sort(sendBlockRanges.begin(), sendBlockRanges.end(), sortByRankAndBegin);
+        std::sort(recvBlockRanges.begin(), recvBlockRanges.end(), sortByRankAndBegin);
+        return std::make_pair(sendBlockRanges, recvBlockRanges);
+    }
+
     void _assertInvariants() const {
         assert(
             (_offsetMode == OffsetMode::constant && _constOffset > 0)
             || (_offsetMode == OffsetMode::lookUpTable && _constOffset == 0));
         assert(_replicationLevel > 0);
     }
-};
+
+    int getServingRank(const BlockDistribution<>::BlockRange& blockRange) {
+        auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
+        if (ranksWithBlockRange.empty()) {
+            throw UnrecoverableDataLossException();
+        }
+        // TODO: Is this smart? Maybe even split up blocks
+        return ranksWithBlockRange.front();
+    }
+}; // class ReStore
 
 /*
 Indended usage:
