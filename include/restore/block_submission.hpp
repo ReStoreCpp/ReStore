@@ -109,7 +109,6 @@ class BlockSubmissionCommunication {
             assert(startOfBlockId < message.data.size());
             assert(startOfPayload < message.data.size());
             assert(startOfBlockId < startOfPayload);
-            assert(startOfPayload <= std::numeric_limits<long>::max());
 
             // Get the block id from the data stream
             // This const kind of feels like a Cola light with a burger menu ...

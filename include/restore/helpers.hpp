@@ -1,7 +1,9 @@
 #ifndef RESTORE_HELPERS_H
 #define RESTORE_HELPERS_H
 
-#include <bits/stdint-uintn.h>
+#include <cstdint>
+#include <limits>
+#include <type_traits>
 
 // Suppress compiler warnings about unused variables
 #define UNUSED(expr) (void)(expr)
@@ -41,5 +43,33 @@ inline constexpr uint64_t operator""_uint64(unsigned long long arg) noexcept {
 #ifndef NDEBUG
     #define DEBUG
 #endif
+
+// in_range<To>(From value) checks if value can be safely casted into type To.
+template <class To>
+struct in_range {
+    template <class From>
+    static constexpr bool check(From value) noexcept {
+        static_assert(std::is_integral_v<From>, "From has to be an integral type.");
+        static_assert(std::is_integral_v<To>, "To has to be an integral type.");
+
+        static_assert(!std::is_unsigned_v<From> || std::numeric_limits<From>::min() == 0);
+        static_assert(!std::is_unsigned_v<To> || std::numeric_limits<To>::min() == 0);
+
+        if (std::is_unsigned_v<From> && std::is_unsigned_v<To>) {
+            return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
+        } else if (std::is_signed_v<From> && std::is_signed_v<To>) {
+            return static_cast<intmax_t>(value) >= static_cast<intmax_t>(std::numeric_limits<To>::min())
+                   && static_cast<intmax_t>(value) <= static_cast<intmax_t>(std::numeric_limits<To>::max());
+        } else if (std::is_signed_v<From> && std::is_unsigned_v<To>) {
+            if (value < 0) {
+                return false;
+            } else {
+                return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
+            }
+        } else if (std::is_unsigned_v<From> && std::is_signed_v<To>) {
+            return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
+        }
+    }
+};
 
 #endif // Include guard
