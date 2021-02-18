@@ -341,6 +341,9 @@ class ReStore {
 
     int getServingRank(const BlockDistribution<>::BlockRange& blockRange) {
         auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
+        if (ranksWithBlockRange.empty()) {
+            throw UnrecoverableDataLossException();
+        }
         // TODO: Is this smart? Maybe even split up blocks
         return ranksWithBlockRange.front();
     }
