@@ -26,6 +26,12 @@
 
 namespace ReStore {
 
+class UnrecoverableDataLossException : public std::exception {
+    virtual const char* what() const throw() override {
+        return "Unrecoverable data loss occurred.";
+    }
+};
+
 template <class BlockType>
 class ReStore {
     using Communication = BlockSubmissionCommunication<BlockType>;
@@ -66,19 +72,12 @@ class ReStore {
     ReStore(const ReStore& other) = delete;
     ReStore& operator=(const ReStore& other) = delete;
 
-    // Moving a ReStore is fine
-    ReStore(ReStore&& other) {
-        // TODO Implement
-    }
-
-    ReStore& operator=(ReStore&& other) {
-        // TODO implement
-    }
+    // Moving a ReStore is disabled for now, because we do not need it and use const members
+    ReStore(ReStore&& other) = delete;
+    ReStore& operator=(ReStore&& other) = delete;
 
     // Destructor
-    ~ReStore() {
-        // TODO Free all allocated storage allocated for blocks
-    }
+    ~ReStore() = default;
 
     // replicationLevel()
     //
@@ -122,8 +121,8 @@ class ReStore {
             std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
             "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream");
         static_assert(
-            std::is_invocable_r<std::optional<std::pair<block_id_t, const BlockType&>>, NextBlockCallbackFunction>(),
-            "serializeFunc must be invocable as std::optional<std::pair<block_id_t, const BlockType&>>()");
+            std::is_invocable_r<std::optional<NextBlock<BlockType>>, NextBlockCallbackFunction>(),
+            "serializeFunc must be invocable as ReStore::std::optional<NextBlock<BlockType>>()");
 
         if (totalNumberOfBlocks == 0) {
             throw std::runtime_error("Invalid number of blocks: 0.");
@@ -148,8 +147,7 @@ class ReStore {
             BlockSubmissionCommunication<BlockType> comm(_mpiContext, *_blockDistribution);
 
             // Allocate send buffers and serialize the blocks to be sent
-            auto sendBuffers =
-                comm.serializeBlocksForTransmission(serializeFunc, nextBlock, totalNumberOfBlocks, canBeParallelized);
+            auto sendBuffers = comm.serializeBlocksForTransmission(serializeFunc, nextBlock, canBeParallelized);
 
             // All blocks have been serialized, send & receive replicas
             auto receivedMessages = comm.exchangeData(sendBuffers);
@@ -157,8 +155,10 @@ class ReStore {
             // Store the received blocks into our local block storage
             comm.parseAllIncomingMessages(
                 receivedMessages,
-                [this](block_id_t blockId, const uint8_t* data, size_t lengthInBytes) {
+                [this](
+                    block_id_t blockId, const uint8_t* data, size_t lengthInBytes, ReStoreMPI::current_rank_t srcRank) {
                     UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
+                    UNUSED(srcRank);       // We simply do not need this right now
                     this->_serializedBlocks->writeBlock(blockId, data);
                 },
                 offsetMode());
@@ -186,7 +186,11 @@ class ReStore {
         std::vector<std::pair<block_id_t, size_t>> blockRanges, HandleSerializedBlockFunction handleSerializedBlock,
         bool canBeParallelized = false // not supported yet
     ) {
+        // TODO implement
         assert(false);
+        UNUSED(blockRanges);
+        UNUSED(handleSerializedBlock);
+        UNUSED(canBeParallelized);
         // HandleSerializedBlockFunction void(SerializedBlockOutStream, size_t lengthOfStreamInBytes, block_id_t)
     }
 

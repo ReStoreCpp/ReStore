@@ -2,6 +2,7 @@
 #define RESTORE_COMMON_H
 
 #include <cstdint>
+#include <optional>
 
 namespace ReStore {
 
@@ -14,6 +15,13 @@ enum class OffsetMode : uint8_t { constant, lookUpTable };
 // block.
 // TODO Do we need local ids? If we do, describe the difference between global and local block ids
 using block_id_t = std::size_t;
+
+// returned by the nextBlock() functions to descripe the next block (or nullopt if there is none)
+template<class BlockType>
+struct NextBlock {
+    block_id_t       blockId;
+    const BlockType& block;
+};
 
 } // End of namespace ReStore
 

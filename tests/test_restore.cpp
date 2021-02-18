@@ -80,8 +80,8 @@ TEST(ReStoreTest, submitBlocks) {
     store.submitBlocks(
         [](const int& value, ReStore::SerializedBlockStoreStream stream) { stream << value; },
         [&counter, &data]() {
-            auto ret =
-                data.size() == counter ? std::nullopt : std::make_optional(std::make_pair(counter, data[counter]));
+            auto ret = data.size() == counter ? std::nullopt
+                                              : std::make_optional(ReStore::NextBlock<int>({counter, data[counter]}));
             counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair is
                        // bound before or after the increment.
             return ret;

@@ -563,18 +563,6 @@ TEST(BlockDistributionTest, Advanced) {
     }
 }
 
-std::vector<ReStoreMPI::original_rank_t>
-getAliveOnlyFake(std::vector<ReStoreMPI::original_rank_t> deadRanks, std::vector<ReStoreMPI::original_rank_t> ranks) {
-    std::vector<ReStoreMPI::original_rank_t> aliveRanks;
-
-    std::sort(ranks.begin(), ranks.end());
-    std::sort(deadRanks.begin(), deadRanks.end());
-    std::set_difference(
-        ranks.begin(), ranks.end(), deadRanks.begin(), deadRanks.end(), std::inserter(aliveRanks, aliveRanks.begin()));
-
-    return aliveRanks;
-}
-
 TEST(BlockDistributionTest, Basic_with_failures) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using block_id_t        = ReStore::block_id_t;

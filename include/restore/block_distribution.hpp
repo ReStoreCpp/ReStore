@@ -232,7 +232,7 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
 
         // The range is located on the rank with the same id ...
         auto rankIds = std::vector<ReStoreMPI::original_rank_t>();
-        assert(range.id() <= std::numeric_limits<ReStoreMPI::original_rank_t>::max());
+        assert(range.id() <= static_cast<size_t>(std::numeric_limits<ReStoreMPI::original_rank_t>::max()));
         assert(range.id() >= 0);
         ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id());
         rankIds.push_back(firstRank);
@@ -274,18 +274,18 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
 
         // ... as are <replication level> - 1 further ranges, all <shift width> apart
         for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
-            assert(firstRange.id() <= std::numeric_limits<int64_t>::max());
-            assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
-            assert(_numRanges < std::numeric_limits<int64_t>::max());
+            assert(firstRange.id() <= static_cast<size_t>(std::numeric_limits<int64_t>::max()));
+            assert(_shiftWidth * replica <= static_cast<size_t>(std::numeric_limits<int64_t>::max()));
+            assert(in_range<int64_t>::check(_numRanges));
             assert(_numRanges > 0);
 
-            assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
-            assert(_shiftWidth <= std::numeric_limits<int64_t>::max());
+            assert(in_range<int64_t>::check(_shiftWidth));
+            assert(in_range<int64_t>::check(_shiftWidth * replica));
             static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
             int64_t rangeId = static_cast<int64_t>(firstRange.id())
                               - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
             if (rangeId < 0) {
-                assert(_numRanges < std::numeric_limits<int64_t>::max());
+                assert(in_range<int64_t>::check(_numRanges));
                 rangeId =
                     static_cast<int64_t>(_numRanges) + static_cast<int64_t>(rangeId % static_cast<int64_t>(_numRanges));
             }
@@ -321,16 +321,15 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
         // Let's try this and think about a more clever solution once we actually _measure_ a performance
         // bottleneck.
         for (uint16_t replica = 0; replica < _replicationLevel; replica++) {
-            assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
-            assert(_numRanges < std::numeric_limits<int64_t>::max());
+            assert(in_range<int64_t>::check(_numRanges));
+            assert(in_range<int64_t>::check(_shiftWidth));
+            assert(in_range<int64_t>::check(_shiftWidth * replica));
             assert(_numRanges > 0);
 
-            assert(_shiftWidth * replica <= std::numeric_limits<int64_t>::max());
-            assert(_shiftWidth <= std::numeric_limits<int64_t>::max());
             static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
             int64_t rangeId = rankId - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
             if (rangeId < 0) {
-                assert(_numRanges < std::numeric_limits<int64_t>::max());
+                assert(in_range<int64_t>::check(_numRanges));
                 rangeId =
                     static_cast<int64_t>(_numRanges) + static_cast<int64_t>(rangeId % static_cast<int64_t>(_numRanges));
             }

@@ -29,6 +29,31 @@ struct SendMessage {
         : data(_data),
           size(_size),
           destRank(_destRank) {}
+
+    // Performs a deep comparison, i.e. the contents of the message is checked for equality, not where data points to.
+    bool operator==(const SendMessage& that) const noexcept {
+        assert(this->data);
+        assert(that.data);
+        assert(this->size >= 0);
+        assert(that.size >= 0);
+
+        if (this->size != that.size || this->destRank != that.destRank) {
+            return false;
+        } else {
+            assert(this->size == that.size);
+            for (decltype(this->size) idx = 0; idx < this->size; ++idx) {
+                if (this->data[idx] != that.data[idx]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    // Performs a deep comparison, i.e. the contents of the message is checked for inequality, not where data points to.
+    bool operator!=(const SendMessage& that) const noexcept {
+        return !(*this == that);
+    }
 };
 
 struct RecvMessage {
@@ -39,6 +64,16 @@ struct RecvMessage {
     RecvMessage(std::vector<uint8_t>&& _data, const current_rank_t _srcRank)
         : data(std::move(_data)),
           srcRank(_srcRank) {}
+
+    // Performs a deep comparison, i.e. the contents of the message is checked for equality, not where data points to.
+    bool operator==(const RecvMessage& that) const {
+        return this->srcRank == that.srcRank && this->data == that.data;
+    }
+
+    // Performs a deep comparison, i.e. the contents of the message is checked for inequality, not where data points to.
+    bool operator!=(const RecvMessage& that) const {
+        return !(*this == that);
+    }
 };
 
 class FaultException : public std::exception {
@@ -217,24 +252,28 @@ class MPIContext {
         _rankManager.resetOriginalCommToCurrentComm();
     }
 
-    original_rank_t getOriginalSize() {
+    original_rank_t getOriginalSize() const {
         return _rankManager.getOriginalSize();
     }
 
-    original_rank_t getMyOriginalRank() {
+    original_rank_t getMyOriginalRank() const {
         return _rankManager.getMyOriginalRank();
     }
 
-    current_rank_t getCurrentSize() {
+    current_rank_t getCurrentSize() const {
         return _rankManager.getCurrentSize();
     }
 
-    current_rank_t getMyCurrentRank() {
+    current_rank_t getMyCurrentRank() const {
         return _rankManager.getMyCurrentRank();
     }
 
     original_rank_t getOriginalRank(const current_rank_t rank) const {
         return _rankManager.getOriginalRank(rank);
+    }
+
+    original_rank_t numFailuresSinceReset() const {
+        return getOriginalSize() - getCurrentSize();
     }
 
     std::optional<current_rank_t> getCurrentRank(const original_rank_t rank) const {
@@ -259,8 +298,8 @@ class MPIContext {
     }
 
     private:
-    MPI_Comm    _comm;
-    RankManager _rankManager;
+    MPI_Comm            _comm;
+    mutable RankManager _rankManager;
 };
 
 } // namespace ReStoreMPI
