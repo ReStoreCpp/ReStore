@@ -24,7 +24,7 @@
 namespace ReStore {
 
 class UnrecoverableDataLossException : public std::exception {
-    virtual const char* what() const throw() {
+    virtual const char* what() const throw() override {
         return "Unrecoverable data loss occurred.";
     }
 };
