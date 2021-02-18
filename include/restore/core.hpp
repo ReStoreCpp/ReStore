@@ -220,13 +220,30 @@ class ReStore {
         bool                                                              canBeParallelized = false // not supported yet
     ) {
         UNUSED(canBeParallelized);
+        const auto [sendBlockRanges, recvBlockRanges] = getSendRecvBlockRanges(blockRanges);
+        const auto recvMessages                       = sparseAllToAll(sendBlockRanges);
+        handleReceivedBlocks(recvMessages, recvBlockRanges, handleSerializedBlock);
+    }
+
+    private:
+    const uint16_t                            _replicationLevel;
+    const OffsetMode                          _offsetMode;
+    const size_t                              _constOffset;
+    ReStoreMPI::MPIContext                    _mpiContext;
+    std::shared_ptr<BlockDistribution<>>      _blockDistribution;
+    std::unique_ptr<SerializedBlockStorage<>> _serializedBlocks;
+
+
+    template <class HandleSerializedBlockFunction>
+    void handleReceivedBlocks(
+        const std::vector<ReStoreMPI::RecvMessage>& recvMessages,
+        const std::vector<block_range_request_t>&   recvBlockRanges,
+        HandleSerializedBlockFunction               handleSerializedBlock) {
         static_assert(
             std::is_invocable<HandleSerializedBlockFunction, const void*, size_t, block_id_t>(),
             "HandleSerializedBlockFunction must be invocable as (const uint8_t*, size_t, "
             "block_id_t)");
-        auto [sendBlockRanges, recvBlockRanges] = getSendRecvBlockRanges(blockRanges);
-        auto   recvMessages                     = sparseAllToAll(sendBlockRanges);
-        size_t currentIndexRecvBlockRanges      = 0;
+        size_t currentIndexRecvBlockRanges = 0;
         for (const ReStoreMPI::RecvMessage& recvMessage: recvMessages) {
             assert(currentIndexRecvBlockRanges < recvBlockRanges.size());
             assert(recvMessage.srcRank == recvBlockRanges[currentIndexRecvBlockRanges].second);
@@ -248,14 +265,6 @@ class ReStore {
             }
         }
     }
-
-    private:
-    const uint16_t                            _replicationLevel;
-    const OffsetMode                          _offsetMode;
-    const size_t                              _constOffset;
-    ReStoreMPI::MPIContext                    _mpiContext;
-    std::shared_ptr<BlockDistribution<>>      _blockDistribution;
-    std::unique_ptr<SerializedBlockStorage<>> _serializedBlocks;
 
     std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(const std::vector<block_range_request_t>& sendBlockRanges) {
         std::vector<std::vector<uint8_t>>    sendData;
