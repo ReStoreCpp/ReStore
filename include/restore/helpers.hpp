@@ -55,18 +55,18 @@ struct in_range {
         static_assert(!std::is_unsigned_v<From> || std::numeric_limits<From>::min() == 0);
         static_assert(!std::is_unsigned_v<To> || std::numeric_limits<To>::min() == 0);
 
-        if (std::is_unsigned_v<From> && std::is_unsigned_v<To>) {
+        if constexpr (std::is_unsigned_v<From> && std::is_unsigned_v<To>) {
             return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
-        } else if (std::is_signed_v<From> && std::is_signed_v<To>) {
+        } else if constexpr (std::is_signed_v<From> && std::is_signed_v<To>) {
             return static_cast<intmax_t>(value) >= static_cast<intmax_t>(std::numeric_limits<To>::min())
                    && static_cast<intmax_t>(value) <= static_cast<intmax_t>(std::numeric_limits<To>::max());
-        } else if (std::is_signed_v<From> && std::is_unsigned_v<To>) {
+        } else if constexpr (std::is_signed_v<From> && std::is_unsigned_v<To>) {
             if (value < 0) {
                 return false;
             } else {
                 return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
             }
-        } else if (std::is_unsigned_v<From> && std::is_signed_v<To>) {
+        } else if constexpr (std::is_unsigned_v<From> && std::is_signed_v<To>) {
             return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
         }
     }
