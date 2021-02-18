@@ -45,31 +45,31 @@ inline constexpr uint64_t operator""_uint64(unsigned long long arg) noexcept {
 #endif
 
 // in_range<To>(From value) checks if value can be safely casted into type To.
-template <class To>
-struct in_range {
-    template <class From>
-    static constexpr bool check(From value) noexcept {
-        static_assert(std::is_integral_v<From>, "From has to be an integral type.");
-        static_assert(std::is_integral_v<To>, "To has to be an integral type.");
+template <class To, class From>
+constexpr bool in_range(From value) noexcept {
+    static_assert(std::is_integral_v<From>, "From has to be an integral type.");
+    static_assert(std::is_integral_v<To>, "To has to be an integral type.");
 
-        static_assert(!std::is_unsigned_v<From> || std::numeric_limits<From>::min() == 0);
-        static_assert(!std::is_unsigned_v<To> || std::numeric_limits<To>::min() == 0);
+    static_assert(!std::is_unsigned_v<From> || std::numeric_limits<From>::min() == 0);
+    static_assert(!std::is_unsigned_v<To> || std::numeric_limits<To>::min() == 0);
 
-        if constexpr (std::is_unsigned_v<From> && std::is_unsigned_v<To>) {
-            return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
-        } else if constexpr (std::is_signed_v<From> && std::is_signed_v<To>) {
-            return static_cast<intmax_t>(value) >= static_cast<intmax_t>(std::numeric_limits<To>::min())
-                   && static_cast<intmax_t>(value) <= static_cast<intmax_t>(std::numeric_limits<To>::max());
-        } else if constexpr (std::is_signed_v<From> && std::is_unsigned_v<To>) {
-            if (value < 0) {
-                return false;
-            } else {
-                return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
-            }
-        } else if constexpr (std::is_unsigned_v<From> && std::is_signed_v<To>) {
+    static_assert(std::numeric_limits<From>::digits <= 64);
+    static_assert(std::numeric_limits<To>::digits <= 64);
+
+    if constexpr (std::is_unsigned_v<From> && std::is_unsigned_v<To>) {
+        return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
+    } else if constexpr (std::is_signed_v<From> && std::is_signed_v<To>) {
+        return static_cast<intmax_t>(value) >= static_cast<intmax_t>(std::numeric_limits<To>::min())
+                && static_cast<intmax_t>(value) <= static_cast<intmax_t>(std::numeric_limits<To>::max());
+    } else if constexpr (std::is_signed_v<From> && std::is_unsigned_v<To>) {
+        if (value < 0) {
+            return false;
+        } else {
             return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
         }
+    } else if constexpr (std::is_unsigned_v<From> && std::is_signed_v<To>) {
+        return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
     }
-};
+}
 
 #endif // Include guard
