@@ -217,6 +217,14 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
     std::vector<ReStoreMPI::original_rank_t> ranksBlockIsStoredOn(block_id_t block) const {
         assert(block < _numBlocks);
         BlockRange range = rangeOfBlock(block);
+        return ranksBlockRangeIsStoredOn(range);
+    }
+
+    // ranksBlockRangeIsStoredOn()
+    //
+    // Returns the ranks the given block is stored on. The ranks are identified by their original rank id.
+    // Dead ranks are filtered from the result list.
+    std::vector<ReStoreMPI::original_rank_t> ranksBlockRangeIsStoredOn(const BlockRange& range) const {
         assert(range.start() < _numBlocks);
         assert(range.start() + range.length() <= _numBlocks);
         assert(range.id() < _numRanges);
