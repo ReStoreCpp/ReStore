@@ -27,12 +27,6 @@
 
 namespace ReStore {
 
-class UnrecoverableDataLossException : public std::exception {
-    virtual const char* what() const throw() override {
-        return "Unrecoverable data loss occurred.";
-    }
-};
-
 template <class BlockType>
 class ReStore {
     using Communication = BlockSubmissionCommunication<BlockType>;
@@ -235,7 +229,6 @@ class ReStore {
     std::shared_ptr<BlockDistribution<>>      _blockDistribution;
     std::unique_ptr<SerializedBlockStorage<>> _serializedBlocks;
 
-
     void _assertInvariants() const {
         assert(
             (_offsetMode == OffsetMode::constant && _constOffset > 0)
@@ -243,14 +236,6 @@ class ReStore {
         assert(_replicationLevel > 0);
     }
 
-    int getServingRank(const BlockDistribution<>::BlockRange& blockRange) {
-        auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
-        if (ranksWithBlockRange.empty()) {
-            throw UnrecoverableDataLossException();
-        }
-        // TODO: Is this smart? Maybe even split up blocks
-        return ranksWithBlockRange.front();
-    }
 }; // class ReStore
 
 /*

@@ -17,10 +17,16 @@ enum class OffsetMode : uint8_t { constant, lookUpTable };
 using block_id_t = std::size_t;
 
 // returned by the nextBlock() functions to descripe the next block (or nullopt if there is none)
-template<class BlockType>
+template <class BlockType>
 struct NextBlock {
     block_id_t       blockId;
     const BlockType& block;
+};
+
+class UnrecoverableDataLossException : public std::exception {
+    virtual const char* what() const throw() override {
+        return "Unrecoverable data loss occurred.";
+    }
 };
 
 } // End of namespace ReStore

@@ -14,7 +14,18 @@ using block_range_external_t = std::pair<block_id_t, size_t>;
 using block_range_request_t  = std::pair<block_range_external_t, int>;
 
 
-template <class MPIContext = ReStoreMPI::MPIContext>
+template <class MPIContext>
+inline ReStoreMPI::original_rank_t getServingRank(
+    const BlockDistribution<>::BlockRange& blockRange, const BlockDistribution<MPIContext>* _blockDistribution) {
+    auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
+    if (ranksWithBlockRange.empty()) {
+        throw UnrecoverableDataLossException();
+    }
+    // TODO: Is this smart? Maybe even split up blocks
+    return ranksWithBlockRange.front();
+}
+
+template <class MPIContext>
 inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_request_t>> getSendRecvBlockRanges(
     const std::vector<block_range_request_t>& blockRanges, const BlockDistribution<MPIContext>* _blockDistribution,
     const MPIContext& _mpiContext) {
@@ -24,8 +35,8 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
         for (block_id_t blockId = blockRange.first.first; blockId < blockRange.first.first + blockRange.first.second;
              blockId += _blockDistribution->rangeOfBlock(blockId).length()) {
             const auto                        blockRangeInternal = _blockDistribution->rangeOfBlock(blockId);
-            const ReStoreMPI::original_rank_t servingRank        = getServingRank(blockRangeInternal);
-            size_t                            size               = blockRangeInternal.length();
+            const ReStoreMPI::original_rank_t servingRank = getServingRank(blockRangeInternal, _blockDistribution);
+            size_t                            size        = blockRangeInternal.length();
             if (blockRangeInternal.start() + blockRangeInternal.length()
                 >= blockRange.first.first + blockRange.first.second) {
                 size = blockRange.first.first + blockRange.first.second - blockRangeInternal.start();
