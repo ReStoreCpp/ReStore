@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
     cliParser.add_options()                                                                        ///
         ("s,seed", "Random seed.", cxxopts::value<unsigned long>()->default_value("0"))            ///
         ("n,no-header", "Do not print the csv header.")                                            ///
-        ("r,replicas", "Number of replicas to run", cxxopts::value<size_t>()->default_value("10")) ///
+        ("r,repetitions", "Number of replicas to run", cxxopts::value<size_t>()->default_value("10")) ///
         ("h,help", "Print help message.")                                                          ///
         ("c,config",
          "A configuration to simulate. Multiple configurations can be given.\n Format: <numRanks numBlocks "
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
     }
 
     const auto RANDOM_SEED      = options["seed"].as<unsigned long>();
-    const auto NUM_REPLICAS     = options["replicas"].as<size_t>();
+    const auto NUM_REPETITIONS     = options["repetitions"].as<size_t>();
     const auto PRINT_CSV_HEADER = !options.count("no-header");
     const auto configurations   = options["config"].as<vector<RankDistributionConfig>>();
 
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
             cout << config.numRanks << " is not a valid rank count (too large)" << endl;
             exit(1);
         }
-        for (auto replica: range(NUM_REPLICAS)) {
+        for (auto repetition: range(NUM_REPETITIONS)) {
             // Create a new block configuration with the given configuration
             shared_ptr<ReStore::BlockDistribution<MPIContextMock>> blockDistribution = nullptr;
             try {
@@ -147,13 +147,13 @@ int main(int argc, char** argv) {
             }
             shuffle(
                 orderOfRankFailures.begin(), orderOfRankFailures.end(),
-                std::default_random_engine(RANDOM_SEED + replica));
+                std::default_random_engine(RANDOM_SEED + repetition));
 
             // Simulate the failures in the precomputed order until a irrecoverable data loss occurs.
             for (auto failingRank: orderOfRankFailures) {
                 deadRanks.push_back(failingRank);
                 if (checkForDataLoss(blockDistribution)) {
-                    resultsPrinter.print_result(RANDOM_SEED + replica, config, deadRanks.size());
+                    resultsPrinter.print_result(RANDOM_SEED + repetition, config, deadRanks.size());
                     break;
                 }
             }
