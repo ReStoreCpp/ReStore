@@ -18,7 +18,7 @@ using namespace ::testing;
 using iter::range;
 using ReStoreMPI::original_rank_t;
 
-bool checkForDataLoss(shared_ptr<ReStore::BlockDistribution<MPIContextMock>> blockDistribution) {
+bool checkForDataLoss(shared_ptr<ReStore::BlockDistribution<MPIContextFake>> blockDistribution) {
     for (auto rangeId: range(blockDistribution->numRanges())) {
         auto blockRange = blockDistribution->blockRangeById(rangeId);
         if (blockDistribution->ranksBlockRangeIsStoredOn(blockRange).empty()) {
@@ -76,11 +76,11 @@ int main(int argc, char** argv) {
         "simulate-failures-until-data-loss",
         "Simulates rank failures and uses the data distribution to check when irrecoverable data loss occurred.");
 
-    cliParser.add_options()                                                                        ///
-        ("s,seed", "Random seed.", cxxopts::value<unsigned long>()->default_value("0"))            ///
-        ("n,no-header", "Do not print the csv header.")                                            ///
+    cliParser.add_options()                                                                           ///
+        ("s,seed", "Random seed.", cxxopts::value<unsigned long>()->default_value("0"))               ///
+        ("n,no-header", "Do not print the csv header.")                                               ///
         ("r,repetitions", "Number of replicas to run", cxxopts::value<size_t>()->default_value("10")) ///
-        ("h,help", "Print help message.")                                                          ///
+        ("h,help", "Print help message.")                                                             ///
         ("c,config",
          "A configuration to simulate. Multiple configurations can be given.\n Format: <numRanks numBlocks "
          "replicationLevel>, e.g.: \"10 1000 3\"",
@@ -106,19 +106,12 @@ int main(int argc, char** argv) {
     }
 
     const auto RANDOM_SEED      = options["seed"].as<unsigned long>();
-    const auto NUM_REPETITIONS     = options["repetitions"].as<size_t>();
+    const auto NUM_REPETITIONS  = options["repetitions"].as<size_t>();
     const auto PRINT_CSV_HEADER = !options.count("no-header");
     const auto configurations   = options["config"].as<vector<RankDistributionConfig>>();
 
     // Set up the fake MPI Context
-    auto                    mpiContext = MPIContextMock();
-    vector<original_rank_t> deadRanks;
-
-    // deadRanks is passed by reference, we can therefore push_back new failed ranks onto dead ranks when simulating
-    // failures.
-    EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([&deadRanks](std::vector<original_rank_t> ranks) {
-        return getAliveOnlyFake(deadRanks, ranks);
-    });
+    auto mpiContext = MPIContextFake();
 
     // Set up the CSV output
     ResultsPrinter resultsPrinter(PRINT_CSV_HEADER);
@@ -131,9 +124,9 @@ int main(int argc, char** argv) {
         }
         for (auto repetition: range(NUM_REPETITIONS)) {
             // Create a new block configuration with the given configuration
-            shared_ptr<ReStore::BlockDistribution<MPIContextMock>> blockDistribution = nullptr;
+            shared_ptr<ReStore::BlockDistribution<MPIContextFake>> blockDistribution = nullptr;
             try {
-                blockDistribution = make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+                blockDistribution = make_shared<ReStore::BlockDistribution<MPIContextFake>>(
                     config.numRanks, config.numBlocks, config.replicationLevel, mpiContext);
             } catch (runtime_error& e) {
                 cout << "Configuration " << config << " is invalid:\n\t" << e.what() << endl;
@@ -151,15 +144,15 @@ int main(int argc, char** argv) {
 
             // Simulate the failures in the precomputed order until a irrecoverable data loss occurs.
             for (auto failingRank: orderOfRankFailures) {
-                deadRanks.push_back(failingRank);
+                mpiContext.killRank(failingRank);
                 if (checkForDataLoss(blockDistribution)) {
-                    resultsPrinter.print_result(RANDOM_SEED + repetition, config, deadRanks.size());
+                    resultsPrinter.print_result(RANDOM_SEED + repetition, config, mpiContext.numFailed());
                     break;
                 }
             }
 
             // Reset deadRanks so we can reuse it in the next iteration (replica X config)
-            deadRanks.clear();
+            mpiContext.resurrectRanks();
         }
     }
 
