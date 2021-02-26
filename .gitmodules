@@ -7,3 +7,6 @@
 [submodule "extern/cppitertools"]
 	path = extern/cppitertools
 	url = https://github.com/ryanhaining/cppitertools.git
+[submodule "extern/cxxopts"]
+	path = extern/cxxopts
+	url = https://github.com/jarro2783/cxxopts.git

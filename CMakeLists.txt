@@ -36,11 +36,14 @@ cmake_dependent_option("${PROJECT_NAME}_BUILD_TESTS" "Build tests for ${PROJECT_
 option("${PROJECT_NAME}_BUILD_BENCHMARKS" "Build examples" OFF)
 option("${PROJECT_NAME}_BUILD_EXAMPLES" "Build examples" OFF)
 
+# TODO Not all libraries are needed for each target (benchmarks, tests, library) -> The user should be able to build the library without needing all theo ther libraries (gmock, gtest, cxxopts, cppitertools, ...)
 # Libraries
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
 set("${PROJECT_NAME}_GTEST_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/googletest" CACHE PATH "Path to the googletest source directory")
 
 set("${PROJECT_NAME}_CPPITERTOOLS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cppitertools" CACHE PATH "Path to the cppitertools source directory")
+
+set("${PROJECT_NAME}_CXXOPTS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cxxopts" CACHE PATH "Path to the cxxopts source directory")
 
 set("${PROJECT_NAME}_BACKWARDCPP_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/backward-cpp" CACHE PATH "Path to the backward-cpp source directory")
 
@@ -146,6 +149,13 @@ endif()
 set("ENV{cppitertools_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
 add_subdirectory("${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
 
+# Load and include cxxopts       
+if(NOT EXISTS "${${PROJECT_NAME}_CXXOPTS_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "Could not find cxxopts in ${${PROJECT_NAME}_CXXOPTS_DIR}")
+endif()
+set("ENV{cxxopts_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
+add_subdirectory("${${PROJECT_NAME}_CXXOPTS_DIR}")
+
 #if(${PROJECT_NAME}_USE_DOXYGEN)
 #    find_package(Doxygen)
 #    if(DOXYGEN_FOUND)
@@ -159,9 +169,9 @@ add_subdirectory("${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
 #    endif()
 #endif()
 
-if(${PROJECT_NAME}_BUILD_BENCHMARKS)
+#if(${PROJECT_NAME}_BUILD_BENCHMARKS)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/benchmark")
-endif()
+#endif()
 
 if(${PROJECT_NAME}_BUILD_EXAMPLES)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/examples")
