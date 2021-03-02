@@ -44,6 +44,8 @@ inline std::vector<block_range_request_t> getServingRank(
     return result;
 }
 
+// Takes block range requests with current ranks
+// Returns sendBlockRanges and recvBlockRanges with current ranks
 template <class MPIContext>
 inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_request_t>> getSendRecvBlockRanges(
     const std::vector<block_range_request_t>& blockRanges, const BlockDistribution<MPIContext>* _blockDistribution,
@@ -84,6 +86,7 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
     return std::make_pair(sendBlockRanges, recvBlockRanges);
 }
 
+// Takes recvBlockRanges with current ranks
 template <class HandleSerializedBlockFunction>
 inline void handleReceivedBlocks(
     const std::vector<ReStoreMPI::RecvMessage>& recvMessages, const std::vector<block_range_request_t>& recvBlockRanges,
@@ -115,6 +118,7 @@ inline void handleReceivedBlocks(
     }
 }
 
+// Takes requests with current ranks
 template <class MPIContext = ReStoreMPI::MPIContext>
 inline std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(
     const std::vector<block_range_request_t>& sendBlockRanges, const OffsetMode _offsetMode,
