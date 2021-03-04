@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <bits/stdint-uintn.h>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -21,11 +22,14 @@ typedef int current_rank_t;
 typedef int original_rank_t;
 
 struct SendMessage {
-    const uint8_t* data;
-    int            size;
-    current_rank_t destRank;
+    static_assert(
+        sizeof(std::byte) == sizeof(char),
+        "byte and char have different sizes. This means restore will probably not work and show undefined behavior.");
+    const std::byte* data;
+    int              size;
+    current_rank_t   destRank;
 
-    SendMessage(const uint8_t* _data, const int _size, const current_rank_t _destRank) noexcept
+    SendMessage(const std::byte* _data, const int _size, const current_rank_t _destRank) noexcept
         : data(_data),
           size(_size),
           destRank(_destRank) {}
@@ -57,11 +61,11 @@ struct SendMessage {
 };
 
 struct RecvMessage {
-    std::vector<uint8_t> data;
-    current_rank_t       srcRank;
+    std::vector<std::byte> data;
+    current_rank_t         srcRank;
 
     RecvMessage(const size_t size, const current_rank_t _srcRank) : data(size), srcRank(_srcRank) {}
-    RecvMessage(std::vector<uint8_t>&& _data, const current_rank_t _srcRank)
+    RecvMessage(std::vector<std::byte>&& _data, const current_rank_t _srcRank)
         : data(std::move(_data)),
           srcRank(_srcRank) {}
 

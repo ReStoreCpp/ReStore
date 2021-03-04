@@ -20,7 +20,7 @@ class BlockSubmissionCommunication {
     // If the user did his homework and designed a BlockDistribution which requires few messages to be send
     // we do not want to allocate all those unneeded send buffers... that's why we use a map here instead
     // of a vector.
-    using SendBuffers = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>;
+    using SendBuffers = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>;
 
     using BlockDistr = BlockDistribution<MPIContext>;
 
@@ -80,7 +80,7 @@ class BlockSubmissionCommunication {
     //
     // This functions iterates over a received message and calls handleBlockData() for each block stored in the
     // messages payload. This functions responsabilities are figuring out where a block starts and ends as well as
-    // which id it has. message: The message to be parsed. handleBlockData(block_id_t blockId, const uint8_t* data,
+    // which id it has. message: The message to be parsed. handleBlockData(block_id_t blockId, const std::byte* data,
     // size_t lengthInBytes) the callback function to call for each detected block.
     // TODO implement LUT mode
     template <class HandleBlockDataFunc>
@@ -88,8 +88,8 @@ class BlockSubmissionCommunication {
         const ReStoreMPI::RecvMessage& message, HandleBlockDataFunc handleBlockData,
         const std::pair<OffsetMode, size_t>& offsetModeDescriptor) {
         static_assert(
-            std::is_invocable<HandleBlockDataFunc, block_id_t, const uint8_t*, size_t, ReStoreMPI::current_rank_t>(),
-            "handleBlockData has to be invocable as _(block_id_t, const uint8_t*, size_t, current_rank_t)");
+            std::is_invocable<HandleBlockDataFunc, block_id_t, const std::byte*, size_t, ReStoreMPI::current_rank_t>(),
+            "handleBlockData has to be invocable as _(block_id_t, const std::byte*, size_t, current_rank_t)");
 
         assert(offsetModeDescriptor.first == OffsetMode::constant);
         auto constOffset = offsetModeDescriptor.second;

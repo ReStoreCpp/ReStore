@@ -10,6 +10,7 @@
 #include <optional>
 #include <vector>
 
+#include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
 
 TEST(MPIContext, SparseAllToAll) {
@@ -22,7 +23,7 @@ TEST(MPIContext, SparseAllToAll) {
     std::vector<ReStoreMPI::SendMessage> sendMessages;
     for (int target = (rank + 2) % size; target != rank && target != (rank + 1) % size; target = (target + 2) % size) {
         sendMessages.emplace_back(
-            reinterpret_cast<const uint8_t*>(new const int[2]{rank, target}), 2 * sizeof(int),
+            reinterpret_cast<const std::byte*>(new const int[2]{rank, target}), 2 * sizeof(int),
             static_cast<ReStoreMPI::current_rank_t>(target));
     }
     auto receiveMessages = context.SparseAllToAll(sendMessages);
@@ -31,9 +32,9 @@ TEST(MPIContext, SparseAllToAll) {
     for (int source = (rank - 2 + 2 * size) % size; source != rank && source != (rank - 1 + 2 * size) % size;
          source     = (source - 2 + 2 * size) % size) {
         int  intMes[] = {source, rank};
-        auto uint8Mes = reinterpret_cast<uint8_t*>(intMes);
+        auto byte8Mes = reinterpret_cast<std::byte*>(intMes);
         receiveMessagesExpected.emplace_back(
-            std::vector<uint8_t>(uint8Mes, uint8Mes + 2 * sizeof(int)),
+            std::vector<std::byte>(byte8Mes, byte8Mes + 2 * sizeof(int)),
             static_cast<ReStoreMPI::current_rank_t>(source));
     }
 
@@ -83,7 +84,7 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
     std::vector<ReStoreMPI::SendMessage> sendMessages;
     for (int target = (rank + 2) % size; target != rank && target != (rank + 1) % size; target = (target + 2) % size) {
         sendMessages.emplace_back(
-            reinterpret_cast<const uint8_t*>(new const int[2]{rank, target}), 2 * sizeof(int),
+            reinterpret_cast<const std::byte*>(new const int[2]{rank, target}), 2 * sizeof(int),
             static_cast<ReStoreMPI::current_rank_t>(target));
     }
     auto receiveMessages = context.SparseAllToAll(sendMessages);
@@ -92,8 +93,8 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
     for (int source = (rank - 2 + 2 * size) % size; source != rank && source != (rank - 1 + 2 * size) % size;
          source     = (source - 2 + 2 * size) % size) {
         int  intMes[] = {source, rank};
-        auto uint8Mes = reinterpret_cast<uint8_t*>(intMes);
-        receiveMessagesExpected.emplace_back(std::vector<uint8_t>(uint8Mes, uint8Mes + 2 * sizeof(int)), source);
+        auto byte8Mes = reinterpret_cast<std::byte*>(intMes);
+        receiveMessagesExpected.emplace_back(std::vector<std::byte>(byte8Mes, byte8Mes + 2 * sizeof(int)), source);
     }
 
     std::sort(
@@ -234,10 +235,10 @@ TEST(MPIContext, MessageEquality) {
     using ReStoreMPI::SendMessage;
 
     {
-        uint8_t payload1a[4] = {0, 0, 0, 0};
-        uint8_t payload1b[4] = {0, 0, 0, 0};
-        uint8_t payload2[4]  = {0, 0, 0};
-        uint8_t payload3[4]  = {0, 0, 0, 1};
+        std::byte payload1a[4] = {0_byte, 0_byte, 0_byte, 0_byte};
+        std::byte payload1b[4] = {0_byte, 0_byte, 0_byte, 0_byte};
+        std::byte payload2[4]  = {0_byte, 0_byte, 0_byte};
+        std::byte payload3[4]  = {0_byte, 0_byte, 0_byte, 1_byte};
 
         ASSERT_EQ(SendMessage(payload1a, 4, 0), SendMessage(payload1a, 4, 0));
         ASSERT_EQ(SendMessage(payload1b, 4, 0), SendMessage(payload1a, 4, 0));
@@ -252,21 +253,21 @@ TEST(MPIContext, MessageEquality) {
     }
 
     {
-        std::vector<uint8_t> payload1a = {0, 0, 0, 0};
-        std::vector<uint8_t> payload1b = {0, 0, 0, 0};
-        std::vector<uint8_t> payload2  = {0, 0, 0};
-        std::vector<uint8_t> payload3  = {0, 0, 0, 1};
+        std::vector<std::byte> payload1a = {0_byte, 0_byte, 0_byte, 0_byte};
+        std::vector<std::byte> payload1b = {0_byte, 0_byte, 0_byte, 0_byte};
+        std::vector<std::byte> payload2  = {0_byte, 0_byte, 0_byte};
+        std::vector<std::byte> payload3  = {0_byte, 0_byte, 0_byte, 1_byte};
 
-        ASSERT_EQ(RecvMessage(std::vector<uint8_t>(payload1a), 0), RecvMessage(std::vector<uint8_t>(payload1a), 0));
-        ASSERT_EQ(RecvMessage(std::vector<uint8_t>(payload1b), 0), RecvMessage(std::vector<uint8_t>(payload1a), 0));
-        ASSERT_EQ(RecvMessage(std::vector<uint8_t>(payload1b), 0), RecvMessage(std::vector<uint8_t>(payload1b), 0));
+        ASSERT_EQ(RecvMessage(std::vector<std::byte>(payload1a), 0), RecvMessage(std::vector<std::byte>(payload1a), 0));
+        ASSERT_EQ(RecvMessage(std::vector<std::byte>(payload1b), 0), RecvMessage(std::vector<std::byte>(payload1a), 0));
+        ASSERT_EQ(RecvMessage(std::vector<std::byte>(payload1b), 0), RecvMessage(std::vector<std::byte>(payload1b), 0));
 
-        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload2), 0), RecvMessage(std::vector<uint8_t>(payload1a), 0));
-        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload1a), 1), RecvMessage(std::vector<uint8_t>(payload1a), 0));
-        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload1a), 1), RecvMessage(std::vector<uint8_t>(payload1a), 2));
-        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload3), 1), RecvMessage(std::vector<uint8_t>(payload1a), 1));
-        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload2), 1), RecvMessage(std::vector<uint8_t>(payload1a), 1));
-        ASSERT_NE(RecvMessage(std::vector<uint8_t>(payload3), 1), RecvMessage(std::vector<uint8_t>(payload2), 1));
+        ASSERT_NE(RecvMessage(std::vector<std::byte>(payload2), 0), RecvMessage(std::vector<std::byte>(payload1a), 0));
+        ASSERT_NE(RecvMessage(std::vector<std::byte>(payload1a), 1), RecvMessage(std::vector<std::byte>(payload1a), 0));
+        ASSERT_NE(RecvMessage(std::vector<std::byte>(payload1a), 1), RecvMessage(std::vector<std::byte>(payload1a), 2));
+        ASSERT_NE(RecvMessage(std::vector<std::byte>(payload3), 1), RecvMessage(std::vector<std::byte>(payload1a), 1));
+        ASSERT_NE(RecvMessage(std::vector<std::byte>(payload2), 1), RecvMessage(std::vector<std::byte>(payload1a), 1));
+        ASSERT_NE(RecvMessage(std::vector<std::byte>(payload3), 1), RecvMessage(std::vector<std::byte>(payload2), 1));
     }
 }
 

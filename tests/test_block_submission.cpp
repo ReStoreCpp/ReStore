@@ -12,7 +12,7 @@ TEST(BlockSubmissionTest, exchangeData) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using ReStoreMPI::RecvMessage;
     using ReStoreMPI::SendMessage;
-    using SendBuffers = ReStore::BlockSubmissionCommunication<uint8_t>::SendBuffers;
+    using SendBuffers = ReStore::BlockSubmissionCommunication<std::byte>::SendBuffers;
 
     std::vector<RecvMessage> dummyReceive;
     SendBuffers              emptySendBuffers;
@@ -35,8 +35,8 @@ TEST(BlockSubmissionTest, exchangeData) {
         ReStore::BlockSubmissionCommunication<uint8_t, MPIContextMock> comm(mpiContext, blockDistribution);
 
         SendBuffers sendBuffers;
-        sendBuffers[0] = {0, 1, 2, 3};
-        sendBuffers[1] = {4, 5, 6, 7};
+        sendBuffers[0] = {0_byte, 1_byte, 2_byte, 3_byte};
+        sendBuffers[1] = {4_byte, 5_byte, 6_byte, 7_byte};
 
         std::vector<SendMessage> expectedSendMessages{{sendBuffers[0].data(), 4, 0}, {sendBuffers[1].data(), 4, 1}};
 
@@ -59,25 +59,30 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
 
 
     RecvMessage message1(
-        std::vector<uint8_t>{
+        std::vector<std::byte>{
             // We have to write everything in big endian notation
-            1, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x02, // id: 1, payload 0x0202
-            3, 0, 0, 0, 0, 0, 0, 0, 0x12, 0x23  // id: 3, payload 0x3412
+            1_byte, 0_byte, 0_byte, 0_byte,    0_byte,
+            0_byte, 0_byte, 0_byte, 0x02_byte, 0x02_byte, // id: 1, payload 0x0202
+            3_byte, 0_byte, 0_byte, 0_byte,    0_byte,
+            0_byte, 0_byte, 0_byte, 0x12_byte, 0x23_byte // id: 3, payload 0x3412
         },
         0);
 
     RecvMessage message2(
-        std::vector<uint8_t>{
-            0, 0, 0, 0, 0, 0, 0, 0, 0x37, 0x13, // id: 0, payload 0x1337
-            8, 0, 0, 0, 0, 0, 0, 0, 0x42, 0x00, // id: 8, payload 0x0042
-            6, 0, 0, 0, 0, 0, 0, 0, 0x11, 0x11, // id: 6, payload 0x1111
+        std::vector<std::byte>{
+            0_byte, 0_byte, 0_byte, 0_byte,    0_byte,
+            0_byte, 0_byte, 0_byte, 0x37_byte, 0x13_byte, // id: 0, payload 0x1337
+            8_byte, 0_byte, 0_byte, 0_byte,    0_byte,
+            0_byte, 0_byte, 0_byte, 0x42_byte, 0x00_byte, // id: 8, payload 0x0042
+            6_byte, 0_byte, 0_byte, 0_byte,    0_byte,
+            0_byte, 0_byte, 0_byte, 0x11_byte, 0x11_byte, // id: 6, payload 0x1111
         },
         1);
 
     auto called = 0;
     comm.parseIncomingMessage(
         message1,
-        [&called](ReStore::block_id_t blockId, const uint8_t* data, size_t lengthInBytes, current_rank_t srcRank) {
+        [&called](ReStore::block_id_t blockId, const std::byte* data, size_t lengthInBytes, current_rank_t srcRank) {
             switch (called) {
                 case 0:
                     ASSERT_EQ(blockId, 1);
@@ -102,7 +107,7 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
     called = 0;
     comm.parseIncomingMessage(
         message2,
-        [&called](ReStore::block_id_t blockId, const uint8_t* data, size_t lengthInBytes, current_rank_t srcRank) {
+        [&called](ReStore::block_id_t blockId, const std::byte* data, size_t lengthInBytes, current_rank_t srcRank) {
             switch (called) {
                 case 0:
                     ASSERT_EQ(blockId, 0);
@@ -134,7 +139,7 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
     std::vector<RecvMessage> messages{message1, message2};
     comm.parseAllIncomingMessages(
         messages,
-        [&called](ReStore::block_id_t blockId, const uint8_t* data, size_t lengthInBytes, current_rank_t srcRank) {
+        [&called](ReStore::block_id_t blockId, const std::byte* data, size_t lengthInBytes, current_rank_t srcRank) {
             switch (called) {
                 case 0:
                     ASSERT_EQ(blockId, 1);
@@ -222,10 +227,10 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
         });
 
     // All these three blocks belong to range 0 and are therefore stored on ranks 0, 3 and 6
-    std::vector<uint8_t> expectedSendBuffer = {
-        0, 0, 0, 0, 0, 0, 0, 0, 0,  false, // earth
-        1, 0, 0, 0, 0, 0, 0, 0, 10, true,  // narnia
-        2, 0, 0, 0, 0, 0, 0, 0, 0,  true   // middle earth
+    std::vector<std::byte> expectedSendBuffer = {
+        0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte,  0_byte, // earth
+        1_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 10_byte, 1_byte, // narnia
+        2_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte,  1_byte  // middle earth
     };
     ASSERT_EQ(sendBuffers.size(), 3);
     ASSERT_EQ(sendBuffers[0], expectedSendBuffer);

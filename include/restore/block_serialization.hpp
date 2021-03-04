@@ -16,8 +16,8 @@ namespace ReStore {
 class SerializedBlockStoreStream {
     public:
     SerializedBlockStoreStream(
-        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>& buffers,
-        std::vector<ReStoreMPI::current_rank_t>&                              ranks)
+        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>& buffers,
+        std::vector<ReStoreMPI::current_rank_t>&                                ranks)
         : _buffers(buffers),
           _ranks(ranks),
           _bytesWritten(0) {
@@ -30,10 +30,10 @@ class SerializedBlockStoreStream {
     SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
 
-        auto src = reinterpret_cast<const uint8_t*>(&value);
+        auto src = reinterpret_cast<const std::byte*>(&value);
         for (auto&& rank: _ranks) {
             if (_buffers.find(rank) == _buffers.end()) {
-                _buffers[rank] = std::vector<uint8_t>();
+                _buffers[rank] = std::vector<std::byte>();
             }
             assert(rank >= 0);
             assert(_buffers.find(rank) != _buffers.end());
@@ -49,9 +49,9 @@ class SerializedBlockStoreStream {
     }
 
     private:
-    std::unordered_map<ReStoreMPI::current_rank_t, std::vector<uint8_t>>& _buffers; // One buffer per rank
-    std::vector<ReStoreMPI::current_rank_t>&                              _ranks;   // Which ranks to send to
-    size_t                                                                _bytesWritten;
+    std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>& _buffers; // One buffer per rank
+    std::vector<ReStoreMPI::current_rank_t>&                                _ranks;   // Which ranks to send to
+    size_t                                                                  _bytesWritten;
 };
 
 template <typename MPIContext = ReStoreMPI::MPIContext>
@@ -90,7 +90,7 @@ class SerializedBlockStorage {
     // Writes the data associated with that block to the storage. The range this block belongs to has to be
     // previously registered using registerRanges. blockId and data: The id and data of the block to be written. In
     // this overload we know the length of the data because it is equal to the constant offset.
-    void writeBlock(block_id_t blockId, const uint8_t* data) {
+    void writeBlock(block_id_t blockId, const std::byte* data) {
         // TODO implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
         // if (_offsetMode == OffsetMode::constant && blockId != numBlocks()) {
@@ -113,8 +113,8 @@ class SerializedBlockStorage {
     template <class HandleBlockFunction>
     void forAllBlocks(const std::pair<block_id_t, size_t> blockRange, HandleBlockFunction handleBlock) {
         static_assert(
-            std::is_invocable<HandleBlockFunction, const uint8_t*, size_t>(),
-            "HandleBlockFunction must be invocable as (const uint8_t*, size_t)");
+            std::is_invocable<HandleBlockFunction, const std::byte*, size_t>(),
+            "HandleBlockFunction must be invocable as (const std::byte*, size_t)");
         block_id_t currentBlockId = blockRange.first;
         while (currentBlockId < blockRange.first + blockRange.second) {
             const BlockRange blockRangeInternal = _blockDistribution->rangeOfBlock(currentBlockId);
@@ -153,12 +153,12 @@ class SerializedBlockStorage {
     }
 
     private:
-    const OffsetMode                   _offsetMode;
-    const size_t                       _constOffset;  // only in ConstOffset mode
-    std::unordered_map<size_t, size_t> _rangeIndices; // Maps a rangeId to its indices in following vectors
-    std::vector<BlockRange>            _ranges;       // For all outer vectors, the indices correspond
-    std::vector<std::vector<size_t>>   _offsets;      // A sentinel points to last elem + 1; only in LUT mode
-    std::vector<std::vector<uint8_t>>  _data;
+    const OffsetMode                    _offsetMode;
+    const size_t                        _constOffset;  // only in ConstOffset mode
+    std::unordered_map<size_t, size_t>  _rangeIndices; // Maps a rangeId to its indices in following vectors
+    std::vector<BlockRange>             _ranges;       // For all outer vectors, the indices correspond
+    std::vector<std::vector<size_t>>    _offsets;      // A sentinel points to last elem + 1; only in LUT mode
+    std::vector<std::vector<std::byte>> _data;
     const std::shared_ptr<const BlockDistribution<MPIContext>> _blockDistribution;
 
     // Return the index this range has in the outer vectors
@@ -195,7 +195,7 @@ class SerializedBlockStorage {
 
         size_t numRanges = this->numRanges();
         _ranges.push_back(std::move(range));
-        _data.push_back(std::vector<uint8_t>());
+        _data.push_back(std::vector<std::byte>());
         _rangeIndices[range.id()] = numRanges;
         // TODO implement LUT mode
 

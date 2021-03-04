@@ -20,6 +20,7 @@ template <class MPIContext>
 inline std::vector<block_range_request_t> getServingRank(
     const BlockDistribution<>::BlockRange& blockRange, const block_range_external_t blockRangeExternal,
     const BlockDistribution<MPIContext>* _blockDistribution) {
+    // TODO: Special case treatment for blocks that we have locally?
     assert(blockRange.contains(blockRangeExternal.first));
     assert(blockRange.contains(blockRangeExternal.first + blockRangeExternal.second));
     auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);

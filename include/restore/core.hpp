@@ -151,7 +151,8 @@ class ReStore {
             comm.parseAllIncomingMessages(
                 receivedMessages,
                 [this](
-                    block_id_t blockId, const uint8_t* data, size_t lengthInBytes, ReStoreMPI::current_rank_t srcRank) {
+                    block_id_t blockId, const std::byte* data, size_t lengthInBytes,
+                    ReStoreMPI::current_rank_t srcRank) {
                     UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
                     UNUSED(srcRank);       // We simply do not need this right now
                     this->_serializedBlocks->writeBlock(blockId, data);

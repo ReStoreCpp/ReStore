@@ -1,6 +1,7 @@
 #ifndef RESTORE_HELPERS_H
 #define RESTORE_HELPERS_H
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
@@ -19,8 +20,8 @@ void print_stacktrace() {
 #endif
 
 // Define some usefull user-defined literals
-inline constexpr uint8_t operator""_byte(unsigned long long arg) noexcept {
-    return static_cast<uint8_t>(arg);
+inline constexpr std::byte operator""_byte(unsigned long long arg) noexcept {
+    return static_cast<std::byte>(arg);
 }
 
 inline constexpr uint8_t operator""_uint8(unsigned long long arg) noexcept {
@@ -60,7 +61,7 @@ constexpr bool in_range(From value) noexcept {
         return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
     } else if constexpr (std::is_signed_v<From> && std::is_signed_v<To>) {
         return static_cast<intmax_t>(value) >= static_cast<intmax_t>(std::numeric_limits<To>::min())
-                && static_cast<intmax_t>(value) <= static_cast<intmax_t>(std::numeric_limits<To>::max());
+               && static_cast<intmax_t>(value) <= static_cast<intmax_t>(std::numeric_limits<To>::max());
     } else if constexpr (std::is_signed_v<From> && std::is_unsigned_v<To>) {
         if (value < 0) {
             return false;
