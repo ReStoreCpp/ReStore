@@ -352,3 +352,7 @@ clangbuild
 # VSCode files
 .vscode/launch.json
 .vscode/tasks.json
+
+# R files
+.Rdata
+.Rhistory
