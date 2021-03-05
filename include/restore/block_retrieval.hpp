@@ -1,6 +1,7 @@
 #ifndef RESTORE_BLOCK_RETRIEVAL_HPP
 #define RESTORE_BLOCK_RETRIEVAL_HPP
 
+#include <algorithm>
 #include <cstddef>
 #include <mpi.h>
 #include <vector>
@@ -95,9 +96,22 @@ inline void handleReceivedBlocks(
     const std::vector<ReStoreMPI::RecvMessage>& recvMessages, const std::vector<block_range_request_t>& recvBlockRanges,
     const OffsetMode _offsetMode, const size_t _constOffset, HandleSerializedBlockFunction handleSerializedBlock) {
     static_assert(
-        std::is_invocable<HandleSerializedBlockFunction, const void*, size_t, block_id_t>(),
-        "HandleSerializedBlockFunction must be invocable as (const uint8_t*, size_t, "
+        std::is_invocable<HandleSerializedBlockFunction, const std::byte*, size_t, block_id_t>(),
+        "HandleSerializedBlockFunction must be invocable as (const std::byte*, size_t, "
         "block_id_t)");
+    auto sortByRankAndBegin = [](const block_range_request_t& lhs, const block_range_request_t& rhs) {
+        bool ranksLess   = lhs.second < rhs.second;
+        bool ranksEqual  = lhs.second == rhs.second;
+        bool blockIdLess = lhs.first.first < rhs.first.first;
+        return ranksLess || (ranksEqual && blockIdLess);
+    };
+    assert(std::is_sorted(recvBlockRanges.begin(), recvBlockRanges.end(), sortByRankAndBegin));
+    assert(std::is_sorted(
+        recvMessages.begin(), recvMessages.end(),
+        [](const ReStoreMPI::RecvMessage& lhs, const ReStoreMPI::RecvMessage& rhs) {
+            return lhs.srcRank < rhs.srcRank;
+        }));
+
     size_t currentIndexRecvBlockRanges = 0;
     for (const ReStoreMPI::RecvMessage& recvMessage: recvMessages) {
         assert(currentIndexRecvBlockRanges < recvBlockRanges.size());
@@ -112,7 +126,7 @@ inline void handleReceivedBlocks(
                                + recvBlockRanges[currentIndexRecvBlockRanges].first.second;
                  ++blockId) {
                 assert(currentIndexRecvMessage < recvMessage.data.size());
-                assert(currentIndexRecvMessage + _constOffset < recvMessage.data.size());
+                assert(currentIndexRecvMessage + _constOffset <= recvMessage.data.size());
                 handleSerializedBlock(&(recvMessage.data[currentIndexRecvMessage]), _constOffset, blockId);
                 currentIndexRecvMessage += _constOffset;
             }
@@ -126,6 +140,14 @@ template <class MPIContext = ReStoreMPI::MPIContext>
 inline std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(
     const std::vector<block_range_request_t>& sendBlockRanges, const OffsetMode _offsetMode,
     const MPIContext& _mpiContext, const SerializedBlockStorage<MPIContext>* _serializedBlocks) {
+    auto sortByRankAndBegin = [](const block_range_request_t& lhs, const block_range_request_t& rhs) {
+        bool ranksLess   = lhs.second < rhs.second;
+        bool ranksEqual  = lhs.second == rhs.second;
+        bool blockIdLess = lhs.first.first < rhs.first.first;
+        return ranksLess || (ranksEqual && blockIdLess);
+    };
+    assert(std::is_sorted(sendBlockRanges.begin(), sendBlockRanges.end(), sortByRankAndBegin));
+
     std::vector<std::vector<uint8_t>>    sendData;
     std::vector<ReStoreMPI::SendMessage> sendMessages;
     int                                  currentRank = MPI_UNDEFINED;
