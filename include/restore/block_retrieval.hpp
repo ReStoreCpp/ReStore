@@ -65,7 +65,7 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
             size_t                                   size = end - blockId;
             const std::vector<block_range_request_t> servingRanks =
                 getServingRank(blockRangeInternal, block_range_external_t(blockId, size), _blockDistribution);
-            for (const block_range_request_t request: servingRanks) {
+            for (const block_range_request_t& request: servingRanks) {
                 ReStoreMPI::original_rank_t servingRank = request.second;
                 if (servingRank == _mpiContext.getMyOriginalRank()) {
                     sendBlockRanges.emplace_back(request.first, blockRange.second);
