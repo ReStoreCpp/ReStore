@@ -47,7 +47,7 @@ TEST(BlockRetrievalTest, getServingRanks) {
     EXPECT_EQ(rangeStart + rangeSize, nextBlockId);
 }
 
-TEST(BlockRetrievalTest, getServingRanksWithDadRanks) {
+TEST(BlockRetrievalTest, getServingRanksWithDeadRanks) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using ReStore::OffsetMode;
     using ReStoreMPI::current_rank_t;
