@@ -43,16 +43,48 @@ struct RankDistributionConfig {
     }
 };
 
+enum class SimulationMode { RANK, NODE, RACK, INVALID };
+
+SimulationMode parse_mode_string(const string& modeStr) {
+    if (modeStr == "rank") {
+        return SimulationMode::RANK;
+    } else if (modeStr == "node") {
+        return SimulationMode::NODE;
+    } else if (modeStr == "rack") {
+        return SimulationMode::RACK;
+    } else {
+        return SimulationMode::INVALID;
+    }
+}
+
+string to_string(const SimulationMode& simulationMode) {
+    switch (simulationMode) {
+        case SimulationMode::RANK:
+            return "rank";
+        case SimulationMode::NODE:
+            return "node";
+        case SimulationMode::RACK:
+            return "rack";
+        case SimulationMode::INVALID:
+        default:
+            throw std::runtime_error("Invalid SimulationMode");
+    }
+}
+
 class ResultsPrinter {
     public:
-    ResultsPrinter(bool printHeader) noexcept {
+    ResultsPrinter(bool printHeader, const SimulationMode& simulationMode, string simulationId) noexcept
+        : _simulationId(simulationId),
+          _simulationMode(to_string(simulationMode)) {
         if (printHeader) {
-            cout << "seed,num_ranks,num_blocks,replication_level,failures_until_data_loss" << endl;
+            cout << "simulation_id,mode,seed,num_ranks,num_blocks,replication_level,failures_until_data_loss" << endl;
         }
     }
 
     void print_result(unsigned long seed, RankDistributionConfig config, size_t failuresUntilDataLoss) {
-        _printCSV(seed, config.numRanks, config.numBlocks, config.replicationLevel, failuresUntilDataLoss);
+        _printCSV(
+            _simulationId, _simulationMode, seed, config.numRanks, config.numBlocks, config.replicationLevel,
+            failuresUntilDataLoss);
     }
 
     private:
@@ -66,6 +98,9 @@ class ResultsPrinter {
             cout << endl;
         }
     }
+
+    const string _simulationId;
+    const string _simulationMode;
 };
 
 int main(int argc, char** argv) {
@@ -74,15 +109,24 @@ int main(int argc, char** argv) {
         "simulate-failures-until-data-loss",
         "Simulates rank failures and uses the data distribution to check when irrecoverable data loss occurred.");
 
-    cliParser.add_options()                                                                           ///
+    cliParser.add_options()                                                            ///
+        ("mode", "Simulation mode. One of <rank|node|rack>", cxxopts::value<string>()) ///
+        ("simulation-id",
+         "Simulation id. Will be echoed as is; can be used to identify the results of this experiment.",
+         cxxopts::value<string>()->default_value("rank"))                                             ///
         ("s,seed", "Random seed.", cxxopts::value<unsigned long>()->default_value("0"))               ///
         ("n,no-header", "Do not print the csv header.")                                               ///
         ("r,repetitions", "Number of replicas to run", cxxopts::value<size_t>()->default_value("10")) ///
         ("h,help", "Print help message.")                                                             ///
+        ("d,ranks-per-node", "The number of ranks per node or ranks per rack to fail at once.",
+         cxxopts::value<original_rank_t>()) ///
         ("c,config",
          "A configuration to simulate. Multiple configurations can be given.\n Format: <numRanks numBlocks "
          "replicationLevel>, e.g.: \"10 1000 3\"",
          cxxopts::value<vector<RankDistributionConfig>>());
+
+    cliParser.parse_positional({"mode", "simulation-id"});
+    cliParser.positional_help("<mode> <simulation-id>");
 
     cxxopts::ParseResult options;
     try {
@@ -101,18 +145,49 @@ int main(int argc, char** argv) {
     if (!options.count("config")) {
         cout << "Please provide at least one configuration to simulate with --config" << endl << endl;
         cout << cliParser.help() << endl;
+        exit(1);
+    }
+
+    if (!options.count("mode")) {
+        cout << "Please provide a simulation mode." << endl;
+        cout << cliParser.help() << endl;
+        exit(1);
+    }
+    const auto SIMULATION_MODE = parse_mode_string(options["mode"].as<string>());
+    if (SIMULATION_MODE == SimulationMode::INVALID) {
+        cout << "The simulation mode must be to simulate failures either <rank|node|rack> wise." << endl;
+        cout << cliParser.help() << endl;
+        exit(1);
+    }
+
+    original_rank_t FAIL_AT_ONCE = 1;
+    if ((SIMULATION_MODE == SimulationMode::NODE || SIMULATION_MODE == SimulationMode::RACK)) {
+        if (!options.count("ranks-per-node")) {
+            cout << "When in node or rack mode, you must specify the number of ranks per node/rack." << endl;
+            cout << cliParser.help() << endl;
+            exit(1);
+        } else {
+            FAIL_AT_ONCE = options["ranks-per-node"].as<original_rank_t>();
+        }
+    }
+
+    if (!options.count("simulation-id")) {
+        cout << "Please provie an id for this simulation." << endl;
+        cout << cliParser.help() << endl;
+        exit(1);
     }
 
     const auto RANDOM_SEED      = options["seed"].as<unsigned long>();
     const auto NUM_REPETITIONS  = options["repetitions"].as<size_t>();
     const auto PRINT_CSV_HEADER = !options.count("no-header");
     const auto configurations   = options["config"].as<vector<RankDistributionConfig>>();
+    const auto SIMULATION_ID    = options["simulation-id"].as<string>();
 
     // Set up the fake MPI Context
     auto mpiContext = MPIContextFake();
 
     // Set up the CSV output
-    ResultsPrinter resultsPrinter(PRINT_CSV_HEADER);
+    ResultsPrinter resultsPrinter(PRINT_CSV_HEADER, SIMULATION_MODE, SIMULATION_ID);
 
     // Loop over all configurations, simulating multiple replicas each
     for (auto config: configurations) {
@@ -132,17 +207,30 @@ int main(int argc, char** argv) {
             }
 
             // Precompute the random order in which the ranks shall fail.
-            auto orderOfRankFailures = vector<original_rank_t>();
-            for (auto i: range(static_cast<original_rank_t>(config.numRanks))) {
-                orderOfRankFailures.push_back(i);
+            assert(SIMULATION_MODE != SimulationMode::RANK || FAIL_AT_ONCE == 1);
+            assert(SIMULATION_MODE != SimulationMode::NODE || FAIL_AT_ONCE != 1);
+            assert(SIMULATION_MODE != SimulationMode::RACK || FAIL_AT_ONCE != 1);
+            auto orderOfFailures = vector<original_rank_t>();
+            for (auto i: range(static_cast<original_rank_t>(
+                     config.numRanks / throwing_cast<decltype(config.numRanks)>(FAIL_AT_ONCE)))) {
+                orderOfFailures.push_back(i);
             }
+
             shuffle(
-                orderOfRankFailures.begin(), orderOfRankFailures.end(),
-                std::default_random_engine(RANDOM_SEED + repetition));
+                orderOfFailures.begin(), orderOfFailures.end(), std::default_random_engine(RANDOM_SEED + repetition));
 
             // Simulate the failures in the precomputed order until a irrecoverable data loss occurs.
-            for (auto failingRank: orderOfRankFailures) {
-                mpiContext.killRank(failingRank);
+            for (auto failing: orderOfFailures) {
+                if (SIMULATION_MODE == SimulationMode::RANK) {
+                    mpiContext.killRank(failing);
+                } else {
+                    assert(SIMULATION_MODE == SimulationMode::NODE || SIMULATION_MODE == SimulationMode::RACK);
+                    auto firstRankToFail = failing * FAIL_AT_ONCE;
+                    auto lastRankToFail  = firstRankToFail + FAIL_AT_ONCE - 1;
+                    for (auto failingRank: range(firstRankToFail, lastRankToFail + 1)) {
+                        mpiContext.killRank(failingRank);
+                    }
+                }
                 if (checkForDataLoss(blockDistribution)) {
                     resultsPrinter.print_result(RANDOM_SEED + repetition, config, mpiContext.numFailed());
                     break;
