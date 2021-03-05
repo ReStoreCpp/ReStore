@@ -6,8 +6,6 @@
 #include <vector>
 
 #include <cxxopts.hpp>
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include "../tests/mocks.hpp"
 #include "restore/helpers.hpp"
