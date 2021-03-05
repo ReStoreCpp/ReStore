@@ -17,6 +17,8 @@ class MPIContextMock {
     public:
     MOCK_METHOD(original_rank_t, getOriginalRank, (const current_rank_t), (const));
     MOCK_METHOD(current_rank_t, getCurrentRank, (const original_rank_t), (const));
+    MOCK_METHOD(original_rank_t, getMyOriginalRank, (), (const));
+    MOCK_METHOD(current_rank_t, getMyCurrentRank, (), (const));
     MOCK_METHOD(bool, isAlive, (const original_rank_t), (const));
     MOCK_METHOD(std::vector<original_rank_t>, getOnlyAlive, (const std::vector<original_rank_t>&), (const));
     MOCK_METHOD(ReStoreMPI::original_rank_t, numFailuresSinceReset, (), (const));
@@ -64,7 +66,7 @@ class MPIContextFake {
     void resurrectRanks() {
         _deadRanks.clear();
     }
-    
+
     size_t numFailed() const {
         return _deadRanks.size();
     }

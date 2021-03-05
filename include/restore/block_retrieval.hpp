@@ -17,12 +17,12 @@ using block_range_request_t  = std::pair<block_range_external_t, int>;
 
 // Returns blockRanges and originalRanks
 template <class MPIContext>
-inline std::vector<block_range_request_t> getServingRank(
+inline std::vector<block_range_request_t> getServingRanks(
     const typename BlockDistribution<MPIContext>::BlockRange& blockRange,
     const block_range_external_t blockRangeExternal, const BlockDistribution<MPIContext>* _blockDistribution) {
     // TODO: Special case treatment for blocks that we have locally?
     assert(blockRange.contains(blockRangeExternal.first));
-    assert(blockRange.contains(blockRangeExternal.first + blockRangeExternal.second));
+    assert(blockRange.contains(blockRangeExternal.first + blockRangeExternal.second - 1));
     auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
     if (ranksWithBlockRange.empty()) {
         throw UnrecoverableDataLossException();
@@ -31,7 +31,8 @@ inline std::vector<block_range_request_t> getServingRank(
     const size_t numRanksWithOneBlockMore = blockRangeExternal.second % ranksWithBlockRange.size();
     std::vector<block_range_request_t> result;
     size_t                             currentBlock = blockRangeExternal.first;
-    for (size_t i = 0; i < ranksWithBlockRange.size(); ++i) {
+    size_t numSendingRanks                          = std::min(ranksWithBlockRange.size(), blockRangeExternal.second);
+    for (size_t i = 0; i < numSendingRanks; ++i) {
         assert(currentBlock < blockRangeExternal.first + blockRangeExternal.second);
         assert(
             currentBlock + numBlocksPerRank + (i < numRanksWithOneBlockMore)
@@ -39,6 +40,7 @@ inline std::vector<block_range_request_t> getServingRank(
         result.emplace_back(
             block_range_external_t(currentBlock, numBlocksPerRank + (i < numRanksWithOneBlockMore)),
             ranksWithBlockRange[i]);
+        assert(result.back().first.second > 0);
         // This might be possible without this additional variable but I didn't bother to figure it out.
         currentBlock += numBlocksPerRank + (i < numRanksWithOneBlockMore);
     }
@@ -59,12 +61,12 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
                        + _blockDistribution->rangeOfBlock(blockId).length()) {
             const typename BlockDistribution<MPIContext>::BlockRange blockRangeInternal =
                 _blockDistribution->rangeOfBlock(blockId);
-            block_id_t end =
-                min(blockRangeInternal.start() + blockRangeInternal.length(),
-                    blockRange.first.first + blockRange.first.second);
+            block_id_t end = std::min(
+                blockRangeInternal.start() + blockRangeInternal.length(),
+                blockRange.first.first + blockRange.first.second);
             size_t                                   size = end - blockId;
             const std::vector<block_range_request_t> servingRanks =
-                getServingRank(blockRangeInternal, block_range_external_t(blockId, size), _blockDistribution);
+                getServingRanks(blockRangeInternal, block_range_external_t(blockId, size), _blockDistribution);
             for (const block_range_request_t& request: servingRanks) {
                 ReStoreMPI::original_rank_t servingRank = request.second;
                 if (servingRank == _mpiContext.getMyOriginalRank()) {
