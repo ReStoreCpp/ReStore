@@ -74,7 +74,7 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
                     sendBlockRanges.emplace_back(request.first, blockRange.second);
                 }
                 if (blockRange.second == _mpiContext.getMyCurrentRank()) {
-                    recvBlockRanges.emplace_back(request.first, _mpiContext.getCurrentRank(servingRank));
+                    recvBlockRanges.emplace_back(request.first, _mpiContext.getCurrentRank(servingRank).value());
                 }
             }
         }
@@ -148,7 +148,7 @@ inline std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(
     };
     assert(std::is_sorted(sendBlockRanges.begin(), sendBlockRanges.end(), sortByRankAndBegin));
 
-    std::vector<std::vector<uint8_t>>    sendData;
+    std::vector<std::vector<std::byte>>  sendData;
     std::vector<ReStoreMPI::SendMessage> sendMessages;
     int                                  currentRank = MPI_UNDEFINED;
     for (const block_range_request_t& sendBlockRange: sendBlockRanges) {
@@ -163,7 +163,7 @@ inline std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(
         }
         // TODO Implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
-        _serializedBlocks->forAllBlocks(sendBlockRange.first, [&sendData](uint8_t* ptr, size_t size) {
+        _serializedBlocks->forAllBlocks(sendBlockRange.first, [&sendData](const std::byte* ptr, size_t size) {
             sendData.back().insert(sendData.back().end(), ptr, ptr + size);
         });
     }

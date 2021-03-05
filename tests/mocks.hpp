@@ -1,6 +1,7 @@
 #ifndef RESTORE_TEST_MOCKS_H
 #define RESTORE_TEST_MOCKS_H
 
+#include <optional>
 #include <unordered_set>
 
 #include <gmock/gmock.h>
@@ -16,7 +17,7 @@ class MPIContextMock {
 
     public:
     MOCK_METHOD(original_rank_t, getOriginalRank, (const current_rank_t), (const));
-    MOCK_METHOD(current_rank_t, getCurrentRank, (const original_rank_t), (const));
+    MOCK_METHOD(std::optional<current_rank_t>, getCurrentRank, (const original_rank_t), (const));
     MOCK_METHOD(original_rank_t, getMyOriginalRank, (), (const));
     MOCK_METHOD(current_rank_t, getMyCurrentRank, (), (const));
     MOCK_METHOD(bool, isAlive, (const original_rank_t), (const));

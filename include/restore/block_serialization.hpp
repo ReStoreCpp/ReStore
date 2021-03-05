@@ -111,7 +111,7 @@ class SerializedBlockStorage {
     }
 
     template <class HandleBlockFunction>
-    void forAllBlocks(const std::pair<block_id_t, size_t> blockRange, HandleBlockFunction handleBlock) {
+    void forAllBlocks(const std::pair<block_id_t, size_t> blockRange, HandleBlockFunction handleBlock) const {
         static_assert(
             std::is_invocable<HandleBlockFunction, const std::byte*, size_t>(),
             "HandleBlockFunction must be invocable as (const std::byte*, size_t)");
@@ -162,12 +162,13 @@ class SerializedBlockStorage {
     const std::shared_ptr<const BlockDistribution<MPIContext>> _blockDistribution;
 
     // Return the index this range has in the outer vectors
-    size_t indexOf(BlockRange blockRange) {
+    size_t indexOf(BlockRange blockRange) const {
         // If we want to get rid of this map, we could sort the _ranges vector and use a binary_search instead
-        if (_rangeIndices.find(blockRange.id()) == _rangeIndices.end()) {
+        auto indexIt = _rangeIndices.find(blockRange.id());
+        if (indexIt == _rangeIndices.end()) {
             throw std::invalid_argument("BlockRange not stored");
         }
-        size_t index = _rangeIndices[blockRange.id()];
+        size_t index = indexIt->second;
         assert(index < _data.size());
         assert(_ranges.size() == _data.size());
         return index;
