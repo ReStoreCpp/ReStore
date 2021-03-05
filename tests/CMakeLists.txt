@@ -26,7 +26,7 @@ macro(restore_add_test TESTNAME LIBRARIES)
         PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_DIR}"
     )
     set_target_properties(${TESTNAME} PROPERTIES FOLDER tests)
-    target_compile_options(${TESTNAME} PRIVATE -g -O0 -Wall -Wextra -Wcast-align -Wconversion -Wnoexcept -Wnon-virtual-dtor -Wnull-dereference -Woverloaded-virtual -Wpedantic -Wsuggest-attribute=const -Wsuggest-attribute=noreturn -Wshadow -Wsign-conversion -Wsuggest-override -Wundef -Wunreachable-code -Wunused)
+    target_compile_options(${TESTNAME} PRIVATE -g -O0 ${WARNING_FLAGS})
 endmacro()
 
 function(add_mpi_test name display_name no_mpi_proc)
@@ -36,14 +36,14 @@ function(add_mpi_test name display_name no_mpi_proc)
   target_link_libraries(${name} gtest gmock ${MPI_LIBRARIES} ${LIBRARIES})
   set(test_parameters -np ${no_mpi_proc} "./${name}")
   add_test(NAME ${display_name} COMMAND mpirun ${test_parameters})
-  target_compile_options(${name} PRIVATE -g -Og -Wall -Wextra -Wcast-align -Wconversion -Wnoexcept -Wnon-virtual-dtor -Wnull-dereference -Woverloaded-virtual -Wpedantic -Wsuggest-attribute=const -Wsuggest-attribute=noreturn -Wshadow -Wsign-conversion -Wsuggest-override -Wundef -Wunreachable-code -Wunused)
+  target_compile_options(${name} PRIVATE -g -Og ${WARNING_FLAGS})
   set_tests_properties(${display_name} PROPERTIES
     FAIL_REGULAR_EXPRESSION " FAILED "
   )
 endfunction(add_mpi_test)
 
 # Register our tests
-restore_add_test(test_restore "ReStore::ReStore;cppitertools" test_restore.cpp)
+restore_add_test(test_restore "ReStore::ReStore;cppitertools;ReStore_warnings" test_restore.cpp)
 restore_add_test(test_block_distribution "ReStore::ReStore;cppitertools" test_block_distribution.cpp)
 restore_add_test(test_serialization "ReStore::ReStore;cppitertools" test_serialization.cpp)
 restore_add_test(test_block_submisssion "ReStore::ReStore;cppitertools" test_block_submission.cpp)

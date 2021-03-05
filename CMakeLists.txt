@@ -97,26 +97,32 @@ add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 # Not added as link target to avoid propagation of warning
 # flags.    Only to be used by internal targets that compile the library.
 add_library("${PROJECT_NAME}_warnings" INTERFACE)
-string(
-    CONCAT WARNING_FLAGS
-    "-Wall;"
-    "-Wextra;"
-    "-Wcast-align;"
-    "-Wconversion;"
-    "-Wnoexcept;"
-    "-Wnon-virtual-dtor;"
-    "-Wnull-dereference;"
-    "-Woverloaded-virtual;"
-    "-Wpedantic;"
-    "-Wsuggest-attribute=const;"
-    "-Wsuggest-attribute=noreturn;"
-    "-Wshadow;"
-    "-Wsign-conversion;"
-    "-Wsuggest-override;"
-    "-Wundef;"
-    "-Wunreachable-code;"
-    "-Wunused;"
+
+list(
+    APPEND WARNING_FLAGS
+    "-Wall"
+    "-Wextra"
+    "-Wcast-align"
+    "-Wconversion"
+    "-Wnon-virtual-dtor"
+    "-Wnull-dereference"
+    "-Woverloaded-virtual"
+    "-Wpedantic"
+    "-Wshadow"
+    "-Wsign-conversion"
+    "-Wundef"
+    "-Wunreachable-code"
+    "-Wunused"
 )
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    list(
+        APPEND WARNING_FLAGS
+        "-Wnoexcept"
+        "-Wsuggest-attribute=const"
+        "-Wsuggest-attribute=noreturn"
+        "-Wsuggest-override"
+    )
+endif()
 
 target_compile_options(
     "${PROJECT_NAME}_warnings" INTERFACE
