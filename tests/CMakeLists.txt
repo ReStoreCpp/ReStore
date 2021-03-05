@@ -35,7 +35,7 @@ function(add_mpi_test NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
   target_include_directories(${NAME} SYSTEM PRIVATE ../include/)
   target_link_libraries(${NAME} gtest gmock ${MPI_LIBRARIES} ${LIBRARIES})
   set(test_parameters -np ${NO_MPI_PROC} "./${NAME}")
-  add_test(NAME ${DISPLAY_NAME} COMMAND mpirun ${test_parameters})
+  add_test(NAME ${DISPLAY_NAME} COMMAND ${MPIEXEC_EXECUTABLE} ${test_parameters})
   target_compile_options(${NAME} PRIVATE -g -Og ${WARNING_FLAGS})
   set_tests_properties(${DISPLAY_NAME} PROPERTIES
     FAIL_REGULAR_EXPRESSION " FAILED "
