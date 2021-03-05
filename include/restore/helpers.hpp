@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <type_traits>
 
 // Suppress compiler warnings about unused variables
@@ -70,6 +71,23 @@ constexpr bool in_range(From value) noexcept {
         }
     } else if constexpr (std::is_unsigned_v<From> && std::is_signed_v<To>) {
         return static_cast<uintmax_t>(value) <= static_cast<uintmax_t>(std::numeric_limits<To>::max());
+    }
+}
+
+// The following two functions use the above in_range to check if a value can be safely casted and if so, static_cast
+// it. Depeneding on which version we choose, this check is either an assert or throws an exception.
+template<class To, class From>
+constexpr To asserting_cast(From value) noexcept {
+    assert(in_range<To>(value));
+    return static_cast<To>(value);
+}
+
+template<class To, class From>
+constexpr To throwing_cast(From value) {
+    if (!in_range<To>(value)) {
+        throw std::range_error("string(value) is not not representable the target type");
+    } else {
+        return static_cast<To>(value);
     }
 }
 
