@@ -228,4 +228,5 @@ TEST(BlockRetrievalTest, handleReceivedBlocks) {
             EXPECT_EQ(allData[index], *intData);
             ++index;
         });
+    EXPECT_EQ(allData.size(), index);
 }
