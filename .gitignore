@@ -345,9 +345,10 @@ zsdoc/data
 /tests/_output/*
 !/tests/_output/.gitkeep
 
+# Clangd files
 .clangd
 clangbuild
 
+# VSCode files
 .vscode/launch.json
 .vscode/tasks.json
-.demian-clang-format
