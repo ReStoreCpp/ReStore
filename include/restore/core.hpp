@@ -133,9 +133,10 @@ class ReStore {
             }
             _blockDistribution = std::make_shared<BlockDistribution<>>(
                 _mpiContext.getOriginalSize(), totalNumberOfBlocks, _replicationLevel, _mpiContext);
-            assert(_serializedBlocks);
             _serializedBlocks =
                 std::make_unique<SerializedBlockStorage<>>(_blockDistribution, _offsetMode, _constOffset);
+            assert(_blockDistribution);
+            assert(_serializedBlocks);
             assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
 
             // Initialize the Implementation object (as in PImpl)
