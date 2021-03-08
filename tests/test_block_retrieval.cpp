@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <functional>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -184,4 +185,48 @@ TEST(BlockRetrievalTest, getSendRecvBlockRanges) {
 
 TEST(BlockRetrievalTest, getSendRecvBlockRangesWithDeadRanks) {
     testSendRecvBlockRanges(4);
+}
+
+TEST(BlockRetrievalTest, handleReceivedBlocks) {
+    std::vector<ReStoreMPI::RecvMessage>                                                       recvMessages;
+    std::vector<std::vector<int>>                                                              messageDataInt;
+    std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> recvBlockRanges;
+    recvBlockRanges.emplace_back(std::make_pair(std::make_pair(5, 2), 0));
+    recvBlockRanges.emplace_back(std::make_pair(std::make_pair(15, 3), 0));
+    messageDataInt.push_back({-5, -6, -15, -16, -17});
+    {
+        std::vector<std::byte> messageDataByte(
+            reinterpret_cast<std::byte*>(messageDataInt.back().data()),
+            reinterpret_cast<std::byte*>(messageDataInt.back().data() + messageDataInt.back().size()));
+        recvMessages.emplace_back(std::move(messageDataByte), 0);
+    }
+
+    recvBlockRanges.emplace_back(std::make_pair(std::make_pair(7, 2), 1));
+    recvBlockRanges.emplace_back(std::make_pair(std::make_pair(20, 1), 1));
+    messageDataInt.push_back({-7, -8, -20});
+    {
+        std::vector<std::byte> messageDataByte(
+            reinterpret_cast<std::byte*>(messageDataInt.back().data()),
+            reinterpret_cast<std::byte*>(messageDataInt.back().data() + messageDataInt.back().size()));
+        recvMessages.emplace_back(std::move(messageDataByte), 1);
+    }
+
+
+    std::vector<int> allData;
+    for (const auto& message: messageDataInt) {
+        allData.insert(allData.end(), message.begin(), message.end());
+    }
+    size_t index = 0;
+    ReStore::handleReceivedBlocks(
+        recvMessages, recvBlockRanges, ReStore::OffsetMode::constant, sizeof(int),
+        [&allData, &index](const std::byte* data, size_t size, ReStore::block_id_t id) {
+            EXPECT_EQ(sizeof(int), size);
+            const int* intData = reinterpret_cast<const int*>(data);
+            int        intId   = static_cast<int>(id);
+            EXPECT_EQ(-1 * intId, *intData);
+            ASSERT_LT(index, allData.size());
+            EXPECT_EQ(allData[index], *intData);
+            ++index;
+        });
+    EXPECT_EQ(allData.size(), index);
 }
