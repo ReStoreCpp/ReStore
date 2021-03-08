@@ -40,6 +40,7 @@ function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
   target_compile_options(${NAME} PRIVATE -g -Og ${WARNING_FLAGS})
   set_tests_properties(${DISPLAY_NAME} PROPERTIES
     FAIL_REGULAR_EXPRESSION " FAILED "
+    PASS_REGULAR_EXPRESSION " PASSED "
   )
 endfunction(add_mpi_test)
 
