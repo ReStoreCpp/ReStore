@@ -25,6 +25,7 @@ inline std::vector<block_range_request_t> getServingRanks(
     assert(blockRange.contains(blockRangeExternal.first));
     assert(blockRange.contains(blockRangeExternal.first + blockRangeExternal.second - 1));
     auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
+    std::sort(ranksWithBlockRange.begin(), ranksWithBlockRange.end());
     if (ranksWithBlockRange.empty()) {
         throw UnrecoverableDataLossException();
     }
@@ -167,9 +168,12 @@ inline std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(
             sendData.back().insert(sendData.back().end(), ptr, ptr + size);
         });
     }
-    assert(currentRank != MPI_UNDEFINED);
-    assert(sendData.size() > 0);
-    sendMessages.emplace_back(sendData.back().data(), sendData.back().size(), currentRank);
+    if (!sendBlockRanges.empty()) {
+        assert(currentRank != MPI_UNDEFINED);
+        assert(sendData.size() > 0);
+        sendMessages.emplace_back(sendData.back().data(), sendData.back().size(), currentRank);
+    }
+
     auto result = _mpiContext.SparseAllToAll(sendMessages);
     std::sort(result.begin(), result.end(), [](const ReStoreMPI::RecvMessage& lhs, const ReStoreMPI::RecvMessage& rhs) {
         return lhs.srcRank < rhs.srcRank;
