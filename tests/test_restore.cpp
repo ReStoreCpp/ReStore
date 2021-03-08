@@ -7,11 +7,14 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <mpi.h>
+#include <utility>
 
+#include "restore/common.hpp"
 #include "restore/core.hpp"
 #include "restore/helpers.hpp"
 
 #include "mocks.hpp"
+#include "restore/mpi_context.hpp"
 
 using namespace ::testing;
 
@@ -79,17 +82,66 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
     store.submitBlocks(
         [](const int& value, ReStore::SerializedBlockStoreStream stream) { stream << value; },
         [&counter, &data]() {
-            auto ret = data.size() == counter ? std::nullopt
-                                              : std::make_optional(ReStore::NextBlock<int>({counter, data[counter]}));
+            auto ret = data.size() == counter
+                           ? std::nullopt
+                           : std::make_optional(ReStore::NextBlock<int>(
+                               {counter + static_cast<size_t>(myRankId()) * data.size(), data[counter]}));
             counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair is
                        // bound before or after the increment.
             return ret;
         },
-        data.size());
+        data.size() * static_cast<size_t>(numRanks()));
 
     // No failure
 
-    // TODO @Demian Assert stuff
+    {
+        std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
+        for (int rank = 0; rank < numRanks(); ++rank) {
+            requests.emplace_back(std::make_pair(std::make_pair(0, data.size()), rank));
+        }
+
+        std::vector<int>    dataReceived;
+        ReStore::block_id_t nextBlockId = 0;
+        store.pushBlocks(
+            requests,
+            [&dataReceived, &nextBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
+                EXPECT_EQ(nextBlockId, blockId);
+                ++nextBlockId;
+                ASSERT_EQ(sizeof(int), size);
+                dataReceived.emplace_back(*reinterpret_cast<const int*>(dataPtr));
+            });
+        EXPECT_EQ(data.size(), nextBlockId);
+
+        ASSERT_EQ(data.size(), dataReceived.size());
+        for (size_t i = 0; i < data.size(); ++i) {
+            EXPECT_EQ(data[i], dataReceived[i]);
+        }
+    }
+
+    {
+        std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
+        for (int rank = 0; rank < numRanks(); ++rank) {
+            requests.emplace_back(
+                std::make_pair(std::make_pair(static_cast<size_t>(rank) * data.size(), data.size()), rank));
+        }
+
+        std::vector<int>    dataReceived;
+        ReStore::block_id_t nextBlockId = static_cast<size_t>(myRankId()) * data.size();
+        store.pushBlocks(
+            requests,
+            [&dataReceived, &nextBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
+                EXPECT_EQ(nextBlockId, blockId);
+                ++nextBlockId;
+                ASSERT_EQ(sizeof(int), size);
+                dataReceived.emplace_back(*reinterpret_cast<const int*>(dataPtr));
+            });
+        EXPECT_EQ(static_cast<size_t>(myRankId()) * data.size() + data.size(), nextBlockId);
+
+        ASSERT_EQ(data.size(), dataReceived.size());
+        for (size_t i = 0; i < data.size(); ++i) {
+            EXPECT_EQ(data[i], dataReceived[i]);
+        }
+    }
 }
 
 TEST(ReStoreTest, EndToEnd_Simple2) {
@@ -222,7 +274,8 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
         bool         divisibleByTwo;
         bool         divisibleByThree;
 
-        AwesomeDataType(signed int _number, unsigned int _absNumber, bool _divisibleByTwo, bool _divisibleByThree) noexcept
+        AwesomeDataType(
+            signed int _number, unsigned int _absNumber, bool _divisibleByTwo, bool _divisibleByThree) noexcept
             : number(_number),
               absNumber(_absNumber),
               divisibleByTwo(_divisibleByTwo),
@@ -273,6 +326,8 @@ int main(int argc, char** argv) {
 
     // Initialize MPI
     MPI_Init(&argc, &argv);
+    // Set errorhandler to return so we have a chance to mitigate failures
+    MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
     int result = RUN_ALL_TESTS();
 
