@@ -80,6 +80,15 @@ struct RecvMessage {
     }
 };
 
+// Just for debugging
+// std::ostream& operator<<(std::ostream& out, const ReStoreMPI::RecvMessage& v) {
+//     out << "RecvMessage(";
+//     out << v.data.size();
+//     out << ", " << v.srcRank;
+//     out << ")";
+//     return out;
+// }
+
 class FaultException : public std::exception {
     virtual const char* what() const throw() override {
         return "A rank in the communicator failed";
@@ -148,13 +157,13 @@ class RankManager {
     }
 
     std::vector<original_rank_t> getOnlyAlive(const std::vector<original_rank_t>& in) const {
-        std::vector<current_rank_t> out(in.size());
+        std::vector<original_rank_t> out(in.size());
         MPI_Group_translate_ranks(_originalGroup, (int)in.size(), in.data(), _currentGroup, out.data());
         for (size_t i = 0; i < in.size(); ++i) {
             out[i] = out[i] == MPI_UNDEFINED ? MPI_UNDEFINED : in[i];
         }
         out.erase(
-            std::remove_if(out.begin(), out.end(), [](const current_rank_t& rank) { return rank == MPI_UNDEFINED; }),
+            std::remove_if(out.begin(), out.end(), [](const original_rank_t& rank) { return rank == MPI_UNDEFINED; }),
             out.end());
         return out;
     }
