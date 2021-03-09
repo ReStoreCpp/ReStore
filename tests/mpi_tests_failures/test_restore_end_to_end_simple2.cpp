@@ -34,7 +34,7 @@ TEST(ReStoreTest, EndToEnd_Simple2) {
 
     unsigned counter = 0;
     store.submitBlocks(
-        [](const int& value, ReStore::SerializedBlockStoreStream stream) { stream << value; },
+        [](const int& value, ReStore::SerializedBlockStoreStream& stream) { stream << value; },
         [&counter, &data]() {
             auto ret = data.size() == counter
                            ? std::nullopt

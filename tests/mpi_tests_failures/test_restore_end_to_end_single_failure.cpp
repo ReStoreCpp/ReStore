@@ -33,7 +33,7 @@ TEST(ReStoreTest, EndToEnd_SingleFailure) {
 
     unsigned counter = 0;
     store.submitBlocks(
-        [](const int& value, ReStore::SerializedBlockStoreStream stream) { stream << value; },
+        [](const int& value, ReStore::SerializedBlockStoreStream& stream) { stream << value; },
         [&counter, &data]() {
             auto ret = data.size() == counter ? std::nullopt
                                               : std::make_optional(ReStore::NextBlock<int>({counter, data[counter]}));

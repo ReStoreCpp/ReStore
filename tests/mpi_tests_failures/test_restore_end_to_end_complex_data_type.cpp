@@ -51,7 +51,7 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
 
     unsigned counter = 0;
     store.submitBlocks(
-        [](const auto& value, ReStore::SerializedBlockStoreStream stream) {
+        [](const auto& value, ReStore::SerializedBlockStoreStream& stream) {
             stream << value.number;
             stream << value.absNumber;
             stream << value.divisibleByTwo;

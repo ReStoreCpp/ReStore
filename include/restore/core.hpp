@@ -113,8 +113,8 @@ class ReStore {
         bool canBeParallelized = false // not supported yet
     ) {
         static_assert(
-            std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
-            "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream");
+            std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream&>(),
+            "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream&");
         static_assert(
             std::is_invocable_r<std::optional<NextBlock<BlockType>>, NextBlockCallbackFunction>(),
             "nextBlock must be invocable as ReStore::std::optional<NextBlock<BlockType>>()");

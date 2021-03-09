@@ -26,6 +26,12 @@ class SerializedBlockStoreStream {
         }
     }
 
+    // Keep the user from copying or moving our SerializedBlockStore object we pass to him.
+    SerializedBlockStoreStream(const SerializedBlockStoreStream&) = delete;
+    SerializedBlockStoreStream(SerializedBlockStoreStream&&) = delete;
+    SerializedBlockStoreStream& operator=(const SerializedBlockStoreStream&) = delete;
+    SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&) = delete;
+
     template <class T>
     SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");

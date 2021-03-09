@@ -210,7 +210,7 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
     size_t             worldId     = 0;
 
     auto sendBuffers = comm.serializeBlocksForTransmission(
-        [](World world, ReStore::SerializedBlockStoreStream stream) {
+        [](World world, ReStore::SerializedBlockStoreStream& stream) {
             stream << world.unicornCount;
             stream << world.useMagic;
             // if (world.useMagic) {
