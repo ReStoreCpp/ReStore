@@ -75,7 +75,17 @@ class BlockSubmissionCommunication {
                 // TODO implement efficient storing of continuous blocks
 
                 // Call the user-defined serialization function to serialize the block to a flat byte stream
+                auto bytesWrittenBeforeSerialization = storeStream.bytesWritten();
                 serializeFunc(block, storeStream);
+                assert(_offsetModeDescriptor.mode == OffsetMode::constant);
+                auto bytesWrittenDuringSerialization = storeStream.bytesWritten() - bytesWrittenBeforeSerialization;
+                if (bytesWrittenDuringSerialization != _offsetModeDescriptor.constOffset) {
+                    throw std::runtime_error(
+                        "You wrote too many or too few bytes ("
+                        + std::to_string(bytesWrittenDuringSerialization)
+                        + ") during serialization of block " + std::to_string(blockId) + ". Is your constant offset ("
+                        + std::to_string(_offsetModeDescriptor.constOffset) + ") set correctly?");
+                }
             }
         } while (!doneSerializingBlocks);
 
