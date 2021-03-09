@@ -26,6 +26,9 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
     // Each rank submits different data. The replication level is set to 3. There are two rank failures.
     // We use a struct as a data type in this test case.
 
+    // The logic of this tests assumes that there are four ranks
+    assert(numRanks() == 4);
+
     struct AwesomeDataType {
         signed int   number;
         unsigned int absNumber;
@@ -40,10 +43,10 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
               divisibleByThree(_divisibleByThree) {}
     };
 
-    ReStore::ReStore<AwesomeDataType> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
+    ReStore::ReStore<AwesomeDataType> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, 10);
     std::vector<AwesomeDataType>      data;
 
-    signed int myStart = (myRankId() - numRanks() / 2) * 1000;
+    signed int myStart = (myRankId() - (numRanks() / 2)) * 1000;
     signed int myEnd   = myStart + 1000;
     for (int number: range(myStart, myEnd)) {
         data.emplace_back(number, abs(number), number % 2 == 0, number % 3 == 0);
@@ -68,14 +71,18 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
         asserting_cast<ReStore::block_id_t>(numRanks()) * data.size());
 
     // Two failures
-    constexpr int failingRank1 = 0;
-    constexpr int failingRank2 = 1;
+    constexpr int failingRank1 = 1;
+    constexpr int failingRank2 = 2;
     failRank(failingRank1);
     failRank(failingRank2);
     ASSERT_NE(myRankId(), failingRank1);
     ASSERT_NE(myRankId(), failingRank2);
+    // TODO repair communicator
+    //assert(numRanks() == 2);
 
     // TODO @Demian Assert stuff
+
+    //assert(numRanks() == 2);
 }
 
 int main(int argc, char** argv) {

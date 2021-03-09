@@ -26,6 +26,9 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
     // The most basic test base. Each rank submits exactly the same data. The replication level is set to one. There is
     // no rank failure.
 
+    // The logic of this tests assumes that there are four ranks
+    assert(numRanks() == 4);
+
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 1, ReStore::OffsetMode::constant, sizeof(int));
     std::vector<int>      data{0, 1, 2, 3, 42, 1337};
 

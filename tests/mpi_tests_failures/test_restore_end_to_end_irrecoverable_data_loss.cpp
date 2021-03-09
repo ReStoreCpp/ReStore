@@ -45,8 +45,8 @@ TEST(ReStoreTest, EndToEnd_IrrecoverableDataLoss) {
         data.size());
 
     // Two failures
-    constexpr int failingRank1 = 0;
-    constexpr int failingRank2 = 1;
+    constexpr int failingRank1 = 1;
+    constexpr int failingRank2 = 2;
     failRank(failingRank1);
     failRank(failingRank2);
     ASSERT_NE(myRankId(), failingRank1);
