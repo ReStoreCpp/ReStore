@@ -217,11 +217,6 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
         [](World world, ReStore::SerializedBlockStoreStream& stream) {
             stream << world.unicornCount;
             stream << world.useMagic;
-            // if (world.useMagic) {
-            //    stream << 0xFF;
-            //} else {
-            //    stream << 0x00;
-            //}
         },
         [&worlds, &worldId]() -> std::optional<NextBlock<World>> {
             auto ret = worldId < worlds.size() ? std::make_optional(NextBlock<World>({worldId, worlds[worldId]}))
