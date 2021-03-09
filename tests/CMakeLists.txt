@@ -30,27 +30,38 @@ macro(restore_add_test TESTNAME LIBRARIES)
 endmacro()
 
 function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
-  add_executable(${NAME} ${FILE})
-  target_include_directories(${NAME} SYSTEM PRIVATE ../extern/)
-  target_include_directories(${NAME} SYSTEM PRIVATE ../include/)
-  target_include_directories(${NAME} PRIVATE .)
-  target_link_libraries(${NAME} gtest gmock ${MPI_LIBRARIES} ${LIBRARIES})
-  set(test_parameters -np ${NO_MPI_PROC} "./${NAME}")
-  add_test(NAME ${DISPLAY_NAME} COMMAND ${MPIEXEC_EXECUTABLE} ${test_parameters})
-  target_compile_options(${NAME} PRIVATE -g -Og ${WARNING_FLAGS})
-  set_tests_properties(${DISPLAY_NAME} PROPERTIES
-    FAIL_REGULAR_EXPRESSION " FAILED "
-    PASS_REGULAR_EXPRESSION " PASSED "
-  )
+    add_executable(${NAME} ${FILE})
+    target_include_directories(${NAME} SYSTEM PRIVATE ../extern/)
+    target_include_directories(${NAME} SYSTEM PRIVATE ../include/)
+    target_include_directories(${NAME} PRIVATE .)
+    target_link_libraries(${NAME} gtest gmock ${MPI_LIBRARIES} ${LIBRARIES})
+
+    add_custom_command(
+        TARGET ${NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_SOURCE_DIR}/tests/mpi_test_wrapper.sh
+                ${CMAKE_CURRENT_BINARY_DIR}/mpi_test_wrapper.sh
+    )
+
+    add_test(NAME ${DISPLAY_NAME} COMMAND "./mpi_test_wrapper.sh" ${MPIEXEC_EXECUTABLE} ${NO_MPI_PROC} "./${NAME}")
+    target_compile_options(${NAME} PRIVATE -g -Og ${WARNING_FLAGS})
+    #set_tests_properties(${DISPLAY_NAME} PROPERTIES
+    #    FAIL_REGULAR_EXPRESSION " FAILED "
+    #    PASS_REGULAR_EXPRESSION " PASSED "
+    #)
 endfunction(add_mpi_test)
 
+
 # Register our tests
+## Without MPI
 restore_add_test(test_block_distribution "ReStore::ReStore;cppitertools" test_block_distribution.cpp)
 restore_add_test(test_serialization "ReStore::ReStore;cppitertools" test_serialization.cpp)
 restore_add_test(test_block_submisssion "ReStore::ReStore;cppitertools" test_block_submission.cpp)
 restore_add_test(test_block_retrieval "ReStore::ReStore;" test_block_retrieval.cpp)
 restore_add_test(test_helpers "ReStore::ReStore;cppitertools" test_helpers.cpp)
 add_mpi_test(mpi_tests_failures/test_restore_constructor.cpp test_restore_constructor TestRestoreConstructor 4 "ReStore::ReStore;cppitertools")
+
+## With MPI
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple1.cpp test_restore_end_to_end_simple1 TestRestore_EndToEnd_Simple1 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple2.cpp test_restore_end_to_end_simple2 TestRestore_EndToEnd_Simple2 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_single_failure.cpp test_restore_end_to_end_single_failure TestRestore_EndToEnd_SingleFailure 4 "ReStore::ReStore;cppitertools")
@@ -58,4 +69,6 @@ add_mpi_test(mpi_tests_failures/test_restore_end_to_end_two_failures.cpp test_re
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_complex_data_type.cpp test_restore_end_to_end_complex_data_type TestRestore_EndToEnd_ComplextDataType 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_irrecoverable_data_loss.cpp test_restore_end_to_end_irrecoverable_data_loss TestRestore_EndToEnd_IrrecoverableDataLoss 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(test_mpi_context.cpp test_mpi_context MPIContext 4 "")
+
+# Make ctest play nicely with Demian's spacemacs
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --force-new-ctest-process --output-on-failure)

@@ -1,8 +1,10 @@
-#include <gtest/gtest.h>
+#include <cstdlib>
 #include <mpi.h>
 #include <signal.h>
 
 #include <mpi-ext.h>
+
+constexpr int EXIT_SIMULATED_FAILURE = 42;
 
 int myRankId(MPI_Comm _comm = MPI_COMM_WORLD) {
     int rankId;
@@ -18,7 +20,8 @@ int numRanks(MPI_Comm _comm = MPI_COMM_WORLD) {
 
 void failRank(int rankId) {
     if (myRankId() == rankId) {
-        raise(SIGKILL);
+        //raise(SIGKILL);
+        exit(EXIT_SIMULATED_FAILURE);
     }
 }
 
