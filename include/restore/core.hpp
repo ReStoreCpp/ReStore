@@ -90,6 +90,10 @@ class ReStore {
         return std::make_pair(this->_offsetMode, this->_constOffset);
     }
 
+    void updateComm(MPI_Comm newComm) {
+        _mpiContext.updateComm(newComm);
+    }
+
     // submitBlocks()
     //
     // Submits blocks to the replicated storage. They will be replicated among the ranks and can be

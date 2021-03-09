@@ -131,6 +131,7 @@ inline void handleReceivedBlocks(
                 handleSerializedBlock(&(recvMessage.data[currentIndexRecvMessage]), _constOffset, blockId);
                 currentIndexRecvMessage += _constOffset;
             }
+
             currentIndexRecvBlockRanges++;
         }
     }
