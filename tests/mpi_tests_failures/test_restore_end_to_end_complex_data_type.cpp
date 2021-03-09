@@ -65,7 +65,7 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
                        // bound before or after the increment.
             return ret;
         },
-        data.size());
+        asserting_cast<ReStore::block_id_t>(numRanks()) * data.size());
 
     // Two failures
     constexpr int failingRank1 = 0;

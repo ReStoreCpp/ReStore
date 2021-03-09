@@ -2,6 +2,7 @@
 #define RESTORE_BLOCK_SUBMISSION_H
 
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -54,7 +55,10 @@ class BlockSubmissionCommunication {
             } else {
                 block_id_t       blockId = next.value().blockId;
                 const BlockType& block   = next.value().block;
-                assert(blockId < _blockDistribution.numBlocks());
+                if (blockId >= _blockDistribution.numBlocks()) {
+                    throw std::runtime_error("The block id is bigger than the number of blocks. Have you passed "
+                                             "the number of block *in total* (not only on this rank)?");
+                }
 
                 // Determine which ranks will get this block; assume that no failures occurred
                 assert(_mpiContext.numFailuresSinceReset() == 0);
