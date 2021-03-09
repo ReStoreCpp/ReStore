@@ -65,7 +65,7 @@ struct RecvMessage {
     current_rank_t         srcRank;
 
     RecvMessage(const size_t size, const current_rank_t _srcRank) : data(size), srcRank(_srcRank) {}
-    RecvMessage(std::vector<std::byte>&& _data, const current_rank_t _srcRank)
+    RecvMessage(std::vector<std::byte>&& _data, const current_rank_t _srcRank) noexcept
         : data(std::move(_data)),
           srcRank(_srcRank) {}
 
