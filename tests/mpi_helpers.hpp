@@ -1,5 +1,8 @@
+#include <cstdlib>
 #include <mpi.h>
 #include <signal.h>
+
+constexpr int EXIT_SIMULATED_FAILURE = 42;
 
 int myRankId() {
     int rankId;
@@ -15,6 +18,7 @@ int numRanks() {
 
 void failRank(int rankId) {
     if (myRankId() == rankId) {
-        raise(SIGKILL);
+        //raise(SIGKILL);
+        exit(EXIT_SIMULATED_FAILURE);
     }
 }
