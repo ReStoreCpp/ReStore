@@ -29,6 +29,12 @@ include(CMakeDependentOption)
 include(CTest)
 include(GNUInstallDirs)
 
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  message("debug mode")
+  add_definitions(-D_GLIBCXX_DEBUG)
+  add_definitions(-D_GLIBCXX_DEBUG_PEDANTIC)
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
 #option(${PROJECT_NAME}_USE_DOXYGEN "Add a doxygen target to generate the documentation" ON)
 #cmake_dependent_option(${PROJECT_NAME}_INSTALL_DOCS "Add the generated documentation to the install list" ON, ${PROJECT_NAME}_USE_DOXYGEN OFF)
 option(${PROJECT_NAME}_INSTALL "Add ${PROJECT_NAME} to the install list" ON)
