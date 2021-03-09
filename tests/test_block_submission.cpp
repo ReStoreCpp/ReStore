@@ -4,6 +4,7 @@
 #include "mocks.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/block_submission.hpp"
+#include "restore/common.hpp"
 #include "restore/core.hpp"
 
 using namespace ::testing;
@@ -21,7 +22,9 @@ TEST(BlockSubmissionTest, exchangeData) {
         MPIContextMock    mpiContext;
         BlockDistribution blockDistribution(10, 100, 3, mpiContext);
 
-        ReStore::BlockSubmissionCommunication<uint8_t, MPIContextMock> comm(mpiContext, blockDistribution);
+        ReStore::BlockSubmissionCommunication<uint8_t, MPIContextMock> comm(
+            mpiContext, blockDistribution,
+            ReStore::OffsetModeDescriptor{ReStore::OffsetMode::constant, sizeof(uint8_t)});
 
         std::vector<SendMessage> expectedSendMessages{{}};
         EXPECT_CALL(mpiContext, SparseAllToAll(Eq(expectedSendMessages))).WillOnce(Return(dummyReceive));
@@ -32,7 +35,9 @@ TEST(BlockSubmissionTest, exchangeData) {
         MPIContextMock    mpiContext;
         BlockDistribution blockDistribution(10, 100, 3, mpiContext);
 
-        ReStore::BlockSubmissionCommunication<uint8_t, MPIContextMock> comm(mpiContext, blockDistribution);
+        ReStore::BlockSubmissionCommunication<uint8_t, MPIContextMock> comm(
+            mpiContext, blockDistribution,
+            ReStore::OffsetModeDescriptor{ReStore::OffsetMode::constant, sizeof(uint8_t)});
 
         SendBuffers sendBuffers;
         sendBuffers[0] = {0_byte, 1_byte, 2_byte, 3_byte};
@@ -55,7 +60,8 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
     MPIContextMock    mpiContext;
     BlockDistribution blockDistribution(10, 100, 3, mpiContext);
 
-    ReStore::BlockSubmissionCommunication<uint16_t, MPIContextMock> comm(mpiContext, blockDistribution);
+    ReStore::BlockSubmissionCommunication<uint16_t, MPIContextMock> comm(
+        mpiContext, blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, sizeof(uint16_t)});
 
 
     RecvMessage message1(
@@ -100,8 +106,7 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
                     FAIL();
             }
             ++called;
-        },
-        std::make_pair<OffsetMode, size_t>(OffsetMode::constant, sizeof(uint16_t)));
+        });
     ASSERT_EQ(called, 2);
 
     called = 0;
@@ -131,8 +136,7 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
                     FAIL();
             }
             ++called;
-        },
-        std::make_pair<OffsetMode, size_t>(OffsetMode::constant, sizeof(uint16_t)));
+        });
     ASSERT_EQ(called, 3);
 
     called = 0;
@@ -175,8 +179,7 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
                     FAIL();
             }
             ++called;
-        },
-        std::make_pair<OffsetMode, size_t>(OffsetMode::constant, sizeof(uint16_t)));
+        });
     ASSERT_EQ(called, 5);
 }
 
@@ -201,7 +204,8 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
 
     auto blockDistribution = std::make_shared<BlockDistribution>(10, 100, 3, mpiContext);
 
-    ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(mpiContext, *blockDistribution);
+    ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(
+        mpiContext, *blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, 2});
 
     World              earth       = {false, 0};
     World              narnia      = {true, 10};
