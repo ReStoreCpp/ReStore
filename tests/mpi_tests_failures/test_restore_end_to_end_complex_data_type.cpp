@@ -77,12 +77,15 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
     failRank(failingRank2);
     ASSERT_NE(myRankId(), failingRank1);
     ASSERT_NE(myRankId(), failingRank2);
-    // TODO repair communicator
-    //assert(numRanks() == 2);
+
+    auto newComm = getFixedCommunicator();
+
+    store.updateComm(newComm);
+    assert(numRanks(newComm) == 2);
 
     // TODO @Demian Assert stuff
 
-    //assert(numRanks() == 2);
+    assert(numRanks(newComm) == 2);
 }
 
 int main(int argc, char** argv) {
@@ -94,17 +97,17 @@ int main(int argc, char** argv) {
     // Set errorhandler to return so we have a chance to mitigate failures
     MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
-    // Add object that will finalize MPI on exit; Google Test owns this pointer
-    ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
+    // // Add object that will finalize MPI on exit; Google Test owns this pointer
+    // ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
 
-    // Get the event listener list.
-    ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
+    // // Get the event listener list.
+    // ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
 
-    // Remove default listener: the default printer and the default XML printer
-    ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
+    // // Remove default listener: the default printer and the default XML printer
+    // ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
 
-    // Adds MPI listener; Google Test owns this pointer
-    listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+    // // Adds MPI listener; Google Test owns this pointer
+    // listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
 
     int result = RUN_ALL_TESTS();
 
