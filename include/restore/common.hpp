@@ -10,6 +10,11 @@ namespace ReStore {
 // See the documentation for offsetMode() for details.
 enum class OffsetMode : uint8_t { constant, lookUpTable };
 
+struct OffsetModeDescriptor {
+    OffsetMode mode;
+    size_t     constOffset;
+};
+
 // Global and local id. The global id is unique across all ranks, that is each copy of the
 // same block has the same global id on all ranks. We can use the global id to request a
 // block.

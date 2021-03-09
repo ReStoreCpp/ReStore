@@ -82,12 +82,13 @@ class ReStore {
         return this->_replicationLevel;
     }
 
+    // TODO this is an artifact. Use only OffsetMode Descriptors throughout the whole ReStore class
     // offsetMode()
     //
     // Get the offset mode that defines how the serialized blocks are aligned in memory.
-    std::pair<OffsetMode, size_t> offsetMode() const noexcept {
+    OffsetModeDescriptor offsetMode() const noexcept {
         _assertInvariants();
-        return std::make_pair(this->_offsetMode, this->_constOffset);
+        return OffsetModeDescriptor{this->_offsetMode, this->_constOffset};
     }
 
     void updateComm(MPI_Comm newComm) {
@@ -117,8 +118,8 @@ class ReStore {
         bool canBeParallelized = false // not supported yet
     ) {
         static_assert(
-            std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream>(),
-            "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream");
+            std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream&>(),
+            "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream&");
         static_assert(
             std::is_invocable_r<std::optional<NextBlock<BlockType>>, NextBlockCallbackFunction>(),
             "nextBlock must be invocable as ReStore::std::optional<NextBlock<BlockType>>()");
@@ -144,7 +145,7 @@ class ReStore {
             assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
 
             // Initialize the Implementation object (as in PImpl)
-            BlockSubmissionCommunication<BlockType> comm(_mpiContext, *_blockDistribution);
+            BlockSubmissionCommunication<BlockType> comm(_mpiContext, *_blockDistribution, offsetMode());
 
             // Allocate send buffers and serialize the blocks to be sent
             auto sendBuffers = comm.serializeBlocksForTransmission(serializeFunc, nextBlock, canBeParallelized);
@@ -159,10 +160,10 @@ class ReStore {
                     block_id_t blockId, const std::byte* data, size_t lengthInBytes,
                     ReStoreMPI::current_rank_t srcRank) {
                     UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
+                    assert(lengthInBytes == _constOffset);
                     UNUSED(srcRank);       // We simply do not need this right now
                     this->_serializedBlocks->writeBlock(blockId, data);
-                },
-                offsetMode());
+                });
         } catch (ReStoreMPI::FaultException& e) {
             // Reset BlockDistribution and SerializedBlockStorage
             _blockDistribution = nullptr;

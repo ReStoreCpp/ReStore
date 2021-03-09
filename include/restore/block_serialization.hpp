@@ -26,6 +26,12 @@ class SerializedBlockStoreStream {
         }
     }
 
+    // Keep the user from copying or moving our SerializedBlockStore object we pass to him.
+    SerializedBlockStoreStream(const SerializedBlockStoreStream&) = delete;
+    SerializedBlockStoreStream(SerializedBlockStoreStream&&) = delete;
+    SerializedBlockStoreStream& operator=(const SerializedBlockStoreStream&) = delete;
+    SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&) = delete;
+
     template <class T>
     SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
@@ -87,9 +93,9 @@ class SerializedBlockStorage {
 
     // writeBlock()
     //
-    // Writes the data associated with that block to the storage. The range this block belongs to has to be
-    // previously registered using registerRanges. blockId and data: The id and data of the block to be written. In
-    // this overload we know the length of the data because it is equal to the constant offset.
+    // Writes the data associated with that block to the storage.
+    // blockId and data: The id and data of the block to be written. In this overload we know the length of the data
+    //      because it is equal to the constant offset.
     void writeBlock(block_id_t blockId, const std::byte* data) {
         // TODO implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
@@ -107,7 +113,12 @@ class SerializedBlockStorage {
         }
         auto& rangeData = _data[indexOf(rangeOfBlock)];
         assert(_constOffset > 0);
-        rangeData.insert(rangeData.end(), data, data + _constOffset);
+        assert(_data[indexOf(rangeOfBlock)].size() == rangeOfBlock.length() * _constOffset);
+        assert(blockId >= rangeOfBlock.start());
+        auto offsetInBlockRange = (blockId - rangeOfBlock.start()) * _constOffset;
+        auto blockDest          = rangeData.begin()
+                         + asserting_cast<typename decltype(rangeData.begin())::difference_type>(offsetInBlockRange);
+        std::copy(data, data + _constOffset, blockDest);
     }
 
     template <class HandleBlockFunction>
@@ -187,22 +198,24 @@ class SerializedBlockStorage {
 
     // registerRange()
     //
-    // Registers the block ranges to be stored in this object. May only be called once during the lifetime of this
-    // object. ranges: The block ranges we should reserve storage for. May not be empty.
-    void registerRange(const BlockRange range) {
+    // Registers the block ranges to be stored in this object. May only be called once per range during the lifetime of
+    // this object.
+    // ranges: The block range we should reserve storage for
+    void registerRange(const BlockRange& range) {
         if (_rangeIndices.find(range.id()) != _rangeIndices.end()) {
             throw std::runtime_error("This range already exists.");
         }
 
         size_t numRanges = this->numRanges();
-        _ranges.push_back(std::move(range));
-        _data.push_back(std::vector<std::byte>());
+        _ranges.push_back(range);
+        _data.emplace_back(range.length() * _constOffset);
         _rangeIndices[range.id()] = numRanges;
         // TODO implement LUT mode
 
         assert(_ranges.size() == _data.size());
         assert(_offsets.size() == 0);
         assert(_rangeIndices.size() == _ranges.size());
+        assert(_data[indexOf(range)].size() == range.length() * _constOffset);
     }
 
     // numRanges()

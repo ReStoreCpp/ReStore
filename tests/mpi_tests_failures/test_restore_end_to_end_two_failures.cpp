@@ -35,7 +35,7 @@ TEST(ReStoreTest, EndToEnd_TwoFailures) {
     size_t   numBlocks       = static_cast<size_t>(numRanksInitial) * 1000;
     unsigned counter         = 0;
     store.submitBlocks(
-        [](const int& value, ReStore::SerializedBlockStoreStream stream) { stream << value; },
+        [](const int& value, ReStore::SerializedBlockStoreStream& stream) { stream << value; },
         [&counter, &data]() {
             auto ret = data.size() == counter
                            ? std::nullopt
@@ -49,8 +49,8 @@ TEST(ReStoreTest, EndToEnd_TwoFailures) {
     EXPECT_EQ(1001, counter);
 
     // Two failures
-    constexpr int failingRank1 = 0;
-    constexpr int failingRank2 = 1;
+    constexpr int failingRank1 = 1;
+    constexpr int failingRank2 = 2;
     failRank(failingRank1);
     failRank(failingRank2);
     ASSERT_NE(myRankId(), failingRank1);

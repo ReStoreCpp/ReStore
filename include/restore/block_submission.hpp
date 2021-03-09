@@ -2,6 +2,7 @@
 #define RESTORE_BLOCK_SUBMISSION_H
 
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -24,9 +25,11 @@ class BlockSubmissionCommunication {
 
     using BlockDistr = BlockDistribution<MPIContext>;
 
-    BlockSubmissionCommunication(MPIContext& mpiContext, const BlockDistr& blockDistribution)
+    BlockSubmissionCommunication(
+        const MPIContext& mpiContext, const BlockDistr& blockDistribution, OffsetModeDescriptor offsetModeDescriptor)
         : _mpiContext(mpiContext),
-          _blockDistribution(blockDistribution) {}
+          _blockDistribution(blockDistribution),
+          _offsetModeDescriptor(offsetModeDescriptor) {}
 
     // serializeBlocksForTransmission()
     //
@@ -54,7 +57,10 @@ class BlockSubmissionCommunication {
             } else {
                 block_id_t       blockId = next.value().blockId;
                 const BlockType& block   = next.value().block;
-                assert(blockId < _blockDistribution.numBlocks());
+                if (blockId >= _blockDistribution.numBlocks()) {
+                    throw std::runtime_error("The block id is bigger than the number of blocks. Have you passed "
+                                             "the number of block *in total* (not only on this rank)?");
+                }
 
                 // Determine which ranks will get this block; assume that no failures occurred
                 assert(_mpiContext.numFailuresSinceReset() == 0);
@@ -69,7 +75,17 @@ class BlockSubmissionCommunication {
                 // TODO implement efficient storing of continuous blocks
 
                 // Call the user-defined serialization function to serialize the block to a flat byte stream
+                auto bytesWrittenBeforeSerialization = storeStream.bytesWritten();
                 serializeFunc(block, storeStream);
+                assert(_offsetModeDescriptor.mode == OffsetMode::constant);
+                auto bytesWrittenDuringSerialization = storeStream.bytesWritten() - bytesWrittenBeforeSerialization;
+                if (bytesWrittenDuringSerialization != _offsetModeDescriptor.constOffset) {
+                    throw std::runtime_error(
+                        "You wrote too many or too few bytes ("
+                        + std::to_string(bytesWrittenDuringSerialization)
+                        + ") during serialization of block " + std::to_string(blockId) + ". Is your constant offset ("
+                        + std::to_string(_offsetModeDescriptor.constOffset) + ") set correctly?");
+                }
             }
         } while (!doneSerializingBlocks);
 
@@ -84,19 +100,16 @@ class BlockSubmissionCommunication {
     // size_t lengthInBytes) the callback function to call for each detected block.
     // TODO implement LUT mode
     template <class HandleBlockDataFunc>
-    void parseIncomingMessage(
-        const ReStoreMPI::RecvMessage& message, HandleBlockDataFunc handleBlockData,
-        const std::pair<OffsetMode, size_t>& offsetModeDescriptor) {
+    void parseIncomingMessage(const ReStoreMPI::RecvMessage& message, HandleBlockDataFunc handleBlockData) {
         static_assert(
             std::is_invocable<HandleBlockDataFunc, block_id_t, const std::byte*, size_t, ReStoreMPI::current_rank_t>(),
             "handleBlockData has to be invocable as _(block_id_t, const std::byte*, size_t, current_rank_t)");
 
-        assert(offsetModeDescriptor.first == OffsetMode::constant);
-        auto constOffset = offsetModeDescriptor.second;
+        assert(_offsetModeDescriptor.mode == OffsetMode::constant);
 
         block_id_t currentBlockId;
 
-        size_t bytesPerBlock = sizeof(block_id_t) + constOffset;
+        size_t bytesPerBlock = sizeof(block_id_t) + _offsetModeDescriptor.constOffset;
         assert(bytesPerBlock > 0);
         assert(message.data.size() % bytesPerBlock == 0);
 
@@ -115,7 +128,9 @@ class BlockSubmissionCommunication {
             currentBlockId = *reinterpret_cast<const decltype(currentBlockId)*>(message.data.data() + startOfBlockId);
 
             // Handle the block data
-            handleBlockData(currentBlockId, message.data.data() + startOfPayload, constOffset, message.srcRank);
+            handleBlockData(
+                currentBlockId, message.data.data() + startOfPayload, _offsetModeDescriptor.constOffset,
+                message.srcRank);
         }
     }
 
@@ -124,10 +139,9 @@ class BlockSubmissionCommunication {
     // Iterates over the given messages and calls parseIncomingMessage() for each of them.
     template <class HandleBlockDataFunc>
     void parseAllIncomingMessages(
-        const std::vector<ReStoreMPI::RecvMessage>& messages, HandleBlockDataFunc handleBlockData,
-        const std::pair<OffsetMode, size_t>& offsetModeDescriptor) {
+        const std::vector<ReStoreMPI::RecvMessage>& messages, HandleBlockDataFunc handleBlockData) {
         for (auto&& message: messages) {
-            parseIncomingMessage(message, handleBlockData, offsetModeDescriptor);
+            parseIncomingMessage(message, handleBlockData);
         }
     }
 
@@ -145,8 +159,9 @@ class BlockSubmissionCommunication {
     }
 
     private:
-    const MPIContext& _mpiContext;
-    const BlockDistr& _blockDistribution;
+    const MPIContext&          _mpiContext;
+    const BlockDistr&          _blockDistribution;
+    const OffsetModeDescriptor _offsetModeDescriptor;
 };
 } // end of namespace ReStore
 #endif // Include guard

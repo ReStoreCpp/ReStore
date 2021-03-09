@@ -24,6 +24,7 @@ using namespace ::testing;
 using iter::range;
 
 TEST(ReStoreTest, EndToEnd_Simple2) {
+    // TODO Assert the number of ranks (also in the other tests)
     // Each rank submits different data. The replication level is set to 3. There is no rank failure.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
 
@@ -34,7 +35,7 @@ TEST(ReStoreTest, EndToEnd_Simple2) {
 
     unsigned counter = 0;
     store.submitBlocks(
-        [](const int& value, ReStore::SerializedBlockStoreStream stream) { stream << value; },
+        [](const int& value, ReStore::SerializedBlockStoreStream& stream) { stream << value; },
         [&counter, &data]() {
             auto ret = data.size() == counter
                            ? std::nullopt
