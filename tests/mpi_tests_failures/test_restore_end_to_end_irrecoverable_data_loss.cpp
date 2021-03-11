@@ -25,7 +25,7 @@ using iter::range;
 TEST(ReStoreTest, EndToEnd_IrrecoverableDataLoss) {
     ASSERT_EQ(4, numRanks());
 
-    // Each rank submits different data. The replication level is set to 2. There are three rank failures. Therefore,
+    // Each rank submits different data. The replication level is set to 2. There are two rank failures. Therefore,
     // some data should be irrecoverably lost.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 2, ReStore::OffsetMode::constant, sizeof(int));
 
