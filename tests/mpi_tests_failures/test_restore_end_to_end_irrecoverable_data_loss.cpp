@@ -50,13 +50,13 @@ TEST(ReStoreTest, EndToEnd_IrrecoverableDataLoss) {
 
     // Two failures
     constexpr int failingRank1 = 1;
-    constexpr int failingRank2 = 2;
+    // constexpr int failingRank2 = 2;
     constexpr int failingRank3 = 3;
     failRank(failingRank1);
-    failRank(failingRank2);
+    // failRank(failingRank2);
     failRank(failingRank3);
     ASSERT_NE(myRankId(), failingRank1);
-    ASSERT_NE(myRankId(), failingRank2);
+    // ASSERT_NE(myRankId(), failingRank2);
     ASSERT_NE(myRankId(), failingRank3);
 
     auto newComm = getFixedCommunicator();
