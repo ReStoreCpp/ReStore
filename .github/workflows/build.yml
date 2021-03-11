@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: ulfm
-      run: git clone --recursive https://bitbucket.org/icldistcomp/ulfm2.git && cd ulfm2 && ./configure --prefix="$HOME/ulfm" --enable-mpi-fortran=no --with-pmi2 --with-ucx=no && make -j && make install
+      run: git clone --recursive https://bitbucket.org/icldistcomp/ulfm2.git && cd ulfm2 && ./autogen.pl && ./configure --prefix="$HOME/ulfm" --enable-mpi-fortran=no --with-pmi2 --with-ucx=no && make -j && make install
     - name: mkdir
       run: mkdir build && cd build
     - name: cmake
