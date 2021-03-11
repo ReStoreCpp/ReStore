@@ -9,6 +9,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: submodules
+      run: git submodule init && git submodule update
     - uses: actions/cache@v2
       id: ulfm-cache
       with:
@@ -17,8 +19,6 @@ jobs:
     - name: ulfm
       if: steps.ulfm-cache.outputs.cache-hit != 'true'
       run: git clone --recursive https://bitbucket.org/icldistcomp/ulfm2.git && cd ulfm2 && ./autogen.pl && ./configure --prefix="$HOME/ulfm" --enable-mpi-fortran=no --with-pmi2 --with-ucx=no && make -j && make install
-    - name: submodules
-      run: git submodule init && git submodule update
     - name: mkdir
       run: mkdir build && cd build
     - name: cmake
