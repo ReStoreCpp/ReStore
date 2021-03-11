@@ -24,6 +24,6 @@ jobs:
     - name: cmake
       run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=Debug -DSIMULATE_FAILURES=ON
     - name: make
-      run: make all
+      run: cd build && make all
     - name: make check
-      run: make check
+      run: cd build && make check
