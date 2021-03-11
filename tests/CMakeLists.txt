@@ -51,7 +51,6 @@ function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     #)
 endfunction(add_mpi_test)
 
-
 # Register our tests
 ## Without MPI
 restore_add_test(test_block_distribution "ReStore::ReStore;cppitertools" test_block_distribution.cpp)
@@ -62,6 +61,7 @@ restore_add_test(test_helpers "ReStore::ReStore;cppitertools" test_helpers.cpp)
 add_mpi_test(mpi_tests_failures/test_restore_constructor.cpp test_restore_constructor TestRestoreConstructor 4 "ReStore::ReStore;cppitertools")
 
 ## With MPI
+add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple1.cpp test_restore_end_to_end_simple1 TestRestore_EndToEnd_Simple1 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple2.cpp test_restore_end_to_end_simple2 TestRestore_EndToEnd_Simple2 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_single_failure.cpp test_restore_end_to_end_single_failure TestRestore_EndToEnd_SingleFailure 4 "ReStore::ReStore;cppitertools")

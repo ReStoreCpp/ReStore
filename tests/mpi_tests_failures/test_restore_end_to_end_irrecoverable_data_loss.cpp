@@ -22,7 +22,7 @@ using namespace ::testing;
 
 using iter::range;
 
-TEST(ReStoreTest, EndToEnd_IrrecoverableDataLoss) {
+TEST_F(ReStoreTestWithFailures, IrrecoverableDataLoss) {
     // Each rank submits different data. The replication level is set to 2. There are three rank failures. Therefore,
     // some data should be irrecoverably lost.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 2, ReStore::OffsetMode::constant, sizeof(int));
@@ -49,17 +49,12 @@ TEST(ReStoreTest, EndToEnd_IrrecoverableDataLoss) {
         numBlocks);
 
     // Two failures
-    constexpr int failingRank1 = 1;
-    constexpr int failingRank2 = 2;
-    constexpr int failingRank3 = 3;
-    failRank(failingRank1);
-    failRank(failingRank2);
-    failRank(failingRank3);
-    ASSERT_NE(myRankId(), failingRank1);
-    ASSERT_NE(myRankId(), failingRank2);
-    ASSERT_NE(myRankId(), failingRank3);
-
-    auto newComm = getFixedCommunicator();
+    EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
+    auto newComm = _rankFailureManager.failRanks({1, 2});
+    EXIT_IF_FAILED(_rankFailureManager.iFailed());
+    ASSERT_NE(myRankId(), 1);
+    ASSERT_NE(myRankId(), 2);
+    ASSERT_EQ(numRanks(newComm), 2);
 
     store.updateComm(newComm);
 
@@ -68,6 +63,7 @@ TEST(ReStoreTest, EndToEnd_IrrecoverableDataLoss) {
         requests.emplace_back(std::make_pair(std::make_pair(0, numBlocks), rank));
     }
 
+    EXIT_IF_FAILED(_rankFailureManager.everyoneStillRunning());
     EXPECT_THROW(
         store.pushBlocks(requests, [](const std::byte*, size_t, ReStore::block_id_t) {}),
         ReStore::UnrecoverableDataLossException);
@@ -82,17 +78,19 @@ int main(int argc, char** argv) {
     // Set errorhandler to return so we have a chance to mitigate failures
     MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
-    // // Add object that will finalize MPI on exit; Google Test owns this pointer
-    // ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
+    if constexpr (SIMULATE_FAILURES) {
+        // Add object that will finalize MPI on exit; Google Test owns this pointer
+        ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
 
-    // // Get the event listener list.
-    // ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
+        // Get the event listener list.
+        ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
 
-    // // Remove default listener: the default printer and the default XML printer
-    // ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
+        // Remove default listener: the default printer and the default XML printer
+        ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
 
-    // // Adds MPI listener; Google Test owns this pointer
-    // listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+        // Adds MPI listener; Google Test owns this pointer
+        listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+    }
 
     int result = RUN_ALL_TESTS();
 

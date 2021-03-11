@@ -20,10 +20,9 @@
 #include "restore/mpi_context.hpp"
 
 using namespace ::testing;
-
 using iter::range;
 
-TEST(ReStoreTest, EndToEnd_SingleFailure) {
+TEST_F(ReStoreTestWithFailures, SingleFailure) {
     // Each rank submits different data. The replication level is set to 3. There is a single rank failure.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
 
@@ -51,11 +50,11 @@ TEST(ReStoreTest, EndToEnd_SingleFailure) {
 
 
     // One failure
-    constexpr int failingRank = 1;
-    failRank(failingRank);
-    ASSERT_NE(myRankId(), failingRank);
-
-    auto newComm = getFixedCommunicator();
+    EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
+    auto newComm = _rankFailureManager.failRanks({1});
+    EXIT_IF_FAILED(_rankFailureManager.iFailed());
+    EXPECT_NE(myRankId(), 1);
+    EXPECT_EQ(numRanks(newComm), 3);
 
     store.updateComm(newComm);
 
@@ -76,6 +75,7 @@ TEST(ReStoreTest, EndToEnd_SingleFailure) {
     ReStore::block_id_t firstBlockId = numBlocksPerRank * static_cast<size_t>(myRankId(newComm))
                                        + std::min(numRanksWithMoreBlocks, static_cast<size_t>(myRankId(newComm)));
     ReStore::block_id_t numBlocksReceived = 0;
+    EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
     store.pushBlocks(
         requests, [&dataReceived, &numBlocksReceived,
                    firstBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
@@ -104,17 +104,19 @@ int main(int argc, char** argv) {
     // Set errorhandler to return so we have a chance to mitigate failures
     MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
-    // // Add object that will finalize MPI on exit; Google Test owns this pointer
-    // ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
+    if constexpr (SIMULATE_FAILURES) {
+        // Add object that will finalize MPI on exit; Google Test owns this pointer
+        ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
 
-    // // Get the event listener list.
-    // ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
+        // Get the event listener list.
+        ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
 
-    // // Remove default listener: the default printer and the default XML printer
-    // ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
+        // Remove default listener: the default printer and the default XML printer
+        ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
 
-    // // Adds MPI listener; Google Test owns this pointer
-    // listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+        // Adds MPI listener; Google Test owns this pointer
+        listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+    }
 
     int result = RUN_ALL_TESTS();
 

@@ -34,7 +34,6 @@ for file in "$tmpdir"/*.ec; do
     else
         echo "Rank returned $ec"
     fi
-    cat "$tmpdir"/*.ec
 done
 
 # Clean up and return

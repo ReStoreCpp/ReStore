@@ -49,7 +49,7 @@ struct AwesomeDataType {
     }
 };
 
-TEST(ReStoreTest, EndToEnd_ComplexDataType) {
+TEST_F(ReStoreTestWithFailures, ComplexDataType) {
     // Each rank submits different data. The replication level is set to 3. There are two rank failures.
     // We use a struct as a data type in this test case.
 
@@ -95,17 +95,14 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
         asserting_cast<ReStore::block_id_t>(numRanks()) * data.size());
 
     // Two failures
-    constexpr int failingRank1 = 1;
-    constexpr int failingRank2 = 2;
-    failRank(failingRank1);
-    failRank(failingRank2);
-    ASSERT_NE(myRankId(), failingRank1);
-    ASSERT_NE(myRankId(), failingRank2);
-
-    auto newComm = getFixedCommunicator();
+    EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
+    auto newComm = _rankFailureManager.failRanks({1, 2});
+    EXIT_IF_FAILED(_rankFailureManager.iFailed());
+    EXPECT_NE(myRankId(), 1);
+    EXPECT_NE(myRankId(), 2);
+    EXPECT_EQ(numRanks(newComm), 2);
 
     store.updateComm(newComm);
-    assert(numRanks(newComm) == 2);
 
     size_t              numBlocks              = asserting_cast<ReStore::block_id_t>(numRanks()) * data.size();
     size_t              numBlocksPerRank       = numBlocks / static_cast<size_t>(numRanks(newComm));
@@ -127,6 +124,7 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
     ReStore::block_id_t          firstBlockId = numBlocksPerRank * static_cast<size_t>(myRankId(newComm))
                                        + std::min(numRanksWithMoreBlocks, static_cast<size_t>(myRankId(newComm)));
     ReStore::block_id_t numBlocksReceived = 0;
+    EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
     store.pushBlocks(
         requests, [&dataReceived, &numBlocksReceived,
                    firstBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
@@ -148,7 +146,9 @@ TEST(ReStoreTest, EndToEnd_ComplexDataType) {
         EXPECT_EQ(allData[index + firstBlockId], dataReceived[index]);
     }
 
-    assert(numRanks(newComm) == 2);
+    if constexpr (!SIMULATE_FAILURES) {
+        assert(numRanks(newComm) == 2);
+    }
 }
 
 int main(int argc, char** argv) {
@@ -160,17 +160,19 @@ int main(int argc, char** argv) {
     // Set errorhandler to return so we have a chance to mitigate failures
     MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
-    // // Add object that will finalize MPI on exit; Google Test owns this pointer
-    // ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
+    if constexpr (SIMULATE_FAILURES) {
+        // Add object that will finalize MPI on exit; Google Test owns this pointer
+        ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
 
-    // // Get the event listener list.
-    // ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
+        // Get the event listener list.
+        ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
 
-    // // Remove default listener: the default printer and the default XML printer
-    // ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
+        // Remove default listener: the default printer and the default XML printer
+        ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
 
-    // // Adds MPI listener; Google Test owns this pointer
-    // listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+        // Adds MPI listener; Google Test owns this pointer
+        listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+    }
 
     int result = RUN_ALL_TESTS();
 
