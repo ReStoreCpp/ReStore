@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 #include <memory>
 #include <mpi.h>
-#include <mpi/mpi.h>
 #include <numeric>
 #include <optional>
 #include <vector>
