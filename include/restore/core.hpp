@@ -117,6 +117,9 @@ class ReStore {
         SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock, size_t totalNumberOfBlocks,
         bool canBeParallelized = false // not supported yet
     ) {
+        if (_offsetMode == OffsetMode::lookUpTable) {
+            throw std::runtime_error("LUT mode is not implemented yet.");
+        }
         static_assert(
             std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream&>(),
             "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream&");
@@ -155,13 +158,12 @@ class ReStore {
 
             // Store the received blocks into our local block storage
             comm.parseAllIncomingMessages(
-                receivedMessages,
-                [this](
-                    block_id_t blockId, const std::byte* data, size_t lengthInBytes,
-                    ReStoreMPI::current_rank_t srcRank) {
+                receivedMessages, [this](
+                                      block_id_t blockId, const std::byte* data, size_t lengthInBytes,
+                                      ReStoreMPI::current_rank_t srcRank) {
                     UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
                     assert(lengthInBytes == _constOffset);
-                    UNUSED(srcRank);       // We simply do not need this right now
+                    UNUSED(srcRank); // We simply do not need this right now
                     this->_serializedBlocks->writeBlock(blockId, data);
                 });
         } catch (ReStoreMPI::FaultException& e) {
@@ -221,6 +223,9 @@ class ReStore {
         HandleSerializedBlockFunction                                     handleSerializedBlock,
         bool                                                              canBeParallelized = false // not supported yet
     ) {
+        if (_offsetMode == OffsetMode::lookUpTable) {
+            throw std::runtime_error("LUT mode is not implemented yet.");
+        }
         UNUSED(canBeParallelized);
         const auto [sendBlockRanges, recvBlockRanges] =
             getSendRecvBlockRanges(blockRanges, _blockDistribution.get(), _mpiContext);
