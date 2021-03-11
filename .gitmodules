@@ -7,3 +7,6 @@
 [submodule "extern/cxxopts"]
 	path = extern/cxxopts
 	url = https://github.com/jarro2783/cxxopts.git
+[submodule "extern/gtest-mpi-listener"]
+	path = extern/gtest-mpi-listener
+	url = https://github.com/LLNL/gtest-mpi-listener.git
