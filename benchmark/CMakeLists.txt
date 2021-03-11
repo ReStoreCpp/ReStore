@@ -12,9 +12,22 @@ set_target_properties(gtest_main PROPERTIES FOLDER extern)
 set_target_properties(gmock PROPERTIES FOLDER extern)
 set_target_properties(gmock_main PROPERTIES FOLDER extern)
 
+# TODO Get rid of the googletest and googlemock dependencies
+
+# simulate-failures-until-data-loss
 set(SIM_TILL_DATA_LOSS_TARGET "simulate-failures-until-data-loss")
 add_executable(${SIM_TILL_DATA_LOSS_TARGET} simulate_failures_until_data_loss.cpp)
 target_include_directories(${SIM_TILL_DATA_LOSS_TARGET} SYSTEM PRIVATE ../extern/)
 target_include_directories(${SIM_TILL_DATA_LOSS_TARGET} SYSTEM PRIVATE ../include/)
 target_link_libraries(${SIM_TILL_DATA_LOSS_TARGET} gtest gmock "ReStore::ReStore;cppitertools;cxxopts")
+target_compile_options(${SIM_TILL_DATA_LOSS_TARGET} PRIVATE -O2 "${WARNING_FLAGS}")
+
+# microbenchmarks
+add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
+set(MICROBENCHMARKS_TARGET "microbenchmarks")
+add_executable(${MICROBENCHMARKS_TARGET} microbenchmarks.cpp)
+target_include_directories(${MICROBENCHMARKS_TARGET} SYSTEM PRIVATE ../extern/)
+target_include_directories(${MICROBENCHMARKS_TARGET} SYSTEM PRIVATE ../include/)
+add_subdirectory(../extern/googlebenchmark ${CMAKE_CURRENT_BINARY_DIR}/../googlebenchmark)
+target_link_libraries(${MICROBENCHMARKS_TARGET} "ReStore::ReStore;benchmark::benchmark")
 target_compile_options(${SIM_TILL_DATA_LOSS_TARGET} PRIVATE -O2 "${WARNING_FLAGS}")
