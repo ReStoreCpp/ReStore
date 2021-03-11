@@ -11,9 +11,9 @@ jobs:
     - uses: actions/checkout@v2
     - name: mkdir
       run: mkdir build && cd build
-    - name: cmake
+    - name: cd build && cmake
       run: cmake .. -DCMAKE_BUILD_TYPE=Debug -DSIMULATE_FAILURES=ON
     - name: make
-      run: make
+      run: make all
     - name: make check
       run: make check
