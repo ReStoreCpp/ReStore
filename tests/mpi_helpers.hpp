@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <gtest/gtest.h>
 #include <mpi.h>
 #include <signal.h>
 
@@ -20,7 +21,7 @@ int numRanks(MPI_Comm _comm = MPI_COMM_WORLD) {
 
 void failRank(int rankId) {
     if (myRankId() == rankId) {
-        //raise(SIGKILL);
+        // raise(SIGKILL);
         exit(EXIT_SIMULATED_FAILURE);
     }
 }
