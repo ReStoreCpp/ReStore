@@ -9,10 +9,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: ulfm
+      run: git clone --recursive https://bitbucket.org/icldistcomp/ulfm2.git && cd ulfm2 && ./configure --prefix="$HOME/ulfm" --enable-mpi-fortran=no --with-pmi2 --with-ucx=no && make -j && make install
     - name: mkdir
       run: mkdir build && cd build
     - name: cmake
-      run: cd build && cmake .. -DCMAKE_BUILD_TYPE=Debug -DSIMULATE_FAILURES=ON
+      run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=Debug -DSIMULATE_FAILURES=ON
     - name: make
       run: make all
     - name: make check
