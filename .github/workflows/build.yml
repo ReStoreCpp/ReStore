@@ -36,6 +36,8 @@ jobs:
       run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-mode }} -DSIMULATE_FAILURES=${{ matrix.compiler.failure-simulation }} -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }}
     - name: make
       run: cd build && make -j all
+    - name: two-failure-test
+      run: tests/mpi_test_wrapper.sh ~/ulfm/bin/mpirun 4y build/tests/test_restore_end_to_end_two_failures
     - name: make check
       if: (matrix.compiler.name == 'Clang-simulated' && matrix.build-mode == 'Release') || (matrix.compiler.name == 'GNU-real' && matrix.build-mode == 'Debug')
       run: cd build && make check
