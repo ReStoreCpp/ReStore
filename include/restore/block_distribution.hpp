@@ -62,11 +62,12 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
 
             size_t blocksPerRange               = _blockDistribution->blocksPerRange();
             size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
-            size_t numBlocks                    = _blockDistribution->numBlocks();
 
             assert(blocksPerRange > 0);
             assert(blocksPerRange <= _blockDistribution->numBlocks());
-            assert(blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock == numBlocks);
+            assert(
+                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
+                == _blockDistribution->numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
             size_t start = std::numeric_limits<size_t>::max();
@@ -84,11 +85,12 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
 
             size_t blocksPerRange               = _blockDistribution->blocksPerRange();
             size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
-            size_t numBlocks                    = _blockDistribution->numBlocks();
 
             assert(blocksPerRange > 0);
             assert(blocksPerRange <= _blockDistribution->numBlocks());
-            assert(blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock == numBlocks);
+            assert(
+                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
+                == _blockDistribution->numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
             size_t length = std::numeric_limits<size_t>::max();
