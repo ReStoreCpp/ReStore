@@ -38,5 +38,5 @@ jobs:
     - name: make
       run: cd build && make -j all
     - name: make check
-      if: (matrix.compiler.name == Clang && matrix.failure-simulation == OFF) || (matrix.compiler.name == GNU && matrix.failure-simulation == ON)
+      if: (matrix.compiler.name == "Clang" && matrix.failure-simulation == "OFF") || (matrix.compiler.name == "GNU" && matrix.failure-simulation == "ON")
       run: cd build && make check
