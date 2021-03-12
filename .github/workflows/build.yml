@@ -15,8 +15,8 @@ jobs:
     strategy:
       matrix:
         build:
-          - { name: Clang-debug-real, cc: clang, cxx: clang++, simulate-failures: OFF, build-mode: Debug }
-          - { name: GNU-release-simulated, cc: gcc, cxx: g++ , simulate-failures: ON, build-mode: Release}
+          - { name: Clang-release-real, cc: clang, cxx: clang++, simulate-failures: OFF, build-mode: Release }
+          - { name: GNU-debug-simulated, cc: gcc, cxx: g++ , simulate-failures: ON, build-mode: Debug}
     steps:
     - uses: actions/checkout@v2
     - name: submodules
