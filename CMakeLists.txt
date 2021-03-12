@@ -42,6 +42,7 @@ cmake_dependent_option("${PROJECT_NAME}_BUILD_TESTS" "Build tests for ${PROJECT_
 option("${PROJECT_NAME}_BUILD_BENCHMARKS" "Build examples" OFF)
 option("${PROJECT_NAME}_BUILD_EXAMPLES" "Build examples" OFF)
 option("SIMULATE_FAILURES" "Simulate node failues (for example when running unit test)." OFF)
+option("WARNINGS_ARE_ERRORS" "Treat warnings as errors." ON)
 
 # TODO Not all libraries are needed for each target (benchmarks, tests, library) -> The user should be able to build the library without needing all theo ther libraries (gmock, gtest, cxxopts, cppitertools, ...)
 # Libraries
@@ -128,6 +129,13 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         "-Wsuggest-attribute=const"
         "-Wsuggest-attribute=noreturn"
         "-Wsuggest-override"
+    )
+endif()
+
+if(WARNINGS_ARE_ERRORS)
+  list(
+    APPEND WARNING_FLAGS
+    "-Werror"
     )
 endif()
 

@@ -100,13 +100,14 @@ inline void handleReceivedBlocks(
         std::is_invocable<HandleSerializedBlockFunction, const std::byte*, size_t, block_id_t>(),
         "HandleSerializedBlockFunction must be invocable as (const std::byte*, size_t, "
         "block_id_t)");
-    auto sortByRankAndBegin = [](const block_range_request_t& lhs, const block_range_request_t& rhs) {
-        bool ranksLess   = lhs.second < rhs.second;
-        bool ranksEqual  = lhs.second == rhs.second;
-        bool blockIdLess = lhs.first.first < rhs.first.first;
-        return ranksLess || (ranksEqual && blockIdLess);
-    };
-    assert(std::is_sorted(recvBlockRanges.begin(), recvBlockRanges.end(), sortByRankAndBegin));
+    assert(std::is_sorted(
+        recvBlockRanges.begin(), recvBlockRanges.end(),
+        [](const block_range_request_t& lhs, const block_range_request_t& rhs) {
+            bool ranksLess   = lhs.second < rhs.second;
+            bool ranksEqual  = lhs.second == rhs.second;
+            bool blockIdLess = lhs.first.first < rhs.first.first;
+            return ranksLess || (ranksEqual && blockIdLess);
+        }));
     assert(std::is_sorted(
         recvMessages.begin(), recvMessages.end(),
         [](const ReStoreMPI::RecvMessage& lhs, const ReStoreMPI::RecvMessage& rhs) {
@@ -119,6 +120,7 @@ inline void handleReceivedBlocks(
         assert(recvMessage.srcRank == recvBlockRanges[currentIndexRecvBlockRanges].second);
         // TODO: Implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
+        UNUSED(_offsetMode);
         size_t currentIndexRecvMessage = 0;
         while (currentIndexRecvBlockRanges < recvBlockRanges.size()
                && recvBlockRanges[currentIndexRecvBlockRanges].second == recvMessage.srcRank) {
