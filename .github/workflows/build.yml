@@ -39,5 +39,5 @@ jobs:
     - name: make check
       if: (matrix.compiler.name == 'Clang-simulated' && matrix.build-mode == 'Release') || (matrix.compiler.name == 'GNU-real' && matrix.build-mode == 'Debug')
       run: cd build && make check
-    -name: two-failure-test
+    - name: two-failure-test
       run: ~/ulfm/bin/mpirun -n 4 build/tests/test_restore_end_to_end_two_failures
