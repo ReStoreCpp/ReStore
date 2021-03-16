@@ -34,7 +34,7 @@ jobs:
     - name: mkdir
       run: mkdir build && cd build
     - name: cmake
-      run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-mode }} -DSIMULATE_FAILURES=${{ matrix.compiler.failure-simulation }} -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }}
+      run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-mode }} -DSIMULATE_FAILURES=${{ matrix.compiler.failure-simulation }} -DWARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }}
     - name: make
       run: cd build && make -j all
     - name: make check
