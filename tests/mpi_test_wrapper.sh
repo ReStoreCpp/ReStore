@@ -18,10 +18,11 @@ EOF
 chmod +x "$tmpdir/output_exit_code.sh"
 
 # Run the test executable under MPI with the given number of ranks.
-"$MPI_EXECUTABLE" -n "$NUMBER_OF_RANKS" "$tmpdir/output_exit_code.sh" "$TEST_EXECUTABLE"
+"$MPI_EXECUTABLE" -n "$NUMBER_OF_RANKS" "--oversubscribe" "$tmpdir/output_exit_code.sh" "$TEST_EXECUTABLE"
 
 # Check the return codes, returning 1 if at least one of them failed
-my_exit_code=0
+my_exit_code=$?
+echo "returned $my_exit_code"
 for file in "$tmpdir"/*.ec; do
     ec=$(cat "$file")
     if [[ "$ec" != "0" && "$ec" != "" ]]; then

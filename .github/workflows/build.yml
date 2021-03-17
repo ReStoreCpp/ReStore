@@ -1,0 +1,42 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler:
+          - { name: Clang-simulated, cc: clang, cxx: clang++, failure-simulation: ON}
+          - { name: GNU-real, cc: gcc, cxx: g++, failure-simulation: OFF}
+        build-mode: [Debug, Release]
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@v2
+    - name: submodules
+      run: git submodule init && git submodule update
+    - uses: actions/cache@v2
+      id: ulfm-cache
+      with:
+        path: ~/ulfm
+        key: ${{ runner.os }}
+    - name: ulfm
+      if: steps.ulfm-cache.outputs.cache-hit != 'true'
+      run: git clone --recursive https://bitbucket.org/icldistcomp/ulfm2.git && cd ulfm2 && ./autogen.pl && ./configure --prefix="$HOME/ulfm" --enable-mpi-fortran=no --with-pmi2 --with-ucx=no && make -j && make install
+    - name: mkdir
+      run: mkdir build && cd build
+    - name: cmake
+      run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-mode }} -DSIMULATE_FAILURES=${{ matrix.compiler.failure-simulation }} -DWARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }}
+    - name: make
+      run: cd build && make -j all
+    - name: make check
+      if: (matrix.compiler.name == 'Clang-simulated' && matrix.build-mode == 'Release') || (matrix.compiler.name == 'GNU-real' && matrix.build-mode == 'Debug')
+      run: cd build && make check
