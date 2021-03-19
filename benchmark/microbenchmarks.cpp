@@ -49,14 +49,8 @@ static void BM_submitBlocks(benchmark::State& state) {
 
         auto start = std::chrono::high_resolution_clock::now();
         store.submitBlocks(
-            [blockSize](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
-                size_t bytesWritten = 0;
-                for (auto value: range) {
-                    stream << value;
-                    bytesWritten++;
-                }
-                assert(bytesWritten == blockSize);
-                UNUSED(bytesWritten);
+            [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
+                stream.writeBytes(range.begin(), range.size());
             },
             [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
                 auto ret = data.size() == counter
@@ -86,12 +80,13 @@ auto constexpr MiB(N n) {
     return n * 1024 * KiB(1);
 }
 
-BENCHMARK(BM_submitBlocks) ///
-    ->UseManualTime()      ///
+BENCHMARK(BM_submitBlocks)          ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
     ->ArgsProduct({
-        {8, KiB(1), MiB(1)},                          // block sizes
-        {2, 3, 4},                                    // replication level
-        {MiB(1), MiB(16), MiB(32), MiB(64), MiB(128)} // bytes per rank
+        {8, KiB(1), MiB(1)},                // block sizes
+        {2, 3, 4},                          // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)} //, MiB(128)} // bytes per rank
     });
 
 // This reporter does nothing.
