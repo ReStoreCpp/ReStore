@@ -1,7 +1,11 @@
+#if defined(__GNUC__) && !defined (__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsuggest-override"
 #include <benchmark/benchmark.h>
 #pragma GCC diagnostic pop
+#else
+#include <benchmark/benchmark.h>
+#endif
 
 #include <cassert>
 #include <chrono>
