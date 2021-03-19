@@ -9,7 +9,7 @@
 	url = https://github.com/jarro2783/cxxopts.git
 [submodule "extern/gtest-mpi-listener"]
 	path = extern/gtest-mpi-listener
-	url = https://github.com:LLNL/gtest-mpi-listener.git
+	url = https://github.com/LLNL/gtest-mpi-listener.git
 [submodule "extern/googlebenchmark"]
 	path = extern/googlebenchmark
 	url = https://github.com/google/benchmark
