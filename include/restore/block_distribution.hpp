@@ -28,7 +28,7 @@ namespace ReStore {
 //   - If the replication level is 3, and the rank id of the first rank which stores a particular block range is
 //     fid, the block is stored on fid, fid+s and fid+2s.
 template <typename MPIContext = ReStoreMPI::MPIContext>
-class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<MPIContext>> {
+class BlockDistribution {
     public:
     // BlockRange
     //
@@ -41,10 +41,10 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
         //
         // Build a block range from the given block id. We need to know the number of blocks and the number ranges
         // to compute the starting block and number of block in this BlockRange.
-        BlockRange(size_t range_id, const std::shared_ptr<const BlockDistribution> blockDistribution)
+        BlockRange(size_t range_id, const BlockDistribution& blockDistribution)
             : _id(range_id),
               _blockDistribution(blockDistribution) {
-            if (range_id > _blockDistribution->numRanges()) {
+            if (range_id > _blockDistribution.numRanges()) {
                 throw std::runtime_error("This range does not exists (id too large).");
             }
         }
@@ -58,16 +58,14 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
         BlockRange& operator=(BlockRange&&) = default;
 
         block_id_t start() const {
-            assert(_blockDistribution);
-
-            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
-            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
+            size_t blocksPerRange               = _blockDistribution.blocksPerRange();
+            size_t numRangesWithAdditionalBlock = _blockDistribution.numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution->numBlocks());
+            assert(blocksPerRange <= _blockDistribution.numBlocks());
             assert(
-                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
-                == _blockDistribution->numBlocks());
+                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
+                == _blockDistribution.numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
             size_t start = std::numeric_limits<size_t>::max();
@@ -81,16 +79,14 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
         }
 
         size_t length() const {
-            assert(_blockDistribution);
-
-            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
-            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
+            size_t blocksPerRange               = _blockDistribution.blocksPerRange();
+            size_t numRangesWithAdditionalBlock = _blockDistribution.numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution->numBlocks());
+            assert(blocksPerRange <= _blockDistribution.numBlocks());
             assert(
-                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
-                == _blockDistribution->numBlocks());
+                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
+                == _blockDistribution.numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
             size_t length = std::numeric_limits<size_t>::max();
@@ -135,8 +131,8 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
         }
 
         private:
-        size_t                                         _id;
-        const std::shared_ptr<const BlockDistribution> _blockDistribution;
+        size_t                   _id;
+        const BlockDistribution& _blockDistribution;
     };
 
     BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
@@ -183,11 +179,7 @@ class BlockDistribution : public std::enable_shared_from_this<BlockDistribution<
     //
     // A factory method to build a BlockRange by its id.
     BlockRange blockRangeById(size_t rangeId) const {
-        try {
-            return BlockRange(rangeId, this->shared_from_this());
-        } catch (std::bad_weak_ptr const&) {
-            throw std::runtime_error("The BlockDistribution object must be owned by smart pointer.");
-        }
+        return BlockRange(rangeId, *this);
     }
 
     // rangeOfBlock()

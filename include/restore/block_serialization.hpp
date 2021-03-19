@@ -16,38 +16,59 @@ namespace ReStore {
 class SerializedBlockStoreStream {
     public:
     SerializedBlockStoreStream(
-        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>& buffers,
-        std::vector<ReStoreMPI::current_rank_t>&                                ranks)
-        : _buffers(buffers),
-          _ranks(ranks),
-          _bytesWritten(0) {
-        if (_ranks.size() == 0) {
+        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<unsigned char>>& buffers,
+        std::vector<ReStoreMPI::current_rank_t>&                                    ranks)
+        : _bytesWritten(0) {
+        if (ranks.size() == 0) {
             throw std::runtime_error("The ranks array is empty.");
         }
+
+        _outputBuffers.reserve(ranks.size());
+
+        for (auto rank: ranks) {
+            assert(rank >= 0);
+            auto buffer = buffers.find(rank);
+            if (buffer == buffers.end()) {
+                auto& bufferRef = buffers[rank] = std::vector<unsigned char>();
+                _outputBuffers.push_back(&bufferRef);
+            } else {
+                _outputBuffers.push_back(&(buffer->second));
+            }
+        }
+        assert(_outputBuffers.size() == ranks.size());
     }
 
     // Keep the user from copying or moving our SerializedBlockStore object we pass to him.
     SerializedBlockStoreStream(const SerializedBlockStoreStream&) = delete;
-    SerializedBlockStoreStream(SerializedBlockStoreStream&&) = delete;
+    SerializedBlockStoreStream(SerializedBlockStoreStream&&)      = delete;
     SerializedBlockStoreStream& operator=(const SerializedBlockStoreStream&) = delete;
     SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&) = delete;
+
+    void reserve(size_t n) {
+        for (auto& buffer: _outputBuffers) {
+            buffer->reserve(n);
+        }
+    }
 
     template <class T>
     SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
 
-        auto src = reinterpret_cast<const std::byte*>(&value);
-        for (auto&& rank: _ranks) {
-            if (_buffers.find(rank) == _buffers.end()) {
-                _buffers[rank] = std::vector<std::byte>();
-            }
-            assert(rank >= 0);
-            assert(_buffers.find(rank) != _buffers.end());
-            _buffers[rank].insert(_buffers[rank].end(), src, src + sizeof(T));
+        auto src = reinterpret_cast<const unsigned char*>(&value);
+        for (auto buffer: _outputBuffers) {
+            buffer->insert(buffer->end(), src, src + sizeof(T));
         }
         _bytesWritten += sizeof(T);
 
         return *this;
+    }
+
+    template <class InputIterator>
+    void writeBytes(InputIterator begin, size_t n) {
+        for (auto buffer: _outputBuffers) {
+            buffer->insert(buffer->end(), begin, begin + n);
+        }
+        _bytesWritten += n;
     }
 
     size_t bytesWritten() const noexcept {
@@ -55,9 +76,8 @@ class SerializedBlockStoreStream {
     }
 
     private:
-    std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>& _buffers; // One buffer per rank
-    std::vector<ReStoreMPI::current_rank_t>&                                _ranks;   // Which ranks to send to
-    size_t                                                                  _bytesWritten;
+    std::vector<std::vector<unsigned char>*> _outputBuffers;
+    size_t                                   _bytesWritten;
 };
 
 template <typename MPIContext = ReStoreMPI::MPIContext>
