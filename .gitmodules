@@ -1,15 +1,15 @@
 [submodule "extern/googletest"]
 	path = extern/googletest
 	url = https://github.com/google/googletest.git
-[submodule "extern/gtest-mpi-listener"]
-	path = extern/gtest-mpi-listener
-	url = https://github.com:LLNL/gtest-mpi-listener.git
 [submodule "extern/cppitertools"]
 	path = extern/cppitertools
 	url = https://github.com/ryanhaining/cppitertools.git
 [submodule "extern/cxxopts"]
 	path = extern/cxxopts
 	url = https://github.com/jarro2783/cxxopts.git
+[submodule "extern/gtest-mpi-listener"]
+	path = extern/gtest-mpi-listener
+	url = https://github.com:LLNL/gtest-mpi-listener.git
 [submodule "extern/googlebenchmark"]
 	path = extern/googlebenchmark
 	url = https://github.com/google/benchmark
