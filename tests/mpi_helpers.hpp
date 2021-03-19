@@ -1,9 +1,10 @@
+#include <cassert>
 #include <cstdlib>
 #include <mpi.h>
 #include <restore/mpi_context.hpp>
 #include <signal.h>
+#include <iostream>
 
-#include <gtest/gtest.h>
 #include <mpi-ext.h>
 
 constexpr int EXIT_SIMULATED_FAILURE = 42;
@@ -130,7 +131,7 @@ class RankFailureManager {
         rc = MPI_Barrier(_comm);
         MPI_Error_class(rc, &ec);
 
-        EXPECT_TRUE((ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_REVOKED));
+        assert((ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_REVOKED));
         if (ec == MPI_ERR_PROC_FAILED) {
             MPIX_Comm_revoke(_comm);
         }
@@ -138,7 +139,7 @@ class RankFailureManager {
         // Build a new communicator without the failed ranks
         MPI_Comm newComm;
         rc = MPIX_Comm_shrink(_comm, &newComm);
-        EXPECT_EQ(MPI_SUCCESS, rc);
+        assert(MPI_SUCCESS == rc);
         // As for the ULFM documentation, freeing the communicator is recommended but will probably
         // not succeed. This is why we do not check for an error here.
         // I checked that --mca mpi_show_handle_leaks 1 does not show a leaked handle
@@ -150,19 +151,4 @@ class RankFailureManager {
     MPI_Comm _comm;
     bool     _iFailed;
     bool     _noMoreCollectives;
-};
-
-class ReStoreTestWithFailures : public ::testing::Test {
-    protected:
-    RankFailureManager _rankFailureManager;
-
-    ReStoreTestWithFailures() : _rankFailureManager(MPI_COMM_WORLD) {}
-
-    virtual ~ReStoreTestWithFailures() override {}
-
-    virtual void SetUp() override {}
-
-    virtual void TearDown() override {
-        _rankFailureManager.endOfTestcase();
-    }
 };
