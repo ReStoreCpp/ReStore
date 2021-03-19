@@ -1,4 +1,8 @@
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsuggest-override"
 #include <benchmark/benchmark.h>
+#pragma GCC diagnostic pop
+
 #include <cassert>
 #include <chrono>
 #include <cppitertools/range.hpp>
@@ -7,8 +11,6 @@
 #include <../tests/mpi_helpers.hpp>
 #include <restore/core.hpp>
 #include <restore/helpers.hpp>
-
-#include <dbg.h>
 
 using iter::range;
 
@@ -23,7 +25,8 @@ static void BM_submitBlocks(benchmark::State& state) {
     assert(bytesPerRank % blockSize == 0);
     size_t blocksPerRank = bytesPerRank / blockSize;
 
-    using BlockType = std::vector<uint8_t>;
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
 
     // Measurement
     for (auto _: state) {
@@ -36,7 +39,8 @@ static void BM_submitBlocks(benchmark::State& state) {
             data.emplace_back();
             data.back().reserve(blockSize);
             for (uint64_t increment: range(0ul, blockSize)) {
-                data.back().push_back((base - increment) % std::numeric_limits<uint8_t>::max());
+                data.back().push_back(
+                    static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
             }
             assert(data.back().size() == blockSize);
         }
@@ -94,11 +98,11 @@ BENCHMARK(BM_submitBlocks)          ///
 class NullReporter : public ::benchmark::BenchmarkReporter {
     public:
     NullReporter() {}
-    virtual bool ReportContext(const Context&) {
+    virtual bool ReportContext(const Context&) override {
         return true;
     }
-    virtual void ReportRuns(const std::vector<Run>&) {}
-    virtual void Finalize() {}
+    virtual void ReportRuns(const std::vector<Run>&) override {}
+    virtual void Finalize() override {}
 };
 
 // The main is rewritten to allow for MPI initializing and for selecting a reporter according to the process rank.
