@@ -58,7 +58,7 @@ static void BM_submitBlocks(benchmark::State& state) {
         auto start = std::chrono::high_resolution_clock::now();
         store.submitBlocks(
             [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
-                stream.writeBytes(range.begin(), range.size());
+                stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
             },
             [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
                 auto ret = data.size() == counter

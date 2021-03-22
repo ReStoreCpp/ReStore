@@ -21,7 +21,7 @@ class BlockSubmissionCommunication {
     // If the user did his homework and designed a BlockDistribution which requires few messages to be send
     // we do not want to allocate all those unneeded send buffers... that's why we use a map here instead
     // of a vector.
-    using SendBuffers = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<unsigned char>>;
+    using SendBuffers = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>;
 
     using BlockDistr = BlockDistribution<MPIContext>;
 

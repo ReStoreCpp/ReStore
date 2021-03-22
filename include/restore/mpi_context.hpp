@@ -25,11 +25,11 @@ struct SendMessage {
     static_assert(
         sizeof(std::byte) == sizeof(char),
         "byte and char have different sizes. This means restore will probably not work and show undefined behavior.");
-    const unsigned char* data;
-    int                  size;
-    current_rank_t       destRank;
+    const std::byte* data;
+    int              size;
+    current_rank_t   destRank;
 
-    SendMessage(const unsigned char* _data, const int _size, const current_rank_t _destRank) noexcept
+    SendMessage(const std::byte* _data, const int _size, const current_rank_t _destRank) noexcept
         : data(_data),
           size(_size),
           destRank(_destRank) {}

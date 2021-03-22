@@ -16,8 +16,8 @@ namespace ReStore {
 class SerializedBlockStoreStream {
     public:
     SerializedBlockStoreStream(
-        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<unsigned char>>& buffers,
-        std::vector<ReStoreMPI::current_rank_t>&                                    ranks)
+        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>& buffers,
+        std::vector<ReStoreMPI::current_rank_t>&                                ranks)
         : _bytesWritten(0) {
         if (ranks.size() == 0) {
             throw std::runtime_error("The ranks array is empty.");
@@ -29,7 +29,7 @@ class SerializedBlockStoreStream {
             assert(rank >= 0);
             auto buffer = buffers.find(rank);
             if (buffer == buffers.end()) {
-                auto& bufferRef = buffers[rank] = std::vector<unsigned char>();
+                auto& bufferRef = buffers[rank] = std::vector<std::byte>();
                 _outputBuffers.push_back(&bufferRef);
             } else {
                 _outputBuffers.push_back(&(buffer->second));
@@ -54,7 +54,7 @@ class SerializedBlockStoreStream {
     SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
 
-        auto src = reinterpret_cast<const unsigned char*>(&value);
+        auto src = reinterpret_cast<const std::byte*>(&value);
         for (auto buffer: _outputBuffers) {
             buffer->insert(buffer->end(), src, src + sizeof(T));
         }
@@ -63,8 +63,7 @@ class SerializedBlockStoreStream {
         return *this;
     }
 
-    template <class InputIterator>
-    void writeBytes(InputIterator begin, size_t n) {
+    void writeBytes(const std::byte* begin, size_t n) {
         for (auto buffer: _outputBuffers) {
             buffer->insert(buffer->end(), begin, begin + n);
         }
@@ -76,8 +75,8 @@ class SerializedBlockStoreStream {
     }
 
     private:
-    std::vector<std::vector<unsigned char>*> _outputBuffers;
-    size_t                                   _bytesWritten;
+    std::vector<std::vector<std::byte>*> _outputBuffers;
+    size_t                               _bytesWritten;
 };
 
 template <typename MPIContext = ReStoreMPI::MPIContext>

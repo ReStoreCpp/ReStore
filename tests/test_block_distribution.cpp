@@ -29,7 +29,7 @@ TEST(BlockDistributionTest, BlockRange) {
     EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly(ReturnArg<0>());
 
     {
-        auto blockDistribution = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+        auto blockDistribution = ReStore::BlockDistribution<MPIContextMock>(
             100,  // number of ranks
             1000, // number of blocks
             3,    // replication level,
@@ -39,7 +39,7 @@ TEST(BlockDistributionTest, BlockRange) {
     }
 
     {
-        auto blockDistribution = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+        auto blockDistribution = ReStore::BlockDistribution<MPIContextMock>(
             10,  // number of ranks
             100, // number of blocks
             3,   // replication level,
@@ -61,7 +61,7 @@ TEST(BlockDistributionTest, BlockRange) {
     }
 
     {
-        auto blockDistribution = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+        auto blockDistribution = ReStore::BlockDistribution<MPIContextMock>(
             10,  // number of ranks
             100, // number of blocks
             3,   // replication level,
@@ -86,7 +86,7 @@ TEST(BlockDistributionTest, BlockRange) {
     }
 
     {
-        auto blockDistribution = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+        auto blockDistribution = ReStore::BlockDistribution<MPIContextMock>(
             3,  // number of ranks
             10, // number of blocks
             2,  // replication level,
@@ -133,7 +133,7 @@ TEST(BlockDistributionTest, BlockRange) {
     }
 
     {
-        auto blockDistribution = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+        auto blockDistribution = ReStore::BlockDistribution<MPIContextMock>(
             4, // number of ranks
             6, // number of blocks
             2, // replication level,
@@ -177,12 +177,12 @@ TEST(BlockDistributionTest, BlockRange) {
     }
 
     {
-        auto blockDistribution1 = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+        auto blockDistribution1 = ReStore::BlockDistribution<MPIContextMock>(
             50,   // number of ranks
             6000, // number of blocks
             2,    // replication level,
             mpiContext);
-        auto blockDistribution2 = std::make_shared<ReStore::BlockDistribution<MPIContextMock>>(
+        auto blockDistribution2 = ReStore::BlockDistribution<MPIContextMock>(
             60,   // number of ranks
             6000, // number of blocks
             2,    // replication level,
