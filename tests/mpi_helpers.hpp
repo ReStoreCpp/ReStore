@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cassert>
 #include <cstdlib>
 #include <mpi.h>
@@ -6,7 +8,6 @@
 #include <iostream>
 
 #include <mpi-ext.h>
-#include <gtest/gtest.h>
 
 constexpr int EXIT_SIMULATED_FAILURE = 42;
 
@@ -154,17 +155,3 @@ class RankFailureManager {
     bool     _noMoreCollectives;
 };
 
-class ReStoreTestWithFailures : public ::testing::Test {
-    protected:
-    RankFailureManager _rankFailureManager;
-
-    ReStoreTestWithFailures() : _rankFailureManager(MPI_COMM_WORLD) {}
-
-    virtual ~ReStoreTestWithFailures() override {}
-
-    virtual void SetUp() override {}
-
-    virtual void TearDown() override {
-        _rankFailureManager.endOfTestcase();
-    }
-};

@@ -17,6 +17,7 @@
 #include "mocks.hpp"
 #include "mpi_helpers.hpp"
 #include "restore/mpi_context.hpp"
+#include "test_with_failures_fixture.hpp"
 
 using namespace ::testing;
 
