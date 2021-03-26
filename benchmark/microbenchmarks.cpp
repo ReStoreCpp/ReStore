@@ -1,10 +1,10 @@
-#if defined(__GNUC__) && !defined (__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsuggest-override"
-#include <benchmark/benchmark.h>
-#pragma GCC diagnostic pop
+#if defined(__GNUC__) && !defined(__clang__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wsuggest-override"
+    #include <benchmark/benchmark.h>
+    #pragma GCC diagnostic pop
 #else
-#include <benchmark/benchmark.h>
+    #include <benchmark/benchmark.h>
 #endif
 
 #include <cassert>
@@ -75,7 +75,7 @@ static void BM_submitBlocks(benchmark::State& state) {
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
         MPI_Allreduce(&elapsedSeconds, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         state.SetIterationTime(elapsedSeconds);
-}
+    }
 }
 
 template <typename N>
