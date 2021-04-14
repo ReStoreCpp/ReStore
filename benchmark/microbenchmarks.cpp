@@ -1,3 +1,7 @@
+#include <algorithm>
+#include <cstddef>
+#include <restore/common.hpp>
+#include <utility>
 #if defined(__GNUC__) && !defined(__clang__)
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wsuggest-override"
@@ -89,6 +93,100 @@ auto constexpr MiB(N n) {
 }
 
 BENCHMARK(BM_submitBlocks)          ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->ArgsProduct({
+        {8, KiB(1), MiB(1)},                // block sizes
+        {2, 3, 4},                          // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)} //, MiB(128)} // bytes per rank
+    });
+
+static void BM_pushBlocks(benchmark::State& state) {
+    // Each rank submits different data. The replication level is set to 3.
+
+    // Parse arguments
+    size_t   blockSize        = throwing_cast<size_t>(state.range(0));
+    uint16_t replicationLevel = throwing_cast<uint16_t>(state.range(1));
+    size_t   bytesPerRank     = throwing_cast<size_t>(state.range(2));
+
+    assert(bytesPerRank % blockSize == 0);
+    size_t blocksPerRank = bytesPerRank / blockSize;
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    // Setup
+    uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
+    size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / blockSize;
+
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(blockSize);
+        for (uint64_t increment: range(0ul, blockSize)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == blockSize);
+    }
+    assert(data.size() == blocksPerRank);
+
+    ReStore::ReStore<BlockType> store(
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize);
+
+    unsigned counter = 0;
+
+    store.submitBlocks(
+        [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
+            stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
+        },
+        [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
+            auto ret = data.size() == counter
+                           ? std::nullopt
+                           : std::make_optional(ReStore::NextBlock<BlockType>(
+                               {counter + static_cast<size_t>(myRankId()) * data.size(), data[counter]}));
+            counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair
+                       // is bound before or after the increment.
+            return ret;
+        },
+        numBlocks);
+    assert(counter == data.size() + 1);
+
+    std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, int>> blockRanges;
+    for (int rank: range(numRanks())) {
+        // Get data that was originally on the next rank
+        int                 nextRank   = (rank + 1) % numRanks();
+        ReStore::block_id_t startBlock = static_cast<size_t>(nextRank) * blocksPerRank;
+        blockRanges.emplace_back(std::make_pair(startBlock, blocksPerRank), rank);
+    }
+    auto myStartBlock = static_cast<size_t>((myRankId() + 1) % numRanks()) * blocksPerRank;
+
+    // Measurement
+    for (auto _: state) {
+        std::vector<BlockType> recvData(blocksPerRank);
+        auto                   start = std::chrono::high_resolution_clock::now();
+        store.pushBlocks(
+            blockRanges, [&recvData, myStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
+                assert(blockId >= myStartBlock);
+                auto index = blockId - myStartBlock;
+                assert(index < recvData.size());
+                assert(recvData[index].size() == 0);
+                recvData[index].insert(
+                    recvData[index].end(), reinterpret_cast<const ElementType*>(buffer),
+                    reinterpret_cast<const ElementType*>(buffer + size));
+            });
+        benchmark::DoNotOptimize(recvData.data());
+        benchmark::ClobberMemory();
+        assert(std::all_of(recvData.begin(), recvData.end(), [blockSize](const BlockType& block) {
+            return block.size() == blockSize;
+        }));
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(&elapsedSeconds, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+    }
+}
+
+BENCHMARK(BM_pushBlocks)            ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->ArgsProduct({
