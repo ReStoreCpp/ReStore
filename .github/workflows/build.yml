@@ -18,7 +18,7 @@ jobs:
           - { name: Clang-simulated, cc: clang, cxx: clang++, failure-simulation: ON}
           - { name: GNU-real, cc: gcc, cxx: g++, failure-simulation: OFF}
         build-mode: [Debug, Release]
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
     - uses: actions/checkout@v2
     - name: submodules
