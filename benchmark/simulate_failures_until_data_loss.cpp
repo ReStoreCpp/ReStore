@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
     }
 
     if (!options.count("simulation-id")) {
-        cout << "Please provie an id for this simulation." << endl;
+        cout << "Please provide an id for this simulation." << endl;
         cout << cliParser.help() << endl;
         exit(1);
     }
