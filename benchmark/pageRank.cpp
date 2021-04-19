@@ -148,9 +148,15 @@ std::vector<double> pageRank(
         //     std::cout << calcDiffL2Norm(prevPageRanks, currPageRanks, dampening) << std::endl;
         std::swap(prevPageRanks, currPageRanks);
         std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
-        for (const auto edge: edges) {
-            size_t from = static_cast<size_t>(edge.from);
-            size_t to   = static_cast<size_t>(edge.to);
+        for (size_t i = 0; i < edges.size(); ++i) {
+            const size_t from             = static_cast<size_t>(edges[i].from);
+            const size_t to               = static_cast<size_t>(edges[i].to);
+            const size_t prefetchDistance = 20;
+            if (i < edges.size() - prefetchDistance) {
+                // __builtin_prefetch(&prevPageRanks[static_cast<size_t>(edges[i + prefetchDistance].from)], 0);
+                // __builtin_prefetch(&nodeDegrees[static_cast<size_t>(edges[i + prefetchDistance].from)], 0);
+                __builtin_prefetch(&currPageRanks[static_cast<size_t>(edges[i + prefetchDistance].to)], 1);
+            }
             currPageRanks[to] += getActualPageRank(prevPageRanks[from], teleport, dampening) / nodeDegrees[from];
         }
         // TODO Make fault tolerant
@@ -214,6 +220,8 @@ int main(int argc, char** argv) {
     const double tolerance      = options["tolerance"].as<double>();
 
     auto [numVertices, numEdges, edges, nodeDegrees] = readGraph(options["graph"].as<std::string>());
+    std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
+
 
     auto start = MPI_Wtime();
     for (size_t i = 0; i < numRepititions; ++i) {
