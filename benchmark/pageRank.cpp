@@ -214,7 +214,15 @@ int main(int argc, char** argv) {
 
     auto [numVertices, numEdges, edges, nodeDegrees] = readGraph(options["graph"].as<std::string>());
 
+    auto start = MPI_Wtime();
     for (size_t i = 0; i < numRepititions; ++i) {
         pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance);
     }
+    auto end        = MPI_Wtime();
+    auto time       = end - start;
+    auto timePerRun = time / static_cast<double>(numRepititions);
+
+    std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+
+    MPI_Finalize();
 }
