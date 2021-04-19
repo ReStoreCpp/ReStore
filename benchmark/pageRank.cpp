@@ -149,8 +149,7 @@ std::vector<double> pageRank(
         for (const auto edge: edges) {
             size_t from = static_cast<size_t>(edge.from);
             size_t to   = static_cast<size_t>(edge.to);
-            currPageRanks[to] += getActualPageRank(prevPageRanks[from], n, dampening)
-                                 / getActualPageRank(nodeDegrees[from], n, dampening);
+            currPageRanks[to] += getActualPageRank(prevPageRanks[from], n, dampening) / nodeDegrees[from];
         }
         // TODO Make fault tolerant
         MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
