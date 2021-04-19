@@ -114,16 +114,17 @@ std::tuple<node_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGrap
 //     return std::sqrt(qsum);
 // }
 
-constexpr double getActualPageRank(const double storedPagerank, const node_t n, const double dampening) {
-    return (1.0 - dampening) / n + dampening * storedPagerank;
+constexpr double getActualPageRank(const double storedPagerank, const double teleport, const double dampening) {
+    return teleport + dampening * storedPagerank;
 }
 
-double calcDiffL2Norm(const std::vector<double>& lhs, const std::vector<double>& rhs, const double dampening) {
+double calcDiffL2Norm(
+    const std::vector<double>& lhs, const std::vector<double>& rhs, const double teleport, const double dampening) {
     double qsum = 0;
     assert(lhs.size() == rhs.size());
     for (node_t i = 0; i < static_cast<node_t>(lhs.size()); ++i) {
-        double diff = getActualPageRank(lhs[static_cast<size_t>(i)], static_cast<int>(lhs.size()), dampening)
-                      - getActualPageRank(rhs[static_cast<size_t>(i)], static_cast<int>(lhs.size()), dampening);
+        double diff = getActualPageRank(lhs[static_cast<size_t>(i)], teleport, dampening)
+                      - getActualPageRank(rhs[static_cast<size_t>(i)], teleport, dampening);
         qsum += diff * diff;
     }
     return sqrt(qsum);
@@ -140,8 +141,9 @@ std::vector<double> pageRank(
     std::vector<double> prevPageRanks(static_cast<size_t>(numVertices), 0);
     std::vector<double> currPageRanks(static_cast<size_t>(numVertices), 1 / (double)numVertices);
     std::vector<double> tempPageRanks(static_cast<size_t>(numVertices), 0);
-    const int           n = static_cast<int>(nodeDegrees.size());
-    while (calcDiffL2Norm(prevPageRanks, currPageRanks, dampening) > tol) {
+    const int           n        = static_cast<int>(nodeDegrees.size());
+    const double        teleport = (1.0 - dampening) / n;
+    while (calcDiffL2Norm(prevPageRanks, currPageRanks, teleport, dampening) > tol) {
         // if (myRank == 0)
         //     std::cout << calcDiffL2Norm(prevPageRanks, currPageRanks, dampening) << std::endl;
         std::swap(prevPageRanks, currPageRanks);
@@ -149,14 +151,14 @@ std::vector<double> pageRank(
         for (const auto edge: edges) {
             size_t from = static_cast<size_t>(edge.from);
             size_t to   = static_cast<size_t>(edge.to);
-            currPageRanks[to] += getActualPageRank(prevPageRanks[from], n, dampening) / nodeDegrees[from];
+            currPageRanks[to] += getActualPageRank(prevPageRanks[from], teleport, dampening) / nodeDegrees[from];
         }
         // TODO Make fault tolerant
         MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
         std::swap(currPageRanks, tempPageRanks);
     }
-    std::for_each(currPageRanks.begin(), currPageRanks.end(), [n, dampening](double& value) {
-        value = getActualPageRank(value, n, dampening);
+    std::for_each(currPageRanks.begin(), currPageRanks.end(), [teleport, dampening](double& value) {
+        value = getActualPageRank(value, teleport, dampening);
     });
     return currPageRanks;
 }
