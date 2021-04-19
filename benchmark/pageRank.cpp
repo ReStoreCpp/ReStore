@@ -118,13 +118,11 @@ constexpr double getActualPageRank(const double storedPagerank, const double tel
     return teleport + dampening * storedPagerank;
 }
 
-double calcDiffL2Norm(
-    const std::vector<double>& lhs, const std::vector<double>& rhs, const double teleport, const double dampening) {
+double calcDiffL2Norm(const std::vector<double>& lhs, const std::vector<double>& rhs) {
     double qsum = 0;
     assert(lhs.size() == rhs.size());
     for (node_t i = 0; i < static_cast<node_t>(lhs.size()); ++i) {
-        double diff = getActualPageRank(lhs[static_cast<size_t>(i)], teleport, dampening)
-                      - getActualPageRank(rhs[static_cast<size_t>(i)], teleport, dampening);
+        double diff = lhs[static_cast<size_t>(i)] - rhs[static_cast<size_t>(i)];
         qsum += diff * diff;
     }
     return sqrt(qsum);
@@ -143,9 +141,7 @@ std::vector<double> pageRank(
     std::vector<double> tempPageRanks(static_cast<size_t>(numVertices), 0);
     const int           n        = static_cast<int>(nodeDegrees.size());
     const double        teleport = (1.0 - dampening) / n;
-    while (calcDiffL2Norm(prevPageRanks, currPageRanks, teleport, dampening) > tol) {
-        // if (myRank == 0)
-        //     std::cout << calcDiffL2Norm(prevPageRanks, currPageRanks, dampening) << std::endl;
+    while (calcDiffL2Norm(prevPageRanks, currPageRanks) > tol) {
         std::swap(prevPageRanks, currPageRanks);
         std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
         for (size_t i = 0; i < edges.size(); ++i) {
@@ -157,15 +153,15 @@ std::vector<double> pageRank(
                 // __builtin_prefetch(&nodeDegrees[static_cast<size_t>(edges[i + prefetchDistance].from)], 0);
                 __builtin_prefetch(&currPageRanks[static_cast<size_t>(edges[i + prefetchDistance].to)], 1);
             }
-            currPageRanks[to] += getActualPageRank(prevPageRanks[from], teleport, dampening) / nodeDegrees[from];
+            currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
         }
         // TODO Make fault tolerant
         MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
         std::swap(currPageRanks, tempPageRanks);
+        std::for_each(currPageRanks.begin(), currPageRanks.end(), [teleport, dampening](double& value) {
+            value = getActualPageRank(value, teleport, dampening);
+        });
     }
-    std::for_each(currPageRanks.begin(), currPageRanks.end(), [teleport, dampening](double& value) {
-        value = getActualPageRank(value, teleport, dampening);
-    });
     return currPageRanks;
 }
 
