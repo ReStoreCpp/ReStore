@@ -165,6 +165,25 @@ std::vector<double> pageRank(
     return currPageRanks;
 }
 
+void writePageRanks(const std::vector<double>& pageRanks, const std::string path, const bool sort) {
+    std::ofstream outfile(path);
+
+    std::vector<size_t> indices(pageRanks.size());
+    std::iota(indices.begin(), indices.end(), 0);
+
+    if (sort) {
+        std::sort(indices.begin(), indices.end(), [&pageRanks](const size_t i, const size_t j) {
+            return pageRanks[i] > pageRanks[j];
+        });
+    }
+
+    for (const auto node: indices) {
+        outfile << node << " " << pageRanks[node] << std::endl;
+    }
+
+    outfile.close();
+}
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
 
@@ -175,6 +194,8 @@ int main(int argc, char** argv) {
 
     cliParser.add_options()                                                                   ///
         ("graph", "path to an input graph file", cxxopts::value<std::string>())               ///
+        ("o,output", "path to the output file", cxxopts::value<std::string>())                ///
+        ("s,sort", "sort the output", cxxopts::value<bool>()->default_value("false"))         ///
         ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85")) ///
         ("t,tolerance",
          "Tolerance for stopping PageRank iterations. Stops when the l2 norm of the difference between two iterations "
@@ -211,6 +232,14 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+    std::string outputPath;
+    bool        doOutput = false;
+    if (options.count("output")) {
+        doOutput   = true;
+        outputPath = options["output"].as<std::string>();
+    }
+    const bool sortOutput = options["sort"].as<bool>();
+
     const auto   numRepititions = options["repetitions"].as<size_t>();
     const double dampening      = options["dampening"].as<double>();
     const double tolerance      = options["tolerance"].as<double>();
@@ -219,15 +248,22 @@ int main(int argc, char** argv) {
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
 
 
-    auto start = MPI_Wtime();
+    std::vector<double> result;
+    auto                start = MPI_Wtime();
     for (size_t i = 0; i < numRepititions; ++i) {
-        pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance);
+        result = pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance);
     }
     auto end        = MPI_Wtime();
     auto time       = end - start;
     auto timePerRun = time / static_cast<double>(numRepititions);
 
-    std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+    if (myRank == 0) {
+        std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+    }
+
+    if (doOutput && myRank == 0) {
+        writePageRanks(result, outputPath, sortOutput);
+    }
 
     MPI_Finalize();
 }
