@@ -12,6 +12,7 @@
 #include <numeric>
 #include <optional>
 #include <restore/helpers.hpp>
+#include <streambuf>
 #include <string.h>
 #include <string>
 #include <utility>
@@ -165,9 +166,8 @@ std::vector<double> pageRank(
     return currPageRanks;
 }
 
-void writePageRanks(const std::vector<double>& pageRanks, const std::string path, const bool sort) {
-    std::ofstream outfile(path);
-
+void outputPageRanks(
+    const std::vector<double>& pageRanks, const bool sort, size_t numVerticesToOutput, std::ostream& stream) {
     std::vector<size_t> indices(pageRanks.size());
     std::iota(indices.begin(), indices.end(), 0);
 
@@ -177,9 +177,16 @@ void writePageRanks(const std::vector<double>& pageRanks, const std::string path
         });
     }
 
-    for (const auto node: indices) {
-        outfile << node << " " << pageRanks[node] << std::endl;
+    for (size_t i = 0; i < numVerticesToOutput; ++i) {
+        auto node = indices[i];
+        stream << node << " " << pageRanks[node] << std::endl;
     }
+}
+
+void writePageRanks(const std::vector<double>& pageRanks, const std::string path, const bool sort) {
+    std::ofstream outfile(path);
+
+    outputPageRanks(pageRanks, sort, pageRanks.size(), outfile);
 
     outfile.close();
 }
@@ -192,11 +199,12 @@ int main(int argc, char** argv) {
 
     cxxopts::Options cliParser("pageRank", "Benchmarks a fault tolerant page rank algorithm.");
 
-    cliParser.add_options()                                                                   ///
-        ("graph", "path to an input graph file", cxxopts::value<std::string>())               ///
-        ("o,output", "path to the output file", cxxopts::value<std::string>())                ///
-        ("s,sort", "sort the output", cxxopts::value<bool>()->default_value("false"))         ///
-        ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85")) ///
+    cliParser.add_options()                                                                                    ///
+        ("graph", "path to an input graph file", cxxopts::value<std::string>())                                ///
+        ("o,output", "path to the output file", cxxopts::value<std::string>())                                 ///
+        ("s,sort", "sort the output", cxxopts::value<bool>()->default_value("false"))                          ///
+        ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
+        ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85"))                  ///
         ("t,tolerance",
          "Tolerance for stopping PageRank iterations. Stops when the l2 norm of the difference between two iterations "
          "drops below the tolerance.",
@@ -238,7 +246,8 @@ int main(int argc, char** argv) {
         doOutput   = true;
         outputPath = options["output"].as<std::string>();
     }
-    const bool sortOutput = options["sort"].as<bool>();
+    const bool sortOutput  = options["sort"].as<bool>();
+    const bool printOutput = options["print"].as<bool>();
 
     const auto   numRepititions = options["repetitions"].as<size_t>();
     const double dampening      = options["dampening"].as<double>();
@@ -263,6 +272,10 @@ int main(int argc, char** argv) {
 
     if (doOutput && myRank == 0) {
         writePageRanks(result, outputPath, sortOutput);
+    }
+
+    if (printOutput && myRank == 0) {
+        outputPageRanks(result, sortOutput, 20, std::cout);
     }
 
     MPI_Finalize();
