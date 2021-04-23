@@ -163,6 +163,8 @@ std::vector<double> pageRank(
             value = getActualPageRank(value, teleport, dampening);
         });
     }
+    const double sum = std::accumulate(currPageRanks.begin(), currPageRanks.end(), 0.0);
+    std::for_each(currPageRanks.begin(), currPageRanks.end(), [sum](double& value) { value /= sum; });
     return currPageRanks;
 }
 
