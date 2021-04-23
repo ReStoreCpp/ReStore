@@ -1,9 +1,9 @@
-#! /usr//bin/python3
+#! /usr/bin/python3
 
 import networkit as nk
 import sys
-import code
 import argparse
+import time
 
 parser = argparse.ArgumentParser(description="Calculate PageRank scores using NetworKit")
 parser.add_argument("inputPath")
@@ -20,21 +20,12 @@ outputPath = args.outputPath
 sortOutput = args.sort
 printOutput=args.print
 
-
-# if len(sys.argv) < 2:
-#     print("Usage: pageRankNetworKit <input> [output]")
-
-# inputPath = sys.argv[1]
-
-# if len(sys.argv) > 2:
-#     saveOutput = True
-#     outputPath = sys.argv[2]
-
-
 G = nk.readGraph(inputPath, nk.Format.EdgeList, separator=" ", firstNode=1, directed=True)
 pr = nk.centrality.PageRank(G, damp=0.85, tol=0.000000001)
+start = time.time()
 pr.run()
-# code.interact(local=locals())
+end=time.time()
+print("time: " +str(end - start))
 scores = pr.scores()
 
 assert(len(scores) == G.numberOfNodes())
