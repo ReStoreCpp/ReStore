@@ -17,6 +17,7 @@
 #include <streambuf>
 #include <string.h>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 #include <mpi-ext.h>
@@ -32,7 +33,8 @@ struct edge_t {
     edge_t() : from(0), to(0) {}
 };
 
-auto comm = MPI_COMM_WORLD;
+auto comm    = MPI_COMM_WORLD;
+bool amIDead = false;
 
 std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGraph(std::string graph) {
     int myRank, numRanks;
@@ -137,25 +139,8 @@ double calcDiffL2Norm(const std::vector<double>& lhs, const std::vector<double>&
 }
 
 void recoverFromFailure(
-    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStore<edge_t>& reStore, int ec, int& myRank,
+    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStore<edge_t>& reStore, int& myRank,
     int& numRanks) {
-    if (ec == MPI_ERR_PROC_FAILED) {
-        MPIX_Comm_revoke(comm);
-    }
-
-    // Build a new communicator without the failed ranks
-    MPI_Comm newComm;
-    int      rc;
-    if ((rc = MPIX_Comm_shrink(comm, &newComm)) != MPI_SUCCESS) {
-        std::cerr << "A rank failure was detected, but building the new communicator using " << std::endl;
-        exit(1);
-    }
-    assert(comm != MPI_COMM_NULL);
-    // As for the ULFM documentation, freeing the communicator is recommended but will probably
-    // not succeed. This is why we do not check for an error here.
-    // I checked that --mca mpi_show_handle_leaks 1 does not show a leaked handle
-    MPI_Comm_free(&comm);
-    comm = newComm;
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
     reStore.updateComm(comm);
@@ -180,9 +165,79 @@ void recoverFromFailure(
     reStore.pushBlocks(
         requests, [&edges, myLowerBound](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             assert(sizeof(edge_t) == size);
+            UNUSED(size);
             edges[blockId - asserting_cast<size_t>(myLowerBound)] = *reinterpret_cast<const edge_t*>(dataPtr);
         });
     assert(std::all_of(edges.begin(), edges.end(), [](edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
+}
+
+std::unordered_set<int> ranksToKill;
+
+template <class F>
+bool fault_tolerant_mpi_call(const F& mpi_call) {
+    assert(comm != MPI_COMM_NULL);
+
+    if (SIMULATE_FAILURES) {
+        if (ranksToKill.size() > 0) {
+            MPI_Comm newComm;
+            UNUSED(mpi_call);
+
+            int rank;
+            MPI_Comm_rank(comm, &rank);
+            int color = 0;
+            if (ranksToKill.find(rank) != ranksToKill.end()) {
+                color   = 1;
+                amIDead = true;
+            }
+            ranksToKill.clear();
+
+            MPI_Comm_split(comm, color, rank, &newComm);
+            MPI_Comm_free(&comm);
+            comm = newComm;
+            return false;
+        } else {
+            mpi_call();
+            return true;
+        }
+
+    } else {
+        if (ranksToKill.size() > 0) {
+            int rank;
+            MPI_Comm_rank(comm, &rank);
+            if (ranksToKill.find(rank) != ranksToKill.end()) {
+                exit(42);
+            }
+            ranksToKill.clear();
+        }
+        int rc, ec;
+        rc = mpi_call();
+        MPI_Error_class(rc, &ec);
+
+        if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_REVOKED) {
+            if (ec == MPI_ERR_PROC_FAILED) {
+                MPIX_Comm_revoke(comm);
+            }
+
+            // Build a new communicator without the failed ranks
+            MPI_Comm newComm;
+            if ((rc = MPIX_Comm_shrink(comm, &newComm)) != MPI_SUCCESS) {
+                std::cerr << "A rank failure was detected, but building the new communicator using " << std::endl;
+                exit(1);
+            }
+            assert(comm != MPI_COMM_NULL);
+            // As for the ULFM documentation, freeing the communicator is recommended but will probably
+            // not succeed. This is why we do not check for an error here.
+            // I checked that --mca mpi_show_handle_leaks 1 does not show a leaked handle
+            MPI_Comm_free(&comm);
+            comm = newComm;
+            return false;
+        } else if (rc != MPI_SUCCESS) {
+            std::cerr << "MPI call did non fail because of a faulty rank but still did not return MPI_SUCCESS"
+                      << std::endl;
+            exit(1);
+        }
+        return true;
+    }
 }
 
 std::vector<double> pageRank(
@@ -200,6 +255,8 @@ std::vector<double> pageRank(
     const int           n        = static_cast<int>(nodeDegrees.size());
     const double        teleport = (1.0 - dampening) / n;
     while (calcDiffL2Norm(prevPageRanks, currPageRanks) > tol) {
+        // if (myRank == 0)
+        //     std::cout << currPageRanks[16638] << std::endl;
         std::swap(prevPageRanks, currPageRanks);
         std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
         bool repeat = false;
@@ -216,21 +273,20 @@ std::vector<double> pageRank(
                 }
                 currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
             }
-            int rc, ec;
-            rc = MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
             static bool crash(false);
             if (crash) {
-                crash = false;
-                if (myRank == 0) {
-                    std::cerr << "Crashing" << std::endl;
-                    exit(42);
-                }
+                crash       = false;
+                ranksToKill = {0};
             }
-            MPI_Error_class(rc, &ec);
-            if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_REVOKED) {
-                // TODO Change so that only edges from failed ranks are reloaded and only those new edges are iterated
-                // over again
-                recoverFromFailure(numEdges, edges, reStore, ec, myRank, numRanks);
+            if (!fault_tolerant_mpi_call([&]() {
+                    return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
+                })) {
+                // TODO Change so that only edges from failed ranks are reloaded and only those new edges are
+                // iterated over again
+                if (amIDead) {
+                    return currPageRanks;
+                }
+                recoverFromFailure(numEdges, edges, reStore, myRank, numRanks);
                 repeat = true;
             }
         } while (repeat);
@@ -287,7 +343,8 @@ int main(int argc, char** argv) {
         ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
         ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85"))                  ///
         ("t,tolerance",
-         "Tolerance for stopping PageRank iterations. Stops when the l2 norm of the difference between two iterations "
+         "Tolerance for stopping PageRank iterations. Stops when the l2 norm of the difference between two "
+         "iterations "
          "drops below the tolerance.",
          cxxopts::value<double>()->default_value("0.000000001"))                                       ///
         ("r,repetitions", "Number of repitions to run", cxxopts::value<size_t>()->default_value("10")) ///
@@ -363,6 +420,8 @@ int main(int argc, char** argv) {
 
     reStore.submitBlocks(serializeBlock, getNextBlock, asserting_cast<ReStore::block_id_t>(numEdges));
 
+    if (myRank == 0)
+        std::cout << "Starting with " << numRanks << " ranks" << std::endl;
 
     std::vector<double> result;
     auto                start = MPI_Wtime();
@@ -376,15 +435,18 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
 
-    if (myRank == 0) {
+    if (myRank == 0 && !amIDead)
+        std::cout << "Finished with " << numRanks << " ranks" << std::endl;
+
+    if (myRank == 0 && !amIDead) {
         std::cout << "Time per run: " << timePerRun << " s" << std::endl;
     }
 
-    if (doOutput && myRank == 0) {
+    if (doOutput && myRank == 0 && !amIDead) {
         writePageRanks(result, outputPath, sortOutput);
     }
 
-    if (printOutput && myRank == 0) {
+    if (printOutput && myRank == 0 && !amIDead) {
         outputPageRanks(result, sortOutput, 20, std::cout);
     }
 
