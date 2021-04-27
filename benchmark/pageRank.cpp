@@ -169,6 +169,7 @@ void recoverFromFailure(
             edges[blockId - asserting_cast<size_t>(myLowerBound)] = *reinterpret_cast<const edge_t*>(dataPtr);
         });
     assert(std::all_of(edges.begin(), edges.end(), [](edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
+    std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
 }
 
 std::unordered_set<int> ranksToKill;
