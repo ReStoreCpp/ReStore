@@ -11,11 +11,15 @@
 #include <mpi.h>
 #include <numeric>
 #include <optional>
+#include <restore/block_serialization.hpp>
+#include <restore/common.hpp>
 #include <restore/helpers.hpp>
 #include <streambuf>
 #include <string.h>
 #include <string>
 #include <utility>
+
+#include <mpi-ext.h>
 
 using node_t = int;
 
@@ -25,11 +29,12 @@ struct edge_t {
     node_t from;
     node_t to;
     edge_t(node_t u, node_t v) : from(u), to(v) {}
+    edge_t() : from(0), to(0) {}
 };
 
 auto comm = MPI_COMM_WORLD;
 
-std::tuple<node_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGraph(std::string graph) {
+std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGraph(std::string graph) {
     int myRank, numRanks;
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
@@ -45,6 +50,8 @@ std::tuple<node_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGrap
     edge_id_t           numRanksWithMoreEdges = 0;
     std::vector<edge_t> edges;
     std::vector<node_t> outDegrees;
+    int                 lowerBound = 0;
+    int                 upperBound = 0;
     while (std::getline(infile, line)) {
         if (line.empty()) {
             continue;
@@ -68,6 +75,8 @@ std::tuple<node_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGrap
             outDegrees.resize(static_cast<size_t>(numVertices));
             numEdgesPerRank       = numEdges / numRanks;
             numRanksWithMoreEdges = numEdges & numRanks;
+            lowerBound            = numEdgesPerRank * myRank + std::min(myRank, numRanksWithMoreEdges);
+            upperBound            = numEdgesPerRank * (myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges);
         } else if (letter == 'e') {
             --firstNum;
             --secondNum;
@@ -88,8 +97,6 @@ std::tuple<node_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGrap
                 exit(1);
             }
             ++outDegrees[static_cast<size_t>(firstNum)];
-            const int lowerBound = numEdgesPerRank * myRank + std::min(myRank, numRanksWithMoreEdges);
-            const int upperBound = numEdgesPerRank * (myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges);
             if (numEdgesRead >= lowerBound && numEdgesRead < upperBound) {
                 edges.emplace_back(firstNum, secondNum);
             }
@@ -106,7 +113,7 @@ std::tuple<node_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGrap
         exit(1);
     }
     assert(static_cast<edge_id_t>(edges.size()) == numEdgesPerRank + (myRank < numRanksWithMoreEdges));
-    return std::make_tuple(numVertices, numEdges, edges, outDegrees);
+    return std::make_tuple(numVertices, numEdges, lowerBound, edges, outDegrees);
 }
 
 // double calcL2Norm(const std::vector<double>& vec) {
@@ -129,9 +136,59 @@ double calcDiffL2Norm(const std::vector<double>& lhs, const std::vector<double>&
     return sqrt(qsum);
 }
 
+void recoverFromFailure(
+    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStore<edge_t>& reStore, int ec, int& myRank,
+    int& numRanks) {
+    if (ec == MPI_ERR_PROC_FAILED) {
+        MPIX_Comm_revoke(comm);
+    }
+
+    // Build a new communicator without the failed ranks
+    MPI_Comm newComm;
+    int      rc;
+    if ((rc = MPIX_Comm_shrink(comm, &newComm)) != MPI_SUCCESS) {
+        std::cerr << "A rank failure was detected, but building the new communicator using " << std::endl;
+        exit(1);
+    }
+    assert(comm != MPI_COMM_NULL);
+    // As for the ULFM documentation, freeing the communicator is recommended but will probably
+    // not succeed. This is why we do not check for an error here.
+    // I checked that --mca mpi_show_handle_leaks 1 does not show a leaked handle
+    MPI_Comm_free(&comm);
+    comm = newComm;
+    MPI_Comm_rank(comm, &myRank);
+    MPI_Comm_size(comm, &numRanks);
+    reStore.updateComm(comm);
+
+    edge_id_t numEdgesPerRank       = numEdges / numRanks;
+    edge_id_t numRanksWithMoreEdges = numEdges & numRanks;
+    std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
+    for (int rank = 0; rank < numRanks; ++rank) {
+        const edge_id_t lowerBound          = numEdgesPerRank * rank + std::min(rank, numRanksWithMoreEdges);
+        const edge_id_t upperBound          = numEdgesPerRank * (rank + 1) + std::min(rank + 1, numRanksWithMoreEdges);
+        const edge_id_t numEdgesForThisRank = upperBound - lowerBound;
+        requests.emplace_back(std::make_pair(
+            std::make_pair(
+                asserting_cast<ReStore::block_id_t>(lowerBound), asserting_cast<size_t>(numEdgesForThisRank)),
+            rank));
+    }
+    const edge_id_t myLowerBound = numEdgesPerRank * myRank + std::min(myRank, numRanksWithMoreEdges);
+    const edge_id_t myUpperBound = numEdgesPerRank * (myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges);
+    const edge_id_t myNumEdges   = myUpperBound - myLowerBound;
+    edges.clear();
+    edges.resize(asserting_cast<size_t>(myNumEdges));
+    reStore.pushBlocks(
+        requests, [&edges, myLowerBound](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
+            assert(sizeof(edge_t) == size);
+            edges[blockId - asserting_cast<size_t>(myLowerBound)] = *reinterpret_cast<const edge_t*>(dataPtr);
+        });
+    assert(std::all_of(edges.begin(), edges.end(), [](edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
+}
+
 std::vector<double> pageRank(
-    const node_t numVertices, const edge_id_t numEdges, const std::vector<edge_t>& edges,
-    const std::vector<node_t>& nodeDegrees, const double dampening, const double tol) {
+    const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
+    const std::vector<node_t>& nodeDegrees, const double dampening, const double tol,
+    ReStore::ReStore<edge_t>& reStore) {
     UNUSED(numEdges);
     int myRank;
     int numRanks;
@@ -145,19 +202,38 @@ std::vector<double> pageRank(
     while (calcDiffL2Norm(prevPageRanks, currPageRanks) > tol) {
         std::swap(prevPageRanks, currPageRanks);
         std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
-        for (size_t i = 0; i < edges.size(); ++i) {
-            const size_t from             = static_cast<size_t>(edges[i].from);
-            const size_t to               = static_cast<size_t>(edges[i].to);
-            const size_t prefetchDistance = 20;
-            if (i < edges.size() - prefetchDistance) {
-                // __builtin_prefetch(&prevPageRanks[static_cast<size_t>(edges[i + prefetchDistance].from)], 0);
-                // __builtin_prefetch(&nodeDegrees[static_cast<size_t>(edges[i + prefetchDistance].from)], 0);
-                __builtin_prefetch(&currPageRanks[static_cast<size_t>(edges[i + prefetchDistance].to)], 1);
+        bool repeat = false;
+        do {
+            repeat = false;
+            for (size_t i = 0; i < edges.size(); ++i) {
+                const size_t from             = static_cast<size_t>(edges[i].from);
+                const size_t to               = static_cast<size_t>(edges[i].to);
+                const size_t prefetchDistance = 20;
+                if (i < edges.size() - prefetchDistance) {
+                    // __builtin_prefetch(&prevPageRanks[static_cast<size_t>(edges[i + prefetchDistance].from)], 0);
+                    // __builtin_prefetch(&nodeDegrees[static_cast<size_t>(edges[i + prefetchDistance].from)], 0);
+                    __builtin_prefetch(&currPageRanks[static_cast<size_t>(edges[i + prefetchDistance].to)], 1);
+                }
+                currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
             }
-            currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
-        }
-        // TODO Make fault tolerant
-        MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
+            int rc, ec;
+            rc = MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
+            static bool crash(false);
+            if (crash) {
+                crash = false;
+                if (myRank == 0) {
+                    std::cerr << "Crashing" << std::endl;
+                    exit(42);
+                }
+            }
+            MPI_Error_class(rc, &ec);
+            if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_REVOKED) {
+                // TODO Change so that only edges from failed ranks are reloaded and only those new edges are iterated
+                // over again
+                recoverFromFailure(numEdges, edges, reStore, ec, myRank, numRanks);
+                repeat = true;
+            }
+        } while (repeat);
         std::swap(currPageRanks, tempPageRanks);
         std::for_each(currPageRanks.begin(), currPageRanks.end(), [teleport, dampening](double& value) {
             value = getActualPageRank(value, teleport, dampening);
@@ -195,9 +271,12 @@ void writePageRanks(const std::vector<double>& pageRanks, const std::string path
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
+    MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
 
     int myRank;
     MPI_Comm_rank(comm, &myRank);
+    int numRanks;
+    MPI_Comm_size(comm, &numRanks);
 
     cxxopts::Options cliParser("pageRank", "Benchmarks a fault tolerant page rank algorithm.");
 
@@ -212,6 +291,8 @@ int main(int argc, char** argv) {
          "drops below the tolerance.",
          cxxopts::value<double>()->default_value("0.000000001"))                                       ///
         ("r,repetitions", "Number of repitions to run", cxxopts::value<size_t>()->default_value("10")) ///
+        ("f,replications", "Replications for fault tolerance with ReStore",
+         cxxopts::value<size_t>()->default_value("3")) ///
         ("h,help", "Print help message.");
 
     cliParser.parse_positional({"graph"});
@@ -255,18 +336,45 @@ int main(int argc, char** argv) {
     const double dampening      = options["dampening"].as<double>();
     const double tolerance      = options["tolerance"].as<double>();
 
-    auto [numVertices, numEdges, edges, nodeDegrees] = readGraph(options["graph"].as<std::string>());
+    const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
+
+    auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees] = readGraph(options["graph"].as<std::string>());
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
+
+
+    ReStore::ReStore<edge_t> reStore(
+        comm, asserting_cast<uint16_t>(numReplications), ReStore::OffsetMode::constant, sizeof(edge_t));
+
+    edge_id_t currentEdgeId = firstEdgeId;
+    auto      getNextBlock  = [firstEdgeId = firstEdgeId, &currentEdgeId,
+                         &edges      = edges]() -> std::optional<ReStore::NextBlock<edge_t>> {
+        if (currentEdgeId - firstEdgeId >= asserting_cast<edge_id_t>(edges.size())) {
+            return std::nullopt;
+        } else {
+            ++currentEdgeId;
+            return ReStore::NextBlock<edge_t>{asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
+                                              edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
+        }
+    };
+
+    auto serializeBlock = [](const edge_t edge, ReStore::SerializedBlockStoreStream& stream) {
+        stream << edge.from << edge.to;
+    };
+
+    reStore.submitBlocks(serializeBlock, getNextBlock, asserting_cast<ReStore::block_id_t>(numEdges));
 
 
     std::vector<double> result;
     auto                start = MPI_Wtime();
     for (size_t i = 0; i < numRepititions; ++i) {
-        result = pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance);
+        result = pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore);
     }
     auto end        = MPI_Wtime();
     auto time       = end - start;
     auto timePerRun = time / static_cast<double>(numRepititions);
+
+    MPI_Comm_rank(comm, &myRank);
+    MPI_Comm_size(comm, &numRanks);
 
     if (myRank == 0) {
         std::cout << "Time per run: " << timePerRun << " s" << std::endl;
