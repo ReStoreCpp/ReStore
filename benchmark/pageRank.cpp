@@ -181,7 +181,6 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
     if (SIMULATE_FAILURES) {
         if (ranksToKill.size() > 0) {
             MPI_Comm newComm;
-            UNUSED(mpi_call);
 
             int rank;
             MPI_Comm_rank(comm, &rank);
@@ -256,13 +255,11 @@ std::vector<double> pageRank(
     const int           n        = static_cast<int>(nodeDegrees.size());
     const double        teleport = (1.0 - dampening) / n;
     while (calcDiffL2Norm(prevPageRanks, currPageRanks) > tol) {
-        // if (myRank == 0)
-        //     std::cout << currPageRanks[16638] << std::endl;
         std::swap(prevPageRanks, currPageRanks);
-        std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
         bool repeat = false;
         do {
             repeat = false;
+            std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
             for (size_t i = 0; i < edges.size(); ++i) {
                 const size_t from             = static_cast<size_t>(edges[i].from);
                 const size_t to               = static_cast<size_t>(edges[i].to);
@@ -274,11 +271,10 @@ std::vector<double> pageRank(
                 }
                 currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
             }
-            static bool crash(false);
-            if (crash) {
-                crash       = false;
-                ranksToKill = {0};
-            }
+            // static int crashCounter = 0;
+            // if ((crashCounter++ % 10) == 0) {
+            //     ranksToKill = {0};
+            // }
             if (!fault_tolerant_mpi_call([&]() {
                     return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
                 })) {
