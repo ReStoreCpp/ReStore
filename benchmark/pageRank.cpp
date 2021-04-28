@@ -76,7 +76,7 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
             numEdges    = secondNum;
             outDegrees.resize(static_cast<size_t>(numVertices));
             numEdgesPerRank       = numEdges / numRanks;
-            numRanksWithMoreEdges = numEdges & numRanks;
+            numRanksWithMoreEdges = numEdges % numRanks;
             lowerBound            = numEdgesPerRank * myRank + std::min(myRank, numRanksWithMoreEdges);
             upperBound            = numEdgesPerRank * (myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges);
         } else if (letter == 'e') {
@@ -146,7 +146,7 @@ void recoverFromFailure(
     reStore.updateComm(comm);
 
     edge_id_t numEdgesPerRank       = numEdges / numRanks;
-    edge_id_t numRanksWithMoreEdges = numEdges & numRanks;
+    edge_id_t numRanksWithMoreEdges = numEdges % numRanks;
     std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
     for (int rank = 0; rank < numRanks; ++rank) {
         const edge_id_t lowerBound          = numEdgesPerRank * rank + std::min(rank, numRanksWithMoreEdges);
