@@ -222,7 +222,7 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
             // Build a new communicator without the failed ranks
             MPI_Comm newComm;
             if ((rc = MPIX_Comm_shrink(comm, &newComm)) != MPI_SUCCESS) {
-                std::cerr << "A rank failure was detected, but building the new communicator using " << std::endl;
+                std::cerr << "A rank failure was detected, but building the new communicator failed" << std::endl;
                 exit(1);
             }
             assert(comm != MPI_COMM_NULL);
