@@ -22,6 +22,13 @@ target_include_directories(${SIM_TILL_DATA_LOSS_TARGET} SYSTEM PRIVATE ../includ
 target_link_libraries(${SIM_TILL_DATA_LOSS_TARGET} gtest gmock "ReStore::ReStore;cppitertools;cxxopts")
 target_compile_options(${SIM_TILL_DATA_LOSS_TARGET} PRIVATE -O3 "${WARNING_FLAGS}")
 
+set(PAGERANK "pageRank")
+add_executable(${PAGERANK} pageRank.cpp)
+target_include_directories(${PAGERANK} SYSTEM PRIVATE ../extern/)
+target_include_directories(${PAGERANK} SYSTEM PRIVATE ../include/)
+target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxxopts")
+target_compile_options(${PAGERANK} PRIVATE -O3 "${WARNING_FLAGS}")
+
 # microbenchmarks
 add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
 set(MICROBENCHMARKS_TARGET "microbenchmarks")
