@@ -30,8 +30,8 @@ using edge_id_t = uint64_t;
 struct edge_t {
     node_t from;
     node_t to;
-    edge_t(node_t u, node_t v) : from(u), to(v) {}
-    edge_t() : from(0), to(0) {}
+    edge_t(node_t u, node_t v) noexcept : from(u), to(v) {}
+    edge_t() noexcept : from(0), to(0) {}
 };
 
 auto comm    = MPI_COMM_WORLD;
