@@ -4,6 +4,7 @@
 #include <bits/stdint-uintn.h>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cxxopts.hpp>
 #include <fstream>
 #include <iostream>
@@ -24,7 +25,7 @@
 
 using node_t = int;
 
-using edge_id_t = int;
+using edge_id_t = uint64_t;
 
 struct edge_t {
     node_t from;
@@ -49,11 +50,11 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
     edge_id_t           numEdges              = 0;
     edge_id_t           numEdgesRead          = 0;
     edge_id_t           numEdgesPerRank       = 0;
-    edge_id_t           numRanksWithMoreEdges = 0;
+    int                 numRanksWithMoreEdges = 0;
     std::vector<edge_t> edges;
     std::vector<node_t> outDegrees;
-    int                 lowerBound = 0;
-    int                 upperBound = 0;
+    edge_id_t           lowerBound = 0;
+    edge_id_t           upperBound = 0;
     while (std::getline(infile, line)) {
         if (line.empty()) {
             continue;
@@ -63,8 +64,7 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
         }
         std::istringstream iss(line);
         char               letter;
-        node_t             firstNum, secondNum;
-        iss >> letter >> firstNum >> secondNum;
+        iss >> letter;
         if (letter == 'p') {
             if (numVertices != 0 || numEdges != 0) {
                 if (myRank == 0)
@@ -72,14 +72,21 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
                 exit(1);
             }
             assert(numEdgesRead == 0);
+            node_t    firstNum;
+            edge_id_t secondNum;
+            iss >> firstNum >> secondNum;
             numVertices = firstNum;
             numEdges    = secondNum;
             outDegrees.resize(static_cast<size_t>(numVertices));
-            numEdgesPerRank       = numEdges / numRanks;
-            numRanksWithMoreEdges = numEdges % numRanks;
-            lowerBound            = numEdgesPerRank * myRank + std::min(myRank, numRanksWithMoreEdges);
-            upperBound            = numEdgesPerRank * (myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges);
+            numEdgesPerRank       = numEdges / asserting_cast<edge_id_t>(numRanks);
+            numRanksWithMoreEdges = asserting_cast<int>(numEdges % asserting_cast<edge_id_t>(numRanks));
+            lowerBound            = numEdgesPerRank * asserting_cast<edge_id_t>(myRank)
+                         + asserting_cast<edge_id_t>(std::min(myRank, numRanksWithMoreEdges));
+            upperBound =
+                numEdgesPerRank * asserting_cast<edge_id_t>((myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges));
         } else if (letter == 'e') {
+            node_t firstNum, secondNum;
+            iss >> firstNum >> secondNum;
             --firstNum;
             --secondNum;
             if (numVertices == 0 || numEdges == 0) {
@@ -145,21 +152,25 @@ void recoverFromFailure(
     MPI_Comm_size(comm, &numRanks);
     reStore.updateComm(comm);
 
-    edge_id_t numEdgesPerRank       = numEdges / numRanks;
-    edge_id_t numRanksWithMoreEdges = numEdges % numRanks;
+    edge_id_t numEdgesPerRank       = numEdges / asserting_cast<edge_id_t>(numRanks);
+    int       numRanksWithMoreEdges = asserting_cast<int>(numEdges % asserting_cast<edge_id_t>(numRanks));
     std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
     for (int rank = 0; rank < numRanks; ++rank) {
-        const edge_id_t lowerBound          = numEdgesPerRank * rank + std::min(rank, numRanksWithMoreEdges);
-        const edge_id_t upperBound          = numEdgesPerRank * (rank + 1) + std::min(rank + 1, numRanksWithMoreEdges);
+        const edge_id_t lowerBound =
+            numEdgesPerRank * asserting_cast<edge_id_t>(rank + std::min(rank, numRanksWithMoreEdges));
+        const edge_id_t upperBound =
+            numEdgesPerRank * asserting_cast<edge_id_t>((rank + 1) + std::min(rank + 1, numRanksWithMoreEdges));
         const edge_id_t numEdgesForThisRank = upperBound - lowerBound;
         requests.emplace_back(std::make_pair(
             std::make_pair(
                 asserting_cast<ReStore::block_id_t>(lowerBound), asserting_cast<size_t>(numEdgesForThisRank)),
             rank));
     }
-    const edge_id_t myLowerBound = numEdgesPerRank * myRank + std::min(myRank, numRanksWithMoreEdges);
-    const edge_id_t myUpperBound = numEdgesPerRank * (myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges);
-    const edge_id_t myNumEdges   = myUpperBound - myLowerBound;
+    const edge_id_t myLowerBound =
+        numEdgesPerRank * asserting_cast<edge_id_t>(myRank + std::min(myRank, numRanksWithMoreEdges));
+    const edge_id_t myUpperBound =
+        numEdgesPerRank * asserting_cast<edge_id_t>((myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges));
+    const edge_id_t myNumEdges = myUpperBound - myLowerBound;
     edges.clear();
     edges.resize(asserting_cast<size_t>(myNumEdges));
     reStore.pushBlocks(
