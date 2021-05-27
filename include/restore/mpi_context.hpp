@@ -9,6 +9,7 @@
 #include <exception>
 #include <memory>
 #include <mpi.h>
+#include <numeric>
 #include <optional>
 #include <vector>
 
@@ -107,6 +108,7 @@ class RankManager {
     RankManager(MPI_Comm comm) {
         MPI_Comm_group(comm, &_originalGroup);
         MPI_Comm_group(comm, &_currentGroup);
+        MPI_Comm_group(comm, &_lastDiedRanksRequestedGroup);
     }
 
     void updateComm(MPI_Comm newComm) {
@@ -180,9 +182,25 @@ class RankManager {
         return currentRanks;
     }
 
+    std::vector<original_rank_t> getRanksDiedSinceLastCall() {
+        MPI_Group difference;
+        MPI_Group_difference(_lastDiedRanksRequestedGroup, _currentGroup, &difference);
+        int numRanksDied;
+        MPI_Group_size(difference, &numRanksDied);
+        std::vector<int> groupRankIds(static_cast<size_t>(numRanksDied));
+        std::iota(std::begin(groupRankIds), std::end(groupRankIds), 0);
+        std::vector<int> originalRankIds(static_cast<size_t>(numRanksDied));
+        MPI_Group_translate_ranks(
+            difference, numRanksDied, groupRankIds.data(), _originalGroup, originalRankIds.data());
+        MPI_Group_free(&_lastDiedRanksRequestedGroup);
+        _lastDiedRanksRequestedGroup = _currentGroup;
+        return originalRankIds;
+    }
+
     private:
     MPI_Group _originalGroup;
     MPI_Group _currentGroup;
+    MPI_Group _lastDiedRanksRequestedGroup;
 };
 
 template <class F>
@@ -287,6 +305,10 @@ class MPIContext {
 
     original_rank_t numFailuresSinceReset() const {
         return getOriginalSize() - getCurrentSize();
+    }
+
+    std::vector<original_rank_t> getRanksDiedSinceLastCall() {
+        return _rankManager.getRanksDiedSinceLastCall();
     }
 
     std::optional<current_rank_t> getCurrentRank(const original_rank_t rank) const {
