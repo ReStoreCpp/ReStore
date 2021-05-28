@@ -121,25 +121,25 @@ class RankManager {
         _originalGroup = _currentGroup;
     }
 
-    original_rank_t getOriginalSize() {
+    original_rank_t getOriginalSize() const {
         original_rank_t size;
         MPI_Group_size(_originalGroup, &size);
         return size;
     }
 
-    original_rank_t getMyOriginalRank() {
+    original_rank_t getMyOriginalRank() const {
         original_rank_t rank;
         MPI_Group_rank(_originalGroup, &rank);
         return rank;
     }
 
-    current_rank_t getCurrentSize() {
+    current_rank_t getCurrentSize() const {
         current_rank_t size;
         MPI_Group_size(_currentGroup, &size);
         return size;
     }
 
-    current_rank_t getMyCurrentRank() {
+    current_rank_t getMyCurrentRank() const {
         current_rank_t rank;
         MPI_Group_rank(_currentGroup, &rank);
         return rank;
@@ -333,8 +333,8 @@ class MPIContext {
     }
 
     private:
-    MPI_Comm            _comm;
-    mutable RankManager _rankManager;
+    MPI_Comm    _comm;
+    RankManager _rankManager;
 };
 
 } // namespace ReStoreMPI
