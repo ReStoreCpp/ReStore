@@ -165,14 +165,14 @@ TEST(SerializedBlockStoreStream, Constructor) {
     auto ranks   = RanksArrayType();
 
     // no ranks
-    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers).setDestinationRanks(ranks));
 
     // all fine
     ranks.push_back(0);
-    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
+    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers).setDestinationRanks(ranks));
     ranks.push_back(1);
     ranks.push_back(2);
-    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, ranks));
+    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers).setDestinationRanks(ranks));
 }
 
 TEST(SerializedBlockStoreStream, InStream) {
@@ -184,14 +184,16 @@ TEST(SerializedBlockStoreStream, InStream) {
     ranks.push_back(0);
     ranks.push_back(3);
 
-    ReStore::SerializedBlockStoreStream stream(buffers, ranks);
+    ReStore::SerializedBlockStoreStream stream(buffers);
+    stream.setDestinationRanks(ranks);
 
     stream << 0x42_byte;
     ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
     ASSERT_EQ(buffers.find(1), buffers.end());
     ASSERT_EQ(buffers.find(2), buffers.end());
     ASSERT_EQ(buffers.at(3)[0], 0x42_byte);
-    ASSERT_EQ(stream.bytesWritten(), 1);
+    ASSERT_EQ(stream.bytesWritten(0), 1);
+    ASSERT_EQ(stream.bytesWritten(3), 1);
     ASSERT_EQ(buffers.at(0).size(), 1);
     ASSERT_EQ(buffers.at(3).size(), 1);
 
@@ -203,12 +205,10 @@ TEST(SerializedBlockStoreStream, InStream) {
 
     ASSERT_EQ(buffers.at(0)[1], 0x00_byte);
     ASSERT_EQ(buffers.at(3)[1], 0x00_byte);
-    ASSERT_EQ(stream.bytesWritten(), 2);
+    ASSERT_EQ(stream.bytesWritten(0), 2);
+    ASSERT_EQ(stream.bytesWritten(3), 2);
     ASSERT_EQ(buffers.at(0).size(), 2);
     ASSERT_EQ(buffers.at(3).size(), 2);
-
-    // I refrain from asserting anything about the order in which bytes are stored in memory
-    // TODO test that read ° store = identity
 
     stream << 0xFFFF_uint16;
     ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
@@ -222,7 +222,8 @@ TEST(SerializedBlockStoreStream, InStream) {
     ASSERT_EQ(buffers.at(3)[2], 0xFF_byte);
     ASSERT_EQ(buffers.at(0)[3], 0xFF_byte);
     ASSERT_EQ(buffers.at(3)[3], 0xFF_byte);
-    ASSERT_EQ(stream.bytesWritten(), 4);
+    ASSERT_EQ(stream.bytesWritten(0), 4);
+    ASSERT_EQ(stream.bytesWritten(3), 4);
     ASSERT_EQ(buffers.at(0).size(), 4);
     ASSERT_EQ(buffers.at(3).size(), 4);
 
@@ -235,9 +236,33 @@ TEST(SerializedBlockStoreStream, InStream) {
     ASSERT_THAT(
         buffers.at(3),
         UnorderedElementsAre(0x00_byte, 0x42_byte, 0x01_byte, 0x10_byte, 0x13_byte, 0x37_byte, 0xFF_byte, 0xFF_byte));
-    ASSERT_EQ(stream.bytesWritten(), 8);
+    ASSERT_EQ(stream.bytesWritten(0), 8);
+    ASSERT_EQ(stream.bytesWritten(3), 8);
     ASSERT_EQ(buffers.at(0).size(), 8);
     ASSERT_EQ(buffers.at(3).size(), 8);
+
+    auto                                buffers2 = BuffersType();
+    ReStore::SerializedBlockStoreStream stream2(buffers2);
+    stream2.setDestinationRanks(ranks);
+
+    stream2 << 0x1F1F_uint16;
+    auto handle1p0 = stream2.reserveBytesForWriting(0, sizeof(uint8_t));
+    auto handle1p3 = stream2.reserveBytesForWriting(3, sizeof(uint8_t));
+    stream2 << 0x0101_uint16;
+    auto handle2 = stream2.reserveBytesForWriting(3, sizeof(uint16_t));
+    stream2 << 0x2222_uint16;
+    stream2.writeToReservedBytes(handle1p0, 0xFF_uint8);
+    stream2.writeToReservedBytes(handle1p3, 0xFF_uint8);
+    stream2.writeToReservedBytes(handle2, 0x3333_uint16);
+
+    ASSERT_EQ(stream2.bytesWritten(0), 7);
+    ASSERT_EQ(stream2.bytesWritten(3), 9);
+
+    ASSERT_THAT(
+        buffers2.at(0), ElementsAre(0x1F_byte, 0x1F_byte, 0xFF_byte, 0x01_byte, 0x01_byte, 0x22_byte, 0x22_byte));
+    ASSERT_THAT(
+        buffers2.at(3),
+        ElementsAre(0x1F_byte, 0x1F_byte, 0xFF_byte, 0x01_byte, 0x01_byte, 0x33_byte, 0x33_byte, 0x22_byte, 0x22_byte));
 }
 
 int main(int argc, char** argv) {

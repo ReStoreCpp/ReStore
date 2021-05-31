@@ -47,7 +47,6 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
         data.size() * static_cast<size_t>(numRanks()));
 
     // No failure
-
     {
         std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
         for (int rank = 0; rank < numRanks(); ++rank) {
