@@ -38,25 +38,50 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 #option(${PROJECT_NAME}_USE_DOXYGEN "Add a doxygen target to generate the documentation" ON)
 #cmake_dependent_option(${PROJECT_NAME}_INSTALL_DOCS "Add the generated documentation to the install list" ON, ${PROJECT_NAME}_USE_DOXYGEN OFF)
 option(${PROJECT_NAME}_INSTALL "Add ${PROJECT_NAME} to the install list" ON)
-cmake_dependent_option("${PROJECT_NAME}_BUILD_TESTS" "Build tests for ${PROJECT_NAME}" ON "BUILD_TESTING" OFF)
-option("${PROJECT_NAME}_BUILD_BENCHMARKS" "Build examples" OFF)
+
+# Options to disable building the tests, examples, benchmarks, ...
+option("${PROJECT_NAME}_BUILD_TESTS" ON)
+option("${PROJECT_NAME}_BUILD_BENCHMARKS" "Build bencharkm" ON)
 option("${PROJECT_NAME}_BUILD_EXAMPLES" "Build examples" OFF)
+
+# Other build options
 option("SIMULATE_FAILURES" "Simulate node failues (for example when running unit test)." OFF)
 option("WARNINGS_ARE_ERRORS" "Treat warnings as errors." OFF)
 
-# TODO Not all libraries are needed for each target (benchmarks, tests, library) -> The user should be able to build the library without needing all theo ther libraries (gmock, gtest, cxxopts, cppitertools, ...)
-# Libraries
+# Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
-set("${PROJECT_NAME}_GTEST_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/googletest" CACHE PATH "Path to the googletest source directory")
 
-set("${PROJECT_NAME}_CPPITERTOOLS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cppitertools" CACHE PATH "Path to the cppitertools source directory")
+# Library specific settings
+set("NEEDS_GOOGLETEST" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
+set("NEEDS_CPPITERTOOLS" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
+set("NEEDS_CXXOPTS" ${PROJECT_NAME}_BUILD_BENCHMARKS)
+set("NEEDS_GOOGLEBENCHMARK" ${PROJECT_NAME}_BUILD_BENCHMARKS)
+set("NEEDS_BACKWARDCPP" OFF)
 
-set("${PROJECT_NAME}_CXXOPTS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cxxopts" CACHE PATH "Path to the cxxopts source directory")
+if(NEEDS_GOOGLETEST)
+    message("Using googletest")
+    set("${PROJECT_NAME}_GTEST_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/googletest" CACHE PATH "Path to the googletest source directory")
+endif()
 
-set("${PROJECT_NAME}_BACKWARDCPP_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/backward-cpp" CACHE PATH "Path to the backward-cpp source directory")
+if(NEEDS_GOOGLEBENCHMARK)
+    message("Using googlebenchmark")
+    set("${PROJECT_NAME}_GBENCHMARK_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/googlebenchmark" CACHE PATH "Path to the googlebenchmark source directory")
+endif()
 
-#option(${PROJECT_NAME}_USE_DOXYGEN "Add a doxygen target to generate the documentation" ON)
-#set(${PROJECT_NAME}_L1_CACHE_LINESIZE "Set the L1 cache linesize to be used for cache alignment, to encourage true sharing and to prevent false sharing" ON)
+if(NEEDS_CPPITERTOOLS)
+    message("Using cppitertools")
+    set("${PROJECT_NAME}_CPPITERTOOLS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cppitertools" CACHE PATH "Path to the cppitertools source directory")
+endif()
+
+if(NEEDS_CXXOPTS)
+    message("Using cxxopts")
+    set("${PROJECT_NAME}_CXXOPTS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cxxopts" CACHE PATH "Path to the cxxopts source directory")
+endif()
+
+if(NEEDS_BACKWARDCPP)
+    message("Using backwardcpp")
+    set("${PROJECT_NAME}_BACKWARDCPP_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/backward-cpp" CACHE PATH "Path to the backward-cpp source directory")
+endif()
 
 # Organize targets into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -88,6 +113,7 @@ target_include_directories(
 #    $<BUILD_INTERFACE:${PROJECT_CURRENT_BINARY_DIR}>
 #)
 
+### Compiler and linker settings ###
 # This interface reflects the requirements to the compiler for building targets
 # linking against.
 add_library("${PROJECT_NAME}_compile_requirements" INTERFACE)
@@ -144,9 +170,27 @@ target_compile_options(
     $<BUILD_INTERFACE:${WARNING_FLAGS}>
 )
 
-if(${PROJECT_NAME}_BUILD_TESTS)
-    set(TEST_RUNNER_PARAMS "" CACHE STRING "Options added to the test runner")
+### Libraries ###
+# Load and include cppitertools       
+if(NEEDS_CPPITERTOOLS)
+    if(NOT EXISTS "${${PROJECT_NAME}_CPPITERTOOLS_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "Could not find cppitertools in ${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
+    endif()
+    set("ENV{cppitertools_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
+    add_subdirectory("${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
+endif()
 
+# Load and include cxxopts       
+if(NEEDS_CXXOPTS)
+    if(NOT EXISTS "${${PROJECT_NAME}_CXXOPTS_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "Could not find cxxopts in ${${PROJECT_NAME}_CXXOPTS_DIR}")
+    endif()
+    set("ENV{cxxopts_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
+    add_subdirectory("${${PROJECT_NAME}_CXXOPTS_DIR}")
+endif()
+
+# Load and include googletest
+if(NEEDS_GOOGLETEST)
     if(${PROJECT_NAME}_SYSTEM_GTEST)
         find_package(GTest REQUIRED)
     else()
@@ -158,44 +202,41 @@ if(${PROJECT_NAME}_BUILD_TESTS)
         list(APPEND CMAKE_MODULE_PATH "${${PROJECT_NAME}_GTEST_DIR}/contrib")
     endif()
 
-    enable_testing()
     include(GoogleTest)
+endif()
+
+# Load and include googlebenchmark
+if(NEEDS_GOOGLEBENCHMARK)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Suppressing benchmark's tests" FORCE)
+    add_subdirectory("${${PROJECT_NAME}_GBENCHMARK_DIR}" EXCLUDE_FROM_ALL)
+endif()
+
+
+### Subdirectories ###
+# Build the unit tests
+if(${PROJECT_NAME}_BUILD_TESTS)
+    message("Building unit tests: YES")
+    set(TEST_RUNNER_PARAMS "" CACHE STRING "Options added to the test runner")
+    enable_testing()
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/tests")
+else()
+    message("Building unit tests: NO")
 endif()
 
-# Load and include cppitertools       
-if(NOT EXISTS "${${PROJECT_NAME}_CPPITERTOOLS_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR "Could not find cppitertools in ${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
-endif()
-set("ENV{cppitertools_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
-add_subdirectory("${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
-
-# Load and include cxxopts       
-if(NOT EXISTS "${${PROJECT_NAME}_CXXOPTS_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR "Could not find cxxopts in ${${PROJECT_NAME}_CXXOPTS_DIR}")
-endif()
-set("ENV{cxxopts_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
-add_subdirectory("${${PROJECT_NAME}_CXXOPTS_DIR}")
-
-#if(${PROJECT_NAME}_USE_DOXYGEN)
-#    find_package(Doxygen)
-#    if(DOXYGEN_FOUND)
-#        doxygen_add_docs(
-#            doxygen
-#            "${CMAKE_CURRENT_LIST_DIR}/include/${PROJECT_NAME}"
-#            COMMENT "Generate man pages"
-#        )
-#    else()
-#        message("Doxygen not found, skipping documentation generation")
-#    endif()
-#endif()
-
-#if(${PROJECT_NAME}_BUILD_BENCHMARKS)
+# Build the benchmarks
+if(${PROJECT_NAME}_BUILD_BENCHMARKS)
+    message("Building benchmarks: YES")
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/benchmark")
-#endif()
+else()
+    message("Building benchmarks: NO")
+endif()
 
+# Build the examples
 if(${PROJECT_NAME}_BUILD_EXAMPLES)
+    message("Building examples: YES")
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/examples")
+else()
+    message("Building examples: NO")
 endif()
 
 #if(${PROJECT_NAME}_INSTALL)
