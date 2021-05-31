@@ -55,7 +55,7 @@ endfunction(add_mpi_test)
 ## Without MPI
 restore_add_test(test_block_distribution "ReStore::ReStore;cppitertools" test_block_distribution.cpp)
 restore_add_test(test_serialization "ReStore::ReStore;cppitertools" test_serialization.cpp)
-restore_add_test(test_block_submisssion "ReStore::ReStore;cppitertools" test_block_submission.cpp)
+restore_add_test(test_block_submission "ReStore::ReStore;cppitertools" test_block_submission.cpp)
 restore_add_test(test_block_retrieval "ReStore::ReStore;" test_block_retrieval.cpp)
 restore_add_test(test_helpers "ReStore::ReStore;cppitertools" test_helpers.cpp)
 add_mpi_test(mpi_tests_failures/test_restore_constructor.cpp test_restore_constructor TestRestoreConstructor 4 "ReStore::ReStore;cppitertools")
