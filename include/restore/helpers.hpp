@@ -1,6 +1,7 @@
 #ifndef RESTORE_HELPERS_H
 #define RESTORE_HELPERS_H
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -76,13 +77,13 @@ constexpr bool in_range(From value) noexcept {
 
 // The following two functions use the above in_range to check if a value can be safely casted and if so, static_cast
 // it. Depeneding on which version we choose, this check is either an assert or throws an exception.
-template<class To, class From>
+template <class To, class From>
 constexpr To asserting_cast(From value) noexcept {
     assert(in_range<To>(value));
     return static_cast<To>(value);
 }
 
-template<class To, class From>
+template <class To, class From>
 constexpr To throwing_cast(From value) {
     if (!in_range<To>(value)) {
         throw std::range_error("string(value) is not not representable the target type");
