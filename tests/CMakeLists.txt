@@ -62,6 +62,7 @@ add_mpi_test(mpi_tests_failures/test_restore_constructor.cpp test_restore_constr
 
 ## With MPI
 add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
+add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple1.cpp test_restore_end_to_end_simple1 TestRestore_EndToEnd_Simple1 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple2.cpp test_restore_end_to_end_simple2 TestRestore_EndToEnd_Simple2 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_single_failure.cpp test_restore_end_to_end_single_failure TestRestore_EndToEnd_SingleFailure 4 "ReStore::ReStore;cppitertools")

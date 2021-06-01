@@ -29,24 +29,35 @@ include(CMakeDependentOption)
 include(CTest)
 include(GNUInstallDirs)
 
+# Enable sorting targets (of external libraries) into folders
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+# Are we building in DEBUG mode?
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  message("debug mode")
+  message("!!!!! Building in DEBUG mode !!!!!")
   add_definitions(-D_GLIBCXX_DEBUG)
   add_definitions(-D_GLIBCXX_DEBUG_PEDANTIC)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
-#option(${PROJECT_NAME}_USE_DOXYGEN "Add a doxygen target to generate the documentation" ON)
-#cmake_dependent_option(${PROJECT_NAME}_INSTALL_DOCS "Add the generated documentation to the install list" ON, ${PROJECT_NAME}_USE_DOXYGEN OFF)
 option(${PROJECT_NAME}_INSTALL "Add ${PROJECT_NAME} to the install list" ON)
 
 # Options to disable building the tests, examples, benchmarks, ...
-option("${PROJECT_NAME}_BUILD_TESTS" ON)
-option("${PROJECT_NAME}_BUILD_BENCHMARKS" "Build bencharkm" ON)
-option("${PROJECT_NAME}_BUILD_EXAMPLES" "Build examples" OFF)
+option(${PROJECT_NAME}_BUILD_TESTS "Build unit tests" ON)
+option(${PROJECT_NAME}_BUILD_BENCHMARKS "Build benchmarks" ON)
+option(${PROJECT_NAME}_BUILD_EXAMPLES "Build examples" OFF)
 
 # Other build options
 option("SIMULATE_FAILURES" "Simulate node failues (for example when running unit test)." OFF)
+option("USE_FTMPI" "Use a fault-tolerant MPI implementation" ON)
 option("WARNINGS_ARE_ERRORS" "Treat warnings as errors." OFF)
+
+# Output config
+if(NOT SIMULATE_FAILURES AND NOT USE_FTMPI)
+    message(FATAL_ERROR "You have to either use a fault-tolerant MPI implementation or simulated failures (or both).")
+endif()
+
+message(" ## Using simulated failures: ${SIMULATE_FAILURES}")
+message(" ## Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
 
 # Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
@@ -203,12 +214,14 @@ if(NEEDS_GOOGLETEST)
     endif()
 
     include(GoogleTest)
+    set_target_properties(gtest gmock PROPERTIES FOLDER googletest)
 endif()
 
 # Load and include googlebenchmark
 if(NEEDS_GOOGLEBENCHMARK)
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Suppressing benchmark's tests" FORCE)
     add_subdirectory("${${PROJECT_NAME}_GBENCHMARK_DIR}" EXCLUDE_FROM_ALL)
+    set_target_properties(benchmark PROPERTIES FOLDER googlebenchmark)
 endif()
 
 

@@ -1,6 +1,7 @@
 #include <bits/stdint-uintn.h>
 #include <cassert>
 #include <cstdint>
+#include <gmock/gmock-matchers.h>
 #include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
 #include <memory>
@@ -128,7 +129,6 @@ TEST(MPIContext, SparseAllToAllSmallerComm) {
     }
 }
 
-
 TEST(MPIContext, RankConversion) {
     int originalRank;
     int originalSize;
@@ -229,6 +229,109 @@ TEST(MPIContext, RankConversion) {
     }
 }
 
+TEST(MPIContext, DeadRankRetrievalSimple) {
+    int originalRank;
+    int originalSize;
+    MPI_Comm_rank(MPI_COMM_WORLD, &originalRank);
+    MPI_Comm_size(MPI_COMM_WORLD, &originalSize);
+    ReStoreMPI::MPIContext context(MPI_COMM_WORLD);
+    ASSERT_EQ(4, originalSize);
+    MPI_Comm comm;
+    MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
+    context.updateComm(comm);
+    auto deadRanks = context.getRanksDiedSinceLastCall();
+    if (originalRank == 1 || originalRank == 2) {
+        EXPECT_THAT(deadRanks, testing::ElementsAre(0, 3));
+    } else {
+        EXPECT_THAT(deadRanks, testing::ElementsAre(1, 2));
+    }
+}
+
+TEST(MPIContext, DeadRankRetrievalTwiceWithCalls) {
+    int originalRank;
+    int originalSize;
+    MPI_Comm_rank(MPI_COMM_WORLD, &originalRank);
+    MPI_Comm_size(MPI_COMM_WORLD, &originalSize);
+    ReStoreMPI::MPIContext context(MPI_COMM_WORLD);
+    ASSERT_EQ(4, originalSize);
+    MPI_Comm comm;
+    MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
+    context.updateComm(comm);
+    auto deadRanks = context.getRanksDiedSinceLastCall();
+    if (originalRank == 1 || originalRank == 2) {
+        EXPECT_THAT(deadRanks, testing::ElementsAre(0, 3));
+    } else {
+        EXPECT_THAT(deadRanks, testing::ElementsAre(1, 2));
+    }
+    MPI_Comm comm2;
+    MPI_Comm_split(comm, originalRank == 0 || originalRank == 1, originalRank, &comm2);
+    context.updateComm(comm2);
+    deadRanks = context.getRanksDiedSinceLastCall();
+    switch (originalRank) {
+        case 0:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(3));
+            break;
+        case 1:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(2));
+            break;
+        case 2:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(1));
+            break;
+        case 3:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(0));
+            break;
+        default:
+            FAIL();
+    }
+}
+
+TEST(MPIContext, DeadRankRetrievalTwiceAtOnce) {
+    int originalRank;
+    int originalSize;
+    MPI_Comm_rank(MPI_COMM_WORLD, &originalRank);
+    MPI_Comm_size(MPI_COMM_WORLD, &originalSize);
+    ReStoreMPI::MPIContext context(MPI_COMM_WORLD);
+    ASSERT_EQ(4, originalSize);
+    MPI_Comm comm;
+    MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
+    context.updateComm(comm);
+    MPI_Comm comm2;
+    MPI_Comm_split(comm, originalRank == 0 || originalRank == 1, originalRank, &comm2);
+    context.updateComm(comm2);
+    auto deadRanks = context.getRanksDiedSinceLastCall();
+    switch (originalRank) {
+        case 0:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(1, 2, 3));
+            break;
+        case 1:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(0, 2, 3));
+            break;
+        case 2:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(0, 1, 3));
+            break;
+        case 3:
+            EXPECT_THAT(deadRanks, testing::ElementsAre(0, 1, 2));
+            break;
+        default:
+            FAIL();
+    }
+}
+
+TEST(MPIContext, DeadRankRetrievalNoChange) {
+    int originalRank;
+    int originalSize;
+    MPI_Comm_rank(MPI_COMM_WORLD, &originalRank);
+    MPI_Comm_size(MPI_COMM_WORLD, &originalSize);
+    ReStoreMPI::MPIContext context(MPI_COMM_WORLD);
+    ASSERT_EQ(4, originalSize);
+    MPI_Comm comm;
+    MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
+    context.updateComm(comm);
+    auto deadRanks = context.getRanksDiedSinceLastCall();
+    deadRanks      = context.getRanksDiedSinceLastCall();
+    EXPECT_EQ(0, deadRanks.size());
+}
+
 TEST(MPIContext, MessageEquality) {
     using ReStoreMPI::RecvMessage;
     using ReStoreMPI::SendMessage;
@@ -269,6 +372,7 @@ TEST(MPIContext, MessageEquality) {
         ASSERT_NE(RecvMessage(std::vector<std::byte>(payload3), 1), RecvMessage(std::vector<std::byte>(payload2), 1));
     }
 }
+
 
 int main(int argc, char** argv) {
     // Filter out Google Test arguments
