@@ -38,9 +38,9 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 option(${PROJECT_NAME}_INSTALL "Add ${PROJECT_NAME} to the install list" ON)
 
 # Options to disable building the tests, examples, benchmarks, ...
-option("${PROJECT_NAME}_BUILD_TESTS" ON)
-option("${PROJECT_NAME}_BUILD_BENCHMARKS" "Build bencharkm" ON)
-option("${PROJECT_NAME}_BUILD_EXAMPLES" "Build examples" OFF)
+option(${PROJECT_NAME}_BUILD_TESTS "Build unit tests" ON)
+option(${PROJECT_NAME}_BUILD_BENCHMARKS "Build benchmarks" ON)
+option(${PROJECT_NAME}_BUILD_EXAMPLES "Build examples" OFF)
 
 # Other build options
 option("SIMULATE_FAILURES" "Simulate node failues (for example when running unit test)." OFF)
