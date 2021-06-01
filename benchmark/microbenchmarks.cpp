@@ -23,8 +23,6 @@
 using iter::range;
 
 static void BM_submitBlocks(benchmark::State& state) {
-    // Each rank submits different data. The replication level is set to 3.
-
     // Parse arguments
     size_t   blockSize        = throwing_cast<size_t>(state.range(0));
     uint16_t replicationLevel = throwing_cast<uint16_t>(state.range(1));
@@ -194,6 +192,7 @@ BENCHMARK(BM_pushBlocks)            ///
         {2, 3, 4},                          // replication level
         {MiB(1), MiB(16), MiB(32), MiB(64)} //, MiB(128)} // bytes per rank
     });
+const auto MAX_REPLICATION_LEVEL = 4;
 
 // This reporter does nothing.
 // We can use it to disable output from all but the root process
@@ -213,6 +212,12 @@ int main(int argc, char** argv) {
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    // Do we have enough MPI ranks?
+    if (numRanks() < MAX_REPLICATION_LEVEL) {
+        std::cout << "Please call this benchmark with at least " << MAX_REPLICATION_LEVEL << " ranks." << std::endl;
+        return 1;
+    }
 
     ::benchmark::Initialize(&argc, argv);
 
