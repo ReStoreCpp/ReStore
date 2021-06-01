@@ -30,7 +30,7 @@ include(CTest)
 include(GNUInstallDirs)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  message("debug mode")
+  message("!!!!! Building in DEBUG mode !!!!!")
   add_definitions(-D_GLIBCXX_DEBUG)
   add_definitions(-D_GLIBCXX_DEBUG_PEDANTIC)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
