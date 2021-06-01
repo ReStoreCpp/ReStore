@@ -13,6 +13,10 @@
 #include <optional>
 #include <vector>
 
+#if USE_FTMPI
+    #include <mpi-ext.h>
+#endif
+
 #ifndef RESTORE_SPARSE_ALL_TO_ALL_TAG
     #define RESTORE_SPARSE_ALL_TO_ALL_TAG 42
 #endif
@@ -205,14 +209,18 @@ class RankManager {
 
 template <class F>
 void successOrThrowMpiCall(const F& mpiCall) {
-    int rc, ec;
-    rc = mpiCall();
-    MPI_Error_class(rc, &ec);
-    if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_PROC_FAILED_PENDING) {
-        throw FaultException();
-    }
-    if (ec == MPI_ERR_REVOKED) {
-        throw RevokedException();
+    if constexpr (USE_FTMPI) {
+        int rc, ec;
+        rc = mpiCall();
+        MPI_Error_class(rc, &ec);
+        if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_PROC_FAILED_PENDING) {
+            throw FaultException();
+        }
+        if (ec == MPI_ERR_REVOKED) {
+            throw RevokedException();
+        }
+    } else {
+        return;
     }
 }
 
