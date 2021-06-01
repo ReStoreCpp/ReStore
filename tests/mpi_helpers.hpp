@@ -2,12 +2,14 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <iostream>
 #include <mpi.h>
 #include <restore/mpi_context.hpp>
 #include <signal.h>
-#include <iostream>
 
-#include <mpi-ext.h>
+#if USE_FTMPI
+    #include <mpi-ext.h>
+#endif
 
 constexpr int EXIT_SIMULATED_FAILURE = 42;
 
@@ -41,15 +43,15 @@ class RankFailureManager {
         _iFailed = std::find(failedRanks.begin(), failedRanks.end(), myRankId(_comm)) != failedRanks.end();
         std::cout << myRankId() << ": " << _iFailed << std::endl;
 
-        if constexpr (SIMULATE_FAILURES) {
-            return simulateFailure(_iFailed);
-        } else {
-            if (_iFailed) {
-                // raise(SIGKILL);
-                exit(EXIT_SIMULATED_FAILURE);
-            }
-            return repairCommunicator();
+#if SIMULATE_FAILURES
+        return simulateFailure(_iFailed);
+#else
+        if (_iFailed) {
+            // raise(SIGKILL);
+            exit(EXIT_SIMULATED_FAILURE);
         }
+        return repairCommunicator();
+#endif
     }
 
     // everyoneStillRunning()
@@ -124,6 +126,7 @@ class RankFailureManager {
         return newComm;
     }
 
+#if USE_FTMPI && !SIMULATE_FAILURES
     // repairCommunicator()
     //
     // If there was a (non simulated) rank failure we can use this to repair the MPI communicator. It will return
@@ -149,9 +152,9 @@ class RankFailureManager {
         _comm = newComm;
         return newComm;
     }
+#endif
 
     MPI_Comm _comm;
     bool     _iFailed;
     bool     _noMoreCollectives;
 };
-

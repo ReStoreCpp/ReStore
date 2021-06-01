@@ -21,7 +21,13 @@
 #include <unordered_set>
 #include <utility>
 
-#include <mpi-ext.h>
+#if USE_FTMPI
+    #include <mpi-ext.h>
+#endif
+
+static_assert(
+    USE_FTMPI || SIMULATE_FAILURES,
+    "When not simulating failures, you need to use a fault-tolerant MPI implementation.");
 
 using node_t = int;
 
@@ -212,6 +218,7 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
         }
 
     } else {
+#if USE_FTMPI
         if (ranksToKill.size() > 0) {
             int rank;
             MPI_Comm_rank(comm, &rank);
@@ -248,6 +255,7 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
             exit(1);
         }
         return true;
+#endif
     }
 }
 
@@ -417,8 +425,9 @@ int main(int argc, char** argv) {
             return std::nullopt;
         } else {
             ++currentEdgeId;
-            return ReStore::NextBlock<edge_t>{asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
-                                              edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
+            return ReStore::NextBlock<edge_t>{
+                asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
+                edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
         }
     };
 

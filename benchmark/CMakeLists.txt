@@ -31,6 +31,7 @@ target_compile_options(${PAGERANK} PRIVATE -O3 "${WARNING_FLAGS}")
 
 # microbenchmarks
 add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
+add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
 set(MICROBENCHMARKS_TARGET "microbenchmarks")
 add_executable(${MICROBENCHMARKS_TARGET} microbenchmarks.cpp)
 target_include_directories(${MICROBENCHMARKS_TARGET} SYSTEM PRIVATE ../extern/)
