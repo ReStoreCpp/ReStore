@@ -48,7 +48,16 @@ option(${PROJECT_NAME}_BUILD_EXAMPLES "Build examples" OFF)
 
 # Other build options
 option("SIMULATE_FAILURES" "Simulate node failues (for example when running unit test)." OFF)
+option("USE_FTMPI" "Use a fault-tolerant MPI implementation" ON)
 option("WARNINGS_ARE_ERRORS" "Treat warnings as errors." OFF)
+
+# Output config
+if(NOT SIMULATE_FAILURES AND NOT USE_FTMPI)
+    message(FATAL_ERROR "You have to either use a fault-tolerant MPI implementation or simulated failures (or both).")
+endif()
+
+message(" ## Using simulated failures: ${SIMULATE_FAILURES}")
+message(" ## Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
 
 # Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
