@@ -209,7 +209,7 @@ class RankManager {
 
 template <class F>
 void successOrThrowMpiCall(const F& mpiCall) {
-#ifdef USE_FTMPI
+#if USE_FTMPI
     int rc, ec;
     rc = mpiCall();
     MPI_Error_class(rc, &ec);
@@ -220,7 +220,7 @@ void successOrThrowMpiCall(const F& mpiCall) {
         throw RevokedException();
     }
 #else
-    return;
+    mpiCall();
 #endif
 }
 
