@@ -209,19 +209,19 @@ class RankManager {
 
 template <class F>
 void successOrThrowMpiCall(const F& mpiCall) {
-    if constexpr (USE_FTMPI) {
-        int rc, ec;
-        rc = mpiCall();
-        MPI_Error_class(rc, &ec);
-        if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_PROC_FAILED_PENDING) {
-            throw FaultException();
-        }
-        if (ec == MPI_ERR_REVOKED) {
-            throw RevokedException();
-        }
-    } else {
-        return;
+#ifdef USE_FTMPI
+    int rc, ec;
+    rc = mpiCall();
+    MPI_Error_class(rc, &ec);
+    if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_PROC_FAILED_PENDING) {
+        throw FaultException();
     }
+    if (ec == MPI_ERR_REVOKED) {
+        throw RevokedException();
+    }
+#else
+    return;
+#endif
 }
 
 void receiveNewMessage(std::vector<RecvMessage>& result, const MPI_Comm comm, const int tag) {
