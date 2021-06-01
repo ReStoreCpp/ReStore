@@ -29,6 +29,10 @@ include(CMakeDependentOption)
 include(CTest)
 include(GNUInstallDirs)
 
+# Enable sorting targets (of external libraries) into folders
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+# Are we building in DEBUG mode?
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   message("!!!!! Building in DEBUG mode !!!!!")
   add_definitions(-D_GLIBCXX_DEBUG)
@@ -201,12 +205,14 @@ if(NEEDS_GOOGLETEST)
     endif()
 
     include(GoogleTest)
+    set_target_properties(gtest gmock PROPERTIES FOLDER googletest)
 endif()
 
 # Load and include googlebenchmark
 if(NEEDS_GOOGLEBENCHMARK)
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Suppressing benchmark's tests" FORCE)
     add_subdirectory("${${PROJECT_NAME}_GBENCHMARK_DIR}" EXCLUDE_FROM_ALL)
+    set_target_properties(benchmark PROPERTIES FOLDER googlebenchmark)
 endif()
 
 
