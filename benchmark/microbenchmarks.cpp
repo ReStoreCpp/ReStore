@@ -222,12 +222,13 @@ int main(int argc, char** argv) {
     ::benchmark::Initialize(&argc, argv);
 
     if (rank == 0)
-        // root process will use a reporter from the usual set provided by ::benchmark
+        // Root process will use a reporter from the usual set provided by ::benchmark
         ::benchmark::RunSpecifiedBenchmarks();
     else {
-        // reporting from other processes is disabled by passing a custom reporter
+        // Reporting from other processes is disabled by passing a custom reporter.
+        // We have to disable the display AND file reporter.
         NullReporter null;
-        ::benchmark::RunSpecifiedBenchmarks(&null);
+        ::benchmark::RunSpecifiedBenchmarks(&null, &null);
     }
 
     MPI_Finalize();
