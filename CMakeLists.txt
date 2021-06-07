@@ -6,6 +6,13 @@ else()
     set(IS_SUBPROJECT ON)
 endif()
 
+# Use ccache if available
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    message("Found ccache; using it to speed up compilation.")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+endif()
+
 # Project settings
 project(ReStore VERSION 0.1.0 LANGUAGES CXX)
 
