@@ -363,7 +363,7 @@ int main(int argc, char** argv) {
          "iterations "
          "drops below the tolerance.",
          cxxopts::value<double>()->default_value("0.000000001"))                                       ///
-        ("r,repetitions", "Number of repitions to run", cxxopts::value<size_t>()->default_value("10")) ///
+        ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("10")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3")) ///
         ("h,help", "Print help message.");
@@ -405,7 +405,7 @@ int main(int argc, char** argv) {
     const bool sortOutput  = options["sort"].as<bool>();
     const bool printOutput = options["print"].as<bool>();
 
-    const auto   numRepititions = options["repetitions"].as<size_t>();
+    const auto   numRepetitions = options["repetitions"].as<size_t>();
     const double dampening      = options["dampening"].as<double>();
     const double tolerance      = options["tolerance"].as<double>();
 
@@ -442,12 +442,12 @@ int main(int argc, char** argv) {
 
     std::vector<double> result;
     auto                start = MPI_Wtime();
-    for (size_t i = 0; i < numRepititions; ++i) {
+    for (size_t i = 0; i < numRepetitions; ++i) {
         result = pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore);
     }
     auto end        = MPI_Wtime();
     auto time       = end - start;
-    auto timePerRun = time / static_cast<double>(numRepititions);
+    auto timePerRun = time / static_cast<double>(numRepetitions);
 
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
