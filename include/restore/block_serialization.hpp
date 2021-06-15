@@ -18,7 +18,7 @@ class SerializedBlockStoreStream {
     using original_rank_t = ReStoreMPI::original_rank_t;
     using current_rank_t  = ReStoreMPI::current_rank_t;
 
-    SerializedBlockStoreStream(std::unordered_map<current_rank_t, std::vector<std::byte>>& buffers)
+    explicit SerializedBlockStoreStream(std::unordered_map<current_rank_t, std::vector<std::byte>>& buffers)
         : _bytesWritten(0),
           _buffers(buffers) {}
 

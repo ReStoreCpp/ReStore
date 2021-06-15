@@ -62,7 +62,8 @@ TEST_F(ReStoreTestWithFailures, ComplexDataType) {
 
     signed int myStart = (myRankId() - (numRanks() / 2)) * 1000;
     signed int myEnd   = myStart + 1000;
-    for (int number: range(myStart, myEnd)) {
+    
+    for (int number = myStart; number < myEnd; number++) {
         data.emplace_back(number, abs(number), number % 2 == 0, number % 3 == 0);
     }
 
@@ -71,7 +72,7 @@ TEST_F(ReStoreTestWithFailures, ComplexDataType) {
     for (const auto& rank: range(numRanks())) {
         signed int start = (rank - (numRanks() / 2)) * 1000;
         signed int end   = start + 1000;
-        for (int number: range(start, end)) {
+        for (int number = start; number < end; number++) {
             allData.emplace_back(number, abs(number), number % 2 == 0, number % 3 == 0);
         }
     }

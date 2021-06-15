@@ -33,7 +33,7 @@ int numRanks(MPI_Comm _comm = MPI_COMM_WORLD) {
 
 class RankFailureManager {
     public:
-    RankFailureManager(MPI_Comm comm) noexcept : _comm(comm), _iFailed(false), _noMoreCollectives(false) {}
+    explicit RankFailureManager(MPI_Comm comm) noexcept : _comm(comm), _iFailed(false), _noMoreCollectives(false) {}
 
     // failRanks()
     //
@@ -111,6 +111,7 @@ class RankFailureManager {
     }
 
     private:
+#if SIMULATE_FAILURES
     // Simulates the failure of this rank if iFailed is set. This is done by splitting the current communictor into
     // alive and failed ranks. The failed ranks must then exit their test case.
     MPI_Comm simulateFailure(bool iFailed) {
@@ -126,6 +127,7 @@ class RankFailureManager {
         _comm = newComm;
         return newComm;
     }
+#endif
 
 #if USE_FTMPI && !SIMULATE_FAILURES
     // repairCommunicator()

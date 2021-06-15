@@ -333,7 +333,7 @@ void outputPageRanks(
     }
 }
 
-void writePageRanks(const std::vector<double>& pageRanks, const std::string path, const bool sort) {
+void writePageRanks(const std::vector<double>& pageRanks, const std::string& path, const bool sort) {
     std::ofstream outfile(path);
 
     outputPageRanks(pageRanks, sort, pageRanks.size(), outfile);
@@ -375,10 +375,10 @@ int main(int argc, char** argv) {
     try {
         options = cliParser.parse(argc, argv);
     } catch (cxxopts::OptionException& e) {
-        if (myRank == 0)
+        if (myRank == 0) {
             std::cout << e.what() << std::endl << std::endl;
-        if (myRank == 0)
             std::cout << cliParser.help() << std::endl;
+        }
         exit(1);
     }
 
@@ -389,10 +389,10 @@ int main(int argc, char** argv) {
     }
 
     if (!options.count("graph")) {
-        if (myRank == 0)
+        if (myRank == 0) {
             std::cout << "Please provide a graph." << std::endl;
-        if (myRank == 0)
             std::cout << cliParser.help() << std::endl;
+        }
         exit(1);
     }
 
@@ -452,10 +452,8 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
 
-    if (myRank == 0 && !amIDead)
-        std::cout << "Finished with " << numRanks << " ranks" << std::endl;
-
     if (myRank == 0 && !amIDead) {
+        std::cout << "Finished with " << numRanks << " ranks" << std::endl;
         std::cout << "Time per run: " << timePerRun << " s" << std::endl;
     }
 

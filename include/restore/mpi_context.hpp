@@ -109,7 +109,7 @@ class RevokedException : public std::exception {
 
 class RankManager {
     public:
-    RankManager(MPI_Comm comm) {
+    explicit RankManager(MPI_Comm comm) {
         MPI_Comm_group(comm, &_originalGroup);
         MPI_Comm_group(comm, &_currentGroup);
         MPI_Comm_group(comm, &_lastDiedRanksRequestedGroup);
@@ -280,7 +280,7 @@ std::vector<RecvMessage> SparseAllToAll(const std::vector<SendMessage>& messages
 
 class MPIContext {
     public:
-    MPIContext(MPI_Comm comm) : _comm(comm), _rankManager(comm) {}
+    explicit MPIContext(MPI_Comm comm) : _comm(comm), _rankManager(comm) {}
 
     void updateComm(MPI_Comm newComm) {
         _comm = newComm;

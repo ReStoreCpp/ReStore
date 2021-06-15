@@ -58,17 +58,17 @@ class BlockDistribution {
         BlockRange& operator=(BlockRange&&) = default;
 
         block_id_t start() const {
-            size_t blocksPerRange               = _blockDistribution.blocksPerRange();
-            size_t numRangesWithAdditionalBlock = _blockDistribution.numRangesWithAdditionalBlock();
+            size_t blocksPerRange                = _blockDistribution.blocksPerRange();
+            size_t numRangesWithAdditionalBlock  = _blockDistribution.numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution.numBlocks());
+            assert(_blocksPerRange <= _blockDistribution.numBlocks());
             assert(
-                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
+                _blocksPerRange * _blockDistribution.numRanges() + _numRangesWithAdditionalBlock
                 == _blockDistribution.numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
-            size_t start = std::numeric_limits<size_t>::max();
+            size_t start;
             if (_id < numRangesWithAdditionalBlock) {
                 start = _id * (blocksPerRange + 1);
             } else {
@@ -79,17 +79,17 @@ class BlockDistribution {
         }
 
         size_t length() const {
-            size_t blocksPerRange               = _blockDistribution.blocksPerRange();
-            size_t numRangesWithAdditionalBlock = _blockDistribution.numRangesWithAdditionalBlock();
+            size_t blocksPerRange                = _blockDistribution.blocksPerRange();
+            size_t numRangesWithAdditionalBlock  = _blockDistribution.numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution.numBlocks());
+            assert(_blocksPerRange <= _blockDistribution.numBlocks());
             assert(
-                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
+                _blocksPerRange * _blockDistribution.numRanges() + _numRangesWithAdditionalBlock
                 == _blockDistribution.numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
-            size_t length = std::numeric_limits<size_t>::max();
+            size_t length;
             if (_id < numRangesWithAdditionalBlock) {
                 length = blocksPerRange + 1;
             } else {
@@ -227,7 +227,6 @@ class BlockDistribution {
         // The range is located on the rank with the same id ...
         auto rankIds = std::vector<ReStoreMPI::original_rank_t>();
         assert(range.id() <= static_cast<size_t>(std::numeric_limits<ReStoreMPI::original_rank_t>::max()));
-        assert(range.id() >= 0);
         ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id());
         rankIds.push_back(firstRank);
 

@@ -328,6 +328,7 @@ TEST(MPIContext, DeadRankRetrievalNoChange) {
     MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
     context.updateComm(comm);
     auto deadRanks = context.getRanksDiedSinceLastCall();
+    EXPECT_EQ(2, deadRanks.size());
     deadRanks      = context.getRanksDiedSinceLastCall();
     EXPECT_EQ(0, deadRanks.size());
 }

@@ -35,7 +35,7 @@ class BlockSubmissionCommunication {
         public:
         enum class BlockIDMode : uint8_t { EVERY_ID, RANGES };
         struct BlockIDRange {
-            BlockIDRange(IDType id) : first(id), last(id) {}
+            explicit BlockIDRange(IDType id) : first(id), last(id) {}
             BlockIDRange(IDType _first, IDType _last) : first(_first), last(_last) {}
             IDType first;
             IDType last;
