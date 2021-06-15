@@ -356,3 +356,6 @@ clangbuild
 # R files
 .Rdata
 .Rhistory
+
+# SoftWipe output files
+softwipe_*
