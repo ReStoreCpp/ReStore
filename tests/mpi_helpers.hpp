@@ -6,6 +6,7 @@
 #include <mpi.h>
 #include <restore/mpi_context.hpp>
 #include <signal.h>
+#include <vector>
 
 #if USE_FTMPI
     #include <mpi-ext.h>

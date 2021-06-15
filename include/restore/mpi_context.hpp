@@ -2,7 +2,7 @@
 #define MPI_CONTEXT_H
 
 #include <algorithm>
-#include <bits/stdint-uintn.h>
+#include <stdint.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>

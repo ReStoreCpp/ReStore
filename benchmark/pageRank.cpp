@@ -1,7 +1,7 @@
 #include "restore/core.hpp"
 
 #include <algorithm>
-#include <bits/stdint-uintn.h>
+#include <stdint.h>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>

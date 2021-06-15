@@ -1,4 +1,4 @@
-#include <bits/stdint-uintn.h>
+#include <stdint.h>
 #include <cassert>
 #include <cstdint>
 #include <gmock/gmock-matchers.h>
