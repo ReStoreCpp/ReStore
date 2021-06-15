@@ -77,7 +77,7 @@ static void BM_submitBlocks(benchmark::State& state) {
         assert(counter == data.size() + 1);
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-        MPI_Allreduce(&elapsedSeconds, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         state.SetIterationTime(elapsedSeconds);
     }
 }
@@ -181,7 +181,7 @@ static void BM_pushBlocks(benchmark::State& state) {
         }));
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-        MPI_Allreduce(&elapsedSeconds, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         state.SetIterationTime(elapsedSeconds);
     }
 }
