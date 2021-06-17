@@ -219,9 +219,9 @@ class ReStore {
     //      inputs concurrently.
     template <class HandleSerializedBlockFunction>
     void pushBlocks(
-        const std::vector<std::pair<std::pair<block_id_t, size_t>, int>>& blockRanges,
-        HandleSerializedBlockFunction                                     handleSerializedBlock,
-        bool                                                              canBeParallelized = false // not supported yet
+        const std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>>& blockRanges,
+        HandleSerializedBlockFunction                                                            handleSerializedBlock,
+        bool canBeParallelized = false // not supported yet
     ) {
         if (_offsetMode == OffsetMode::lookUpTable) {
             throw std::runtime_error("LUT mode is not implemented yet.");

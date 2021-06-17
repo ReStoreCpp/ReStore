@@ -14,7 +14,7 @@
 
 namespace ReStore {
 using block_range_external_t = std::pair<block_id_t, size_t>;
-using block_range_request_t  = std::pair<block_range_external_t, int>;
+using block_range_request_t  = std::pair<block_range_external_t, ReStoreMPI::current_rank_t>;
 
 
 // Returns blockRanges and originalRanks
