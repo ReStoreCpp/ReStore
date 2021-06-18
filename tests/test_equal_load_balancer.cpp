@@ -27,7 +27,9 @@ TEST(EqualLoadBalancerTest, simpleLoadBalancerTest) {
         {{500, 100}, 5}, {{600, 100}, 6}, {{700, 100}, 7}, {{800, 100}, 8}, {{900, 100}, 9}};
 
     auto loadBalancer   = ReStore::EqualLoadBalancer(initialBlockRanges, 10);
-    auto newBlockRanges = loadBalancer.getNewBlocksAfterFailure({5, 7});
+    auto newBlockRanges = loadBalancer.getNewBlocksAfterFailure({0, 1});
+    // don't commit previous change and discard it by requesting distribution for different set of dead ranks
+    newBlockRanges = loadBalancer.getNewBlocksAfterFailure({5, 7});
 
     // This should be perfectly splittable into 25 block chunks
     EXPECT_EQ(newBlockRanges.size(), 8);
@@ -64,6 +66,10 @@ TEST(EqualLoadBalancerTest, simpleLoadBalancerTest) {
         }
     }
 
+    // Commit to ranks 5 and 7 being dead
+    loadBalancer.commitToPreviousCall();
+    // Commit again to make sure this doesn't crash or produce otherwise wrong results
+    loadBalancer.commitToPreviousCall();
     // Add 2 more dead ranks
     newBlockRanges = loadBalancer.getNewBlocksAfterFailure({0, 1});
 
