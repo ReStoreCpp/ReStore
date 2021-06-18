@@ -179,7 +179,7 @@ void recoverFromFailure(
     const edge_id_t myNumEdges = myUpperBound - myLowerBound;
     edges.clear();
     edges.resize(asserting_cast<size_t>(myNumEdges));
-    reStore.pushBlocks(
+    reStore.pushBlocksCurrentRankIds(
         requests, [&edges, myLowerBound](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             assert(sizeof(edge_t) == size);
             UNUSED(size);
@@ -362,7 +362,7 @@ int main(int argc, char** argv) {
          "Tolerance for stopping PageRank iterations. Stops when the l2 norm of the difference between two "
          "iterations "
          "drops below the tolerance.",
-         cxxopts::value<double>()->default_value("0.000000001"))                                       ///
+         cxxopts::value<double>()->default_value("0.000000001"))                                         ///
         ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("10")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3")) ///
@@ -425,9 +425,8 @@ int main(int argc, char** argv) {
             return std::nullopt;
         } else {
             ++currentEdgeId;
-            return ReStore::NextBlock<edge_t>{
-                asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
-                edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
+            return ReStore::NextBlock<edge_t>{asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
+                                              edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
         }
     };
 
