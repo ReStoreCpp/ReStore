@@ -17,7 +17,7 @@ class EqualLoadBalancer {
     public:
     EqualLoadBalancer(
         const std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>& blockRanges,
-        const int                                                                                 numRanksOriginal)
+        const ReStoreMPI::original_rank_t                                                         numRanksOriginal)
         : _blockRanges(blockRanges) {
         for (int rank = 0; rank < numRanksOriginal; ++rank) {
             _ranks.emplace(rank);
@@ -26,7 +26,10 @@ class EqualLoadBalancer {
 
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>
     getNewBlocksAfterFailure(const std::vector<ReStoreMPI::original_rank_t>& diedRanks) {
+        _previousReturnedBlockRanges.clear();
+        _previousDiedRanks.clear();
         for (const auto diedRank: diedRanks) {
+            _previousDiedRanks.insert(diedRank);
             _ranks.erase(diedRank);
         }
 
@@ -94,19 +97,40 @@ class EqualLoadBalancer {
             }
             ++rankCounter;
         }
+
+        // Re-insert ranks as the user has not committed to the change yet
+        for (const auto diedRank: diedRanks) {
+            _ranks.insert(diedRank);
+        }
+        _previousReturnedBlockRanges = requests;
+        return requests;
+    }
+
+    void commitToPreviousCall() {
+        // remove ranks from rank set
+        for (const auto diedRank: _previousDiedRanks) {
+            _ranks.erase(diedRank);
+        }
+
         // Remove old block ranges
         auto it = std::remove_if(_blockRanges.begin(), _blockRanges.end(), [this](auto blockRange) {
             return _ranks.find(blockRange.second) == _ranks.end();
         });
         _blockRanges.erase(it, _blockRanges.end());
-        // Assume that our suggestion is taken and store them as current block ranges
-        _blockRanges.insert(_blockRanges.end(), requests.begin(), requests.end());
-        return requests;
+        // Our suggestion is taken so we update the current block ranges
+        _blockRanges.insert(
+            _blockRanges.end(), _previousReturnedBlockRanges.begin(), _previousReturnedBlockRanges.end());
+
+        _previousDiedRanks.clear();
+        _previousReturnedBlockRanges.clear();
     }
 
     private:
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>> _blockRanges;
     std::unordered_set<ReStoreMPI::original_rank_t>                                    _ranks;
+
+    std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>> _previousReturnedBlockRanges;
+    std::unordered_set<ReStoreMPI::original_rank_t>                                    _previousDiedRanks;
 };
 } // namespace ReStore
 #endif // EQUAL_LOAD_BALANCER_H
