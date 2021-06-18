@@ -65,7 +65,8 @@ TEST_F(ReStoreTestWithFailures, SingleFailure) {
     std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
     for (int rank = 0; rank < numRanks(newComm); ++rank) {
         const size_t numBlockForThisRank = numBlocksPerRank + (static_cast<size_t>(rank) < numRanksWithMoreBlocks);
-        requests.emplace_back(std::make_pair(std::make_pair(currentBlock, numBlockForThisRank), rank));
+        int          originalRank        = (rank == 0 ? 0 : rank + 1);
+        requests.emplace_back(std::make_pair(std::make_pair(currentBlock, numBlockForThisRank), originalRank));
         currentBlock += numBlockForThisRank;
     }
     EXPECT_EQ(numBlocks, currentBlock);
@@ -77,7 +78,7 @@ TEST_F(ReStoreTestWithFailures, SingleFailure) {
                                        + std::min(numRanksWithMoreBlocks, static_cast<size_t>(myRankId(newComm)));
     ReStore::block_id_t numBlocksReceived = 0;
     EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
-    store.pushBlocksCurrentRankIds(
+    store.pushBlocksOriginalRankIds(
         requests, [&dataReceived, &numBlocksReceived,
                    firstBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             ASSERT_GE(blockId, firstBlockId);
