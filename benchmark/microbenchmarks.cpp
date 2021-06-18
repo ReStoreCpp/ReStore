@@ -162,7 +162,7 @@ static void BM_pushBlocks(benchmark::State& state) {
     for (auto _: state) {
         std::vector<BlockType> recvData(blocksPerRank);
         auto                   start = std::chrono::high_resolution_clock::now();
-        store.pushBlocks(
+        store.pushBlocksCurrentRankIds(
             blockRanges, [&recvData, myStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
                 assert(blockId >= myStartBlock);
                 auto index = blockId - myStartBlock;
