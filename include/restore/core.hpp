@@ -233,6 +233,21 @@ class ReStore {
         handleReceivedBlocks(recvMessages, recvBlockRanges, _offsetMode, _constOffset, handleSerializedBlock);
     }
 
+    // Warning! This changes the blockRanges destination rank from original ranks to current ranks!
+    template <class HandleSerializedBlockFunction>
+    void pushBlocksOriginalRankIds(
+        std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>& blockRanges,
+        HandleSerializedBlockFunction                                                       handleSerializedBlock,
+        bool canBeParallelized = false // not supported yet
+    ) {
+        std::transform(
+            blockRanges.begin(), blockRanges.end(), blockRanges.begin(),
+            [this](std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t> blockRange) {
+                return std::make_pair(blockRange.first, _mpiContext.getCurrentRank(blockRange.second).value());
+            });
+        pushBlocksCurrentRankIds(blockRanges, handleSerializedBlock, canBeParallelized);
+    }
+
     private:
     const uint16_t                            _replicationLevel;
     const OffsetMode                          _offsetMode;
