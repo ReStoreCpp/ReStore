@@ -77,7 +77,7 @@ TEST_F(ReStoreTestWithFailures, SingleFailure) {
                                        + std::min(numRanksWithMoreBlocks, static_cast<size_t>(myRankId(newComm)));
     ReStore::block_id_t numBlocksReceived = 0;
     EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
-    store.pushBlocks(
+    store.pushBlocksCurrentRankIds(
         requests, [&dataReceived, &numBlocksReceived,
                    firstBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             ASSERT_GE(blockId, firstBlockId);

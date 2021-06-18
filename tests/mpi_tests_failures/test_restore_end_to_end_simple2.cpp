@@ -56,7 +56,7 @@ TEST(ReStoreTest, EndToEnd_Simple2) {
 
     std::vector<int>    dataReceived;
     ReStore::block_id_t nextBlockId = static_cast<size_t>(myRankId()) * data.size();
-    store.pushBlocks(
+    store.pushBlocksCurrentRankIds(
         requests, [&dataReceived, &nextBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             EXPECT_EQ(nextBlockId, blockId);
             ++nextBlockId;

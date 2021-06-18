@@ -218,7 +218,7 @@ class ReStore {
     // canBeParallelized: Indicates if multiple handleSerializedBlock calls can happen on different
     //      inputs concurrently.
     template <class HandleSerializedBlockFunction>
-    void pushBlocks(
+    void pushBlocksCurrentRankIds(
         const std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>>& blockRanges,
         HandleSerializedBlockFunction                                                            handleSerializedBlock,
         bool canBeParallelized = false // not supported yet
