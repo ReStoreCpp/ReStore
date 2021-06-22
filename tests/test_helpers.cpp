@@ -1,3 +1,8 @@
+#include <limits>
+#include <memory>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -22,7 +27,7 @@ TEST(HelpersTest, in_range) {
     ASSERT_TRUE(in_range<long int>(intMax));
     ASSERT_TRUE(in_range<uintmax_t>(intMax));
     ASSERT_TRUE(in_range<intmax_t>(intMax));
-    
+
     auto intNeg = -1;
     ASSERT_TRUE(in_range<long int>(intNeg));
     ASSERT_FALSE(in_range<uintmax_t>(intNeg));

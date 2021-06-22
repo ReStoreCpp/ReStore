@@ -1,3 +1,10 @@
+#include <algorithm>
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <stdint.h>
+#include <unordered_map>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

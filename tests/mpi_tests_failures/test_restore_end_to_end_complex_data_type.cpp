@@ -1,22 +1,21 @@
 #include <algorithm>
-#include <functional>
-#include <ostream>
-#include <signal.h>
+#include <assert.h>
+#include <cstddef>
+#include <memory>
 #include <sstream>
+#include <stdlib.h>
+#include <utility>
 
-#include "itertools.hpp"
+#include "range.hpp"
 #include <gmock/gmock.h>
 #include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
 #include <mpi.h>
-#include <tuple>
-#include <utility>
 
 #include "restore/common.hpp"
 #include "restore/core.hpp"
 #include "restore/helpers.hpp"
 
-#include "mocks.hpp"
 #include "mpi_helpers.hpp"
 #include "restore/mpi_context.hpp"
 #include "test_with_failures_fixture.hpp"
@@ -62,7 +61,7 @@ TEST_F(ReStoreTestWithFailures, ComplexDataType) {
 
     signed int myStart = (myRankId() - (numRanks() / 2)) * 1000;
     signed int myEnd   = myStart + 1000;
-    
+
     for (int number = myStart; number < myEnd; number++) {
         data.emplace_back(number, abs(number), number % 2 == 0, number % 3 == 0);
     }

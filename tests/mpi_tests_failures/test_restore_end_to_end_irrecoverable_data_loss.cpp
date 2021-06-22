@@ -1,20 +1,23 @@
 #include <algorithm>
+#include <cstddef>
 #include <functional>
-#include <signal.h>
+#include <memory>
+#include <optional>
 #include <sstream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
-#include "itertools.hpp"
+#include "range.hpp"
 #include <gmock/gmock.h>
 #include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
 #include <mpi.h>
-#include <utility>
 
 #include "restore/common.hpp"
 #include "restore/core.hpp"
 #include "restore/helpers.hpp"
 
-#include "mocks.hpp"
 #include "mpi_helpers.hpp"
 #include "restore/mpi_context.hpp"
 #include "test_with_failures_fixture.hpp"
@@ -27,8 +30,8 @@ TEST_F(ReStoreTestWithFailures, IrrecoverableDataLoss) {
     // Each rank submits different data. The replication level is set to 2. There are three rank failures. Therefore,
     // some data should be irrecoverably lost.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 2, ReStore::OffsetMode::constant, sizeof(int));
- 
-   ASSERT_EQ(4, numRanks());
+
+    ASSERT_EQ(4, numRanks());
 
     std::vector<int> data;
     for (int value: range(1000 * myRankId(), 1000 * myRankId() + 1000)) {

@@ -1,14 +1,20 @@
+#include <algorithm>
+#include <assert.h>
 #include <cppitertools/range.hpp>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <restore/core.hpp>
 #include <restore/helpers.hpp>
+#include <stdexcept>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string>
 #include <vector>
 
 #include <cxxopts.hpp>
 
 #include "../tests/mocks.hpp"
-#include "restore/helpers.hpp"
 
 using namespace std;
 using namespace ::testing;
