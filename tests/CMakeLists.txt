@@ -14,10 +14,14 @@ set_target_properties(gmock_main PROPERTIES FOLDER extern)
 
 macro(restore_add_test TESTNAME LIBRARIES)
     # create an exectuable in which the tests will be stored
-    add_executable(${TESTNAME} ${ARGN})
+    if(${PROJECT_NAME}_BACKWARD_ENABLED)
+        add_executable(${TESTNAME} ${ARGN} "${${PROJECT_NAME}_BACKWARDCPP_DIR}/backward.cpp")
+    else()
+        add_executable(${TESTNAME} ${ARGN})
+    endif()
     # link the Google test infrastructure, mocking library, and a default main fuction to
     # the test executable.  Remove g_test_main if writing your own main function.
-    target_link_libraries(${TESTNAME} gtest gmock gtest_main ${MPI_LIBRARIES} ${LIBRARIES})
+    target_link_libraries(${TESTNAME} gtest gmock gtest_main Backward::Backward ${MPI_LIBRARIES} ${LIBRARIES})
     # gtest_discover_tests replaces gtest_add_tests,
     # see https://cmake.org/cmake/help/v3.10/module/GoogleTest.html for more options to pass to it
     gtest_discover_tests(${TESTNAME}
@@ -34,7 +38,7 @@ function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     target_include_directories(${NAME} SYSTEM PRIVATE ../extern/)
     target_include_directories(${NAME} SYSTEM PRIVATE ../include/)
     target_include_directories(${NAME} PRIVATE .)
-    target_link_libraries(${NAME} gtest gmock ${MPI_LIBRARIES} ${LIBRARIES})
+    target_link_libraries(${NAME} gtest gmock Backward::Backward ${MPI_LIBRARIES} ${LIBRARIES})
 
     add_custom_command(
         TARGET ${NAME} POST_BUILD
@@ -50,6 +54,10 @@ function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     #    PASS_REGULAR_EXPRESSION " PASSED "
     #)
 endfunction(add_mpi_test)
+
+# Load the backward-cpp library
+set(Backward_DIR "${PROJECT_SOURCE_DIR}/extern/backward-cpp")
+find_package(Backward)
 
 # Register our tests
 ## Without MPI
