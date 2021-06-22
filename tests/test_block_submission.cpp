@@ -40,6 +40,7 @@ TEST(BlockSubmissionTest, exchangeData) {
             ReStore::OffsetModeDescriptor{ReStore::OffsetMode::constant, sizeof(uint8_t)});
 
         SendBuffers sendBuffers;
+        sendBuffers.resize(2);
         sendBuffers[0] = {0_byte, 1_byte, 2_byte, 3_byte};
         sendBuffers[1] = {4_byte, 5_byte, 6_byte, 7_byte};
 
@@ -257,6 +258,8 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
     EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([](std::vector<original_rank_t> ranks) {
         return getAliveOnlyFake({}, ranks);
     });
+    EXPECT_CALL(mpiContext, getOriginalSize()).WillRepeatedly(Return(10));
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(10));
 
     auto blockDistribution = std::make_shared<BlockDistribution>(10, 100, 3, mpiContext);
 
@@ -295,7 +298,7 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
         0_byte,  1_byte                                                  // middle earth
     };
 
-    ASSERT_EQ(sendBuffers.size(), 3);
+    ASSERT_EQ(sendBuffers.size(), 10);
 
     ASSERT_EQ(sendBuffers[0].size(), 22);
     ASSERT_EQ(sendBuffers[3].size(), 22);

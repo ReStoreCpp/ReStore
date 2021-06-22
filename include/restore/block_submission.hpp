@@ -22,7 +22,7 @@ class BlockSubmissionCommunication {
     // If the user did his homework and designed a BlockDistribution which requires few messages to be send
     // we do not want to allocate all those unneeded send buffers... that's why we use a map here instead
     // of a vector.
-    using SendBuffers = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>;
+    using SendBuffers = std::vector<std::vector<std::byte>>;
 
     using BlockDistr = BlockDistribution<MPIContext>;
 
@@ -201,9 +201,12 @@ class BlockSubmissionCommunication {
 
         // Allocate one send buffer per destination rank
         SendBuffers sendBuffers;
+        assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
+        sendBuffers.resize(asserting_cast<size_t>(_mpiContext.getOriginalSize()));
 
         // Create the object which represents the store stream
-        auto storeStream = SerializedBlockStoreStream(sendBuffers);
+        auto storeStream = SerializedBlockStoreStream(sendBuffers, _mpiContext.getOriginalSize());
+        // storeStream.reserve(_blockDistribution.numBlocks());
         // TODO storeStream.reserve(...);
 
         // Create the object resposible for serializing the range ids
@@ -313,7 +316,8 @@ class BlockSubmissionCommunication {
     // Sending no data is fine, you may still retreive data.
     std::vector<ReStoreMPI::RecvMessage> exchangeData(const SendBuffers& sendBuffers) {
         std::vector<ReStoreMPI::SendMessage> sendMessages;
-        for (auto&& [rankId, buffer]: sendBuffers) {
+        for (ReStoreMPI::original_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
+            auto& buffer = sendBuffers[asserting_cast<size_t>(rankId)];
             sendMessages.emplace_back(ReStoreMPI::SendMessage{buffer.data(), (int)buffer.size(), rankId});
         }
 

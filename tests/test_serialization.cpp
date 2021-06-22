@@ -158,39 +158,44 @@ TEST(SerializedBlockStorageTest, Writing) {
 }
 
 TEST(SerializedBlockStoreStream, Constructor) {
-    using BuffersType    = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>;
+    using BuffersType    = std::vector<std::vector<std::byte>>;
     using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
 
     auto buffers = BuffersType();
     auto ranks   = RanksArrayType();
 
-    // no ranks
-    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers).setDestinationRanks(ranks));
+    // no ranks or buffers not allocated
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, 0));
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, 4).setDestinationRanks(ranks));
+    buffers.resize(4);
+    ASSERT_ANY_THROW(ReStore::SerializedBlockStoreStream(buffers, 0).setDestinationRanks(ranks));
 
     // all fine
     ranks.push_back(0);
-    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers).setDestinationRanks(ranks));
+    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, 4).setDestinationRanks(ranks));
     ranks.push_back(1);
     ranks.push_back(2);
-    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers).setDestinationRanks(ranks));
+    ASSERT_NO_THROW(ReStore::SerializedBlockStoreStream(buffers, 4).setDestinationRanks(ranks));
 }
 
 TEST(SerializedBlockStoreStream, InStream) {
-    using BuffersType    = std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>;
+    using BuffersType    = std::vector<std::vector<std::byte>>;
     using RanksArrayType = std::vector<ReStoreMPI::current_rank_t>;
 
-    auto buffers = BuffersType();
-    auto ranks   = RanksArrayType();
+    auto                        buffers  = BuffersType();
+    auto                        ranks    = RanksArrayType();
+    ReStoreMPI::original_rank_t numRanks = 4;
     ranks.push_back(0);
     ranks.push_back(3);
+    buffers.resize(asserting_cast<size_t>(numRanks));
 
-    ReStore::SerializedBlockStoreStream stream(buffers);
+    ReStore::SerializedBlockStoreStream stream(buffers, numRanks);
     stream.setDestinationRanks(ranks);
 
     stream << 0x42_byte;
     ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
-    ASSERT_EQ(buffers.find(1), buffers.end());
-    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_EQ(buffers.at(1).size(), 0);
+    ASSERT_EQ(buffers.at(2).size(), 0);
     ASSERT_EQ(buffers.at(3)[0], 0x42_byte);
     ASSERT_EQ(stream.bytesWritten(0), 1);
     ASSERT_EQ(stream.bytesWritten(3), 1);
@@ -199,8 +204,8 @@ TEST(SerializedBlockStoreStream, InStream) {
 
     stream << 0x00_uint8;
     ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
-    ASSERT_EQ(buffers.find(1), buffers.end());
-    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_EQ(buffers.at(1).size(), 0);
+    ASSERT_EQ(buffers.at(2).size(), 0);
     ASSERT_EQ(buffers.at(3)[0], 0x42_byte);
 
     ASSERT_EQ(buffers.at(0)[1], 0x00_byte);
@@ -212,8 +217,8 @@ TEST(SerializedBlockStoreStream, InStream) {
 
     stream << 0xFFFF_uint16;
     ASSERT_EQ(buffers.at(0)[0], 0x42_byte);
-    ASSERT_EQ(buffers.find(1), buffers.end());
-    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_EQ(buffers.at(1).size(), 0);
+    ASSERT_EQ(buffers.at(2).size(), 0);
     ASSERT_EQ(buffers.at(3)[0], 0x42_byte);
 
     ASSERT_EQ(buffers.at(0)[1], 0x00_byte);
@@ -231,8 +236,8 @@ TEST(SerializedBlockStoreStream, InStream) {
     ASSERT_THAT(
         buffers.at(0),
         UnorderedElementsAre(0x00_byte, 0x42_byte, 0x01_byte, 0x10_byte, 0x13_byte, 0x37_byte, 0xFF_byte, 0xFF_byte));
-    ASSERT_EQ(buffers.find(1), buffers.end());
-    ASSERT_EQ(buffers.find(2), buffers.end());
+    ASSERT_EQ(buffers.at(1).size(), 0);
+    ASSERT_EQ(buffers.at(2).size(), 0);
     ASSERT_THAT(
         buffers.at(3),
         UnorderedElementsAre(0x00_byte, 0x42_byte, 0x01_byte, 0x10_byte, 0x13_byte, 0x37_byte, 0xFF_byte, 0xFF_byte));
@@ -241,8 +246,9 @@ TEST(SerializedBlockStoreStream, InStream) {
     ASSERT_EQ(buffers.at(0).size(), 8);
     ASSERT_EQ(buffers.at(3).size(), 8);
 
-    auto                                buffers2 = BuffersType();
-    ReStore::SerializedBlockStoreStream stream2(buffers2);
+    auto buffers2 = BuffersType();
+    buffers2.resize(asserting_cast<size_t>(numRanks));
+    ReStore::SerializedBlockStoreStream stream2(buffers2, numRanks);
     stream2.setDestinationRanks(ranks);
 
     stream2 << 0x1F1F_uint16;

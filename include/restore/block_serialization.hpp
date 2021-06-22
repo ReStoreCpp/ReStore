@@ -18,9 +18,16 @@ class SerializedBlockStoreStream {
     using original_rank_t = ReStoreMPI::original_rank_t;
     using current_rank_t  = ReStoreMPI::current_rank_t;
 
-    explicit SerializedBlockStoreStream(std::unordered_map<current_rank_t, std::vector<std::byte>>& buffers)
+    SerializedBlockStoreStream(std::vector<std::vector<std::byte>>& buffers, ReStoreMPI::original_rank_t numRanks)
         : _bytesWritten(0),
-          _buffers(buffers) {}
+          _buffers(buffers) {
+              if (numRanks <= 0) {
+                  throw new std::runtime_error("numRanks might not be less than or equal to zero");
+              }
+              if (buffers.size() != asserting_cast<size_t>(numRanks)) {
+                  throw new std::runtime_error("There send buffers are not allocated.");
+              }
+          }
 
     void setDestinationRanks(std::vector<current_rank_t> ranks) {
         if (ranks.size() == 0) {
@@ -32,13 +39,7 @@ class SerializedBlockStoreStream {
 
         for (auto rank: ranks) {
             assert(rank >= 0);
-            auto buffer = _buffers.find(rank);
-            if (buffer == _buffers.end()) {
-                auto& bufferRef = _buffers[rank] = std::vector<std::byte>();
-                _outputBuffers.push_back(&bufferRef);
-            } else {
-                _outputBuffers.push_back(&(buffer->second));
-            }
+            _outputBuffers.push_back(&(_buffers[asserting_cast<size_t>(rank)]));
         }
         assert(_outputBuffers.size() == ranks.size());
 
@@ -88,12 +89,10 @@ class SerializedBlockStoreStream {
 
     // Return the number of bytes written to the buffers.
     size_t bytesWritten(current_rank_t rank) const {
-        auto bufferIt = _buffers.find(rank);
-        if (bufferIt == _buffers.end()) {
-            throw new std::runtime_error("No buffer for this rank.");
+        if (rank < 0 || throwing_cast<size_t>(rank) >= _buffers.size()) {
+            throw new std::runtime_error("Invalid rank id.");
         }
-
-        return bufferIt->second.size();
+        return _buffers[asserting_cast<size_t>(rank)].size();
     }
 
     // This handle can be used to alter parts of the stream that are not at the current write front. Use
@@ -131,15 +130,11 @@ class SerializedBlockStoreStream {
     WritableStreamPosition reserveBytesForWriting(ReStoreMPI::original_rank_t rank, size_t n) {
         if (rank < 0) {
             throw new std::runtime_error("Negative rank not allowed.");
+        } else if (asserting_cast<size_t>(rank) >= _buffers.size()) {
+            throw new std::runtime_error("Rank ID larger or equal to the number of ranks.");
         }
 
-        auto bufferIt = _buffers.find(rank);
-        if (bufferIt == _buffers.end()) {
-            throw new std::runtime_error("There is no buffer for this rank.");
-        }
-        auto& buffer = bufferIt->second;
-        assert(bufferIt->first == rank);
-
+        auto&                  buffer = _buffers[asserting_cast<size_t>(rank)];
         WritableStreamPosition position(rank, bytesWritten(rank), n);
 
         // Write dummy data to the stream.
@@ -151,7 +146,7 @@ class SerializedBlockStoreStream {
 
     // Write to previously reserved bytes in the stream.
     void writeToReservedBytes(WritableStreamPosition& position, const std::byte* begin, size_t length = 0) {
-        auto& buffer       = _buffers[position.rank];
+        auto& buffer       = _buffers[asserting_cast<size_t>(position.rank)];
         auto  bytesToWrite = length != 0 ? length : position.bytesLeft();
 
         if (bytesToWrite > position.bytesLeft()) {
@@ -175,9 +170,9 @@ class SerializedBlockStoreStream {
     }
 
     private:
-    size_t                                                      _bytesWritten;
-    std::vector<std::vector<std::byte>*>                        _outputBuffers;
-    std::unordered_map<current_rank_t, std::vector<std::byte>>& _buffers;
+    size_t                               _bytesWritten;
+    std::vector<std::vector<std::byte>*> _outputBuffers;
+    std::vector<std::vector<std::byte>>& _buffers;
 };
 
 template <typename MPIContext = ReStoreMPI::MPIContext>
