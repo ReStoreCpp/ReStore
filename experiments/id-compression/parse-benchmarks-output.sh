@@ -13,7 +13,7 @@ keep-first-five-fields() {
 
 expand-name-field() {
     sed -E "2,\$s/\"BM_([a-zA-Z]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4/" | 
-    sed -E "1s/^name,/benchmark,bytesPerBlock,repliactionLevel,bytesPerRank/"
+    sed -E "1s/^name,/benchmark,bytesPerBlock,replicationLevel,bytesPerRank,/"
 }
 
 add-code-field() {
