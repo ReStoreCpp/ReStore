@@ -62,9 +62,9 @@ class BlockDistribution {
             size_t numRangesWithAdditionalBlock  = _blockDistribution.numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(_blocksPerRange <= _blockDistribution.numBlocks());
+            assert(blocksPerRange <= _blockDistribution.numBlocks());
             assert(
-                _blocksPerRange * _blockDistribution.numRanges() + _numRangesWithAdditionalBlock
+                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
                 == _blockDistribution.numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
@@ -83,9 +83,9 @@ class BlockDistribution {
             size_t numRangesWithAdditionalBlock  = _blockDistribution.numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(_blocksPerRange <= _blockDistribution.numBlocks());
+            assert(blocksPerRange <= _blockDistribution.numBlocks());
             assert(
-                _blocksPerRange * _blockDistribution.numRanges() + _numRangesWithAdditionalBlock
+                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
                 == _blockDistribution.numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
