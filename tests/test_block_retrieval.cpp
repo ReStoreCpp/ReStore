@@ -1,9 +1,12 @@
+#include <algorithm>
 #include <cstddef>
-#include <functional>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <gtest/gtest_pred_impl.h>
+#include <iterator>
 #include <memory>
+#include <optional>
+#include <type_traits>
 #include <utility>
 #include <vector>
 

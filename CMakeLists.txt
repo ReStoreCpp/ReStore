@@ -6,6 +6,13 @@ else()
     set(IS_SUBPROJECT ON)
 endif()
 
+# Use ccache if available
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    message("Found ccache; using it to speed up compilation.")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+endif()
+
 # Project settings
 project(ReStore VERSION 0.1.0 LANGUAGES CXX)
 
@@ -67,7 +74,7 @@ set("NEEDS_GOOGLETEST" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENC
 set("NEEDS_CPPITERTOOLS" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_CXXOPTS" ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_GOOGLEBENCHMARK" ${PROJECT_NAME}_BUILD_BENCHMARKS)
-set("NEEDS_BACKWARDCPP" OFF)
+set("NEEDS_BACKWARDCPP" ${PROJECT_NAME}_BUILD_TESTS)
 
 if(NEEDS_GOOGLETEST)
     message("Using googletest")
@@ -92,6 +99,9 @@ endif()
 if(NEEDS_BACKWARDCPP)
     message("Using backwardcpp")
     set("${PROJECT_NAME}_BACKWARDCPP_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/backward-cpp" CACHE PATH "Path to the backward-cpp source directory")
+    option(${PROJECT_NAME}_BACKWARD_ENABLED "Enable pretty printing of stack traces when a test case fails." ON)
+else()
+    option(${PROJECT_NAME}_BACKWARD_ENABLED "Enable pretty printing of stack traces when a test case fails." OFF)
 endif()
 
 # Organize targets into folders

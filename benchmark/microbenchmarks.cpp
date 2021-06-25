@@ -1,7 +1,14 @@
 #include <algorithm>
+#include <cassert>
+#include <chrono>
+#include <cppitertools/range.hpp>
 #include <cstddef>
+#include <cstring>
+#include <filesystem>
+#include <mpi.h>
 #include <restore/common.hpp>
 #include <utility>
+
 #if defined(__GNUC__) && !defined(__clang__)
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wsuggest-override"
@@ -10,11 +17,6 @@
 #else
     #include <benchmark/benchmark.h>
 #endif
-
-#include <cassert>
-#include <chrono>
-#include <cppitertools/range.hpp>
-#include <mpi.h>
 
 #include <../tests/mpi_helpers.hpp>
 #include <restore/core.hpp>
@@ -75,7 +77,7 @@ static void BM_submitBlocks(benchmark::State& state) {
         assert(counter == data.size() + 1);
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-        MPI_Allreduce(&elapsedSeconds, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         state.SetIterationTime(elapsedSeconds);
     }
 }
@@ -179,7 +181,7 @@ static void BM_pushBlocks(benchmark::State& state) {
         }));
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-        MPI_Allreduce(&elapsedSeconds, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         state.SetIterationTime(elapsedSeconds);
     }
 }
@@ -219,16 +221,42 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    ::benchmark::Initialize(&argc, argv);
+    if (rank == 0) {
+        ::benchmark::Initialize(&argc, argv);
 
-    if (rank == 0)
         // Root process will use a reporter from the usual set provided by ::benchmark
         ::benchmark::RunSpecifiedBenchmarks();
-    else {
+    } else {
         // Reporting from other processes is disabled by passing a custom reporter.
         // We have to disable the display AND file reporter.
         NullReporter null;
+
+        // googlebenchmark will check if the benchmark_out parameter is set even when we prove a NullReporter. It does
+        // this using the google flags libary. We can therefore specify the benchmark_out parameter on the command line
+        // or using an environment variable.
+        std::vector<char*> expanded_argv;
+        for (int idx = 0; idx < argc; idx++) {
+            expanded_argv.push_back(argv[idx]);
+        }
+
+        std::string tmpFile = std::filesystem::temp_directory_path();
+        tmpFile.append("/restore-microbenchmark-sdfuihK789ahajgdfCVgjhkjFDTSATF.tmp");
+
+        std::string benchmark_out_string = std::string{"--benchmark_out="} + tmpFile.c_str();
+        char*       benchmark_out = reinterpret_cast<char*>(malloc(sizeof(char) * benchmark_out_string.length()));
+        strcpy(benchmark_out, benchmark_out_string.c_str());
+
+        expanded_argv.push_back(benchmark_out);
+        argc++;
+
+        // Parse command line parameters
+        ::benchmark::Initialize(&argc, expanded_argv.data());
+
+        // Run the benchmarks
         ::benchmark::RunSpecifiedBenchmarks(&null, &null);
+
+        // Clean up the temporary output file
+        std::filesystem::remove(tmpFile);
     }
 
     MPI_Finalize();

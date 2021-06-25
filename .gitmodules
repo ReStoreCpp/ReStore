@@ -13,3 +13,6 @@
 [submodule "extern/googlebenchmark"]
 	path = extern/googlebenchmark
 	url = https://github.com/google/benchmark
+[submodule "extern/backward-cpp"]
+	path = extern/backward-cpp
+	url = https://github.com/bombela/backward-cpp.git

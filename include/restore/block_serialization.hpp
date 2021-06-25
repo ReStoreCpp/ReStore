@@ -15,27 +15,35 @@ namespace ReStore {
 
 class SerializedBlockStoreStream {
     public:
-    SerializedBlockStoreStream(
-        std::unordered_map<ReStoreMPI::current_rank_t, std::vector<std::byte>>& buffers,
-        std::vector<ReStoreMPI::current_rank_t>&                                ranks)
-        : _bytesWritten(0) {
+    using original_rank_t = ReStoreMPI::original_rank_t;
+    using current_rank_t  = ReStoreMPI::current_rank_t;
+
+    SerializedBlockStoreStream(std::vector<std::vector<std::byte>>& buffers, ReStoreMPI::original_rank_t numRanks)
+        : _bytesWritten(0),
+          _buffers(buffers) {
+              if (numRanks <= 0) {
+                  throw new std::runtime_error("numRanks might not be less than or equal to zero");
+              }
+              if (buffers.size() != asserting_cast<size_t>(numRanks)) {
+                  throw new std::runtime_error("There send buffers are not allocated.");
+              }
+          }
+
+    void setDestinationRanks(std::vector<current_rank_t> ranks) {
         if (ranks.size() == 0) {
             throw std::runtime_error("The ranks array is empty.");
         }
 
+        _outputBuffers.clear();
         _outputBuffers.reserve(ranks.size());
 
         for (auto rank: ranks) {
             assert(rank >= 0);
-            auto buffer = buffers.find(rank);
-            if (buffer == buffers.end()) {
-                auto& bufferRef = buffers[rank] = std::vector<std::byte>();
-                _outputBuffers.push_back(&bufferRef);
-            } else {
-                _outputBuffers.push_back(&(buffer->second));
-            }
+            _outputBuffers.push_back(&(_buffers[asserting_cast<size_t>(rank)]));
         }
         assert(_outputBuffers.size() == ranks.size());
+
+        _outputBuffers.reserve(ranks.size());
     }
 
     // Keep the user from copying or moving our SerializedBlockStore object we pass to him.
@@ -44,12 +52,18 @@ class SerializedBlockStoreStream {
     SerializedBlockStoreStream& operator=(const SerializedBlockStoreStream&) = delete;
     SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&) = delete;
 
+    // reserve()
+    //
+    // Reserve enough space to write n bytes without reallocating the buffers.
     void reserve(size_t n) {
         for (auto& buffer: _outputBuffers) {
             buffer->reserve(n);
         }
     }
 
+    // operator<<
+    //
+    // Can be used to serialize a plain old datatype (pod)
     template <class T>
     SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
@@ -63,6 +77,9 @@ class SerializedBlockStoreStream {
         return *this;
     }
 
+    // writeBytes()
+    //
+    // Copy n bytes, starting at begin to the buffers.
     void writeBytes(const std::byte* begin, size_t n) {
         for (auto buffer: _outputBuffers) {
             buffer->insert(buffer->end(), begin, begin + n);
@@ -70,13 +87,92 @@ class SerializedBlockStoreStream {
         _bytesWritten += n;
     }
 
-    size_t bytesWritten() const noexcept {
-        return _bytesWritten;
+    // Return the number of bytes written to the buffers.
+    size_t bytesWritten(current_rank_t rank) const {
+        if (rank < 0 || throwing_cast<size_t>(rank) >= _buffers.size()) {
+            throw new std::runtime_error("Invalid rank id.");
+        }
+        return _buffers[asserting_cast<size_t>(rank)].size();
+    }
+
+    // This handle can be used to alter parts of the stream that are not at the current write front. Use
+    // reserveBytesForWriting() to get one. Pass it to writeToReservedBytes() to write to the reserved position.
+    struct WritableStreamPosition {
+        public:
+        size_t bytesLeft() const {
+            return length - written;
+        }
+
+        size_t currentPosition() const {
+            return index + written;
+        }
+
+        private:
+        WritableStreamPosition(current_rank_t _rank, size_t _index, size_t _length)
+            : rank(_rank),
+              index(_index),
+              length(_length),
+              written(0) {}
+
+        void writeBytes(const size_t numBytes) {
+            written += numBytes;
+        }
+
+        current_rank_t rank;
+        size_t         index;
+        size_t         length;
+        size_t         written;
+
+        friend SerializedBlockStoreStream;
+    };
+
+    // Reserve n bytes at the current stream position. We can use the returned handle to later write to these bytes.
+    WritableStreamPosition reserveBytesForWriting(ReStoreMPI::original_rank_t rank, size_t n) {
+        if (rank < 0) {
+            throw new std::runtime_error("Negative rank not allowed.");
+        } else if (asserting_cast<size_t>(rank) >= _buffers.size()) {
+            throw new std::runtime_error("Rank ID larger or equal to the number of ranks.");
+        }
+
+        auto&                  buffer = _buffers[asserting_cast<size_t>(rank)];
+        WritableStreamPosition position(rank, bytesWritten(rank), n);
+
+        // Write dummy data to the stream.
+        buffer.resize(buffer.size() + n);
+
+        assert(position.index + position.length == bytesWritten(rank));
+        return position;
+    }
+
+    // Write to previously reserved bytes in the stream.
+    void writeToReservedBytes(WritableStreamPosition& position, const std::byte* begin, size_t length = 0) {
+        auto& buffer       = _buffers[asserting_cast<size_t>(position.rank)];
+        auto  bytesToWrite = length != 0 ? length : position.bytesLeft();
+
+        if (bytesToWrite > position.bytesLeft()) {
+            throw new std::runtime_error("Trying to write more bytes than there are left for this handle.");
+        }
+
+        std::copy(
+            begin, begin + bytesToWrite,
+            buffer.begin() + throwing_cast<std::vector<std::byte>::difference_type>(position.currentPosition()));
+
+        position.writeBytes(bytesToWrite);
+    }
+
+    template <class T>
+    void writeToReservedBytes(WritableStreamPosition& position, const T& value) {
+        static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
+        assert(sizeof(T) <= position.length);
+
+        auto src = reinterpret_cast<const std::byte*>(&value);
+        writeToReservedBytes(position, src, sizeof(T));
     }
 
     private:
-    std::vector<std::vector<std::byte>*> _outputBuffers;
     size_t                               _bytesWritten;
+    std::vector<std::vector<std::byte>*> _outputBuffers;
+    std::vector<std::vector<std::byte>>& _buffers;
 };
 
 template <typename MPIContext = ReStoreMPI::MPIContext>

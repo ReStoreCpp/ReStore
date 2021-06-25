@@ -1,6 +1,6 @@
-#include <bits/stdint-uintn.h>
+#include <algorithm>
 #include <cassert>
-#include <cstdint>
+#include <cstddef>
 #include <gmock/gmock-matchers.h>
 #include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
@@ -328,7 +328,8 @@ TEST(MPIContext, DeadRankRetrievalNoChange) {
     MPI_Comm_split(MPI_COMM_WORLD, originalRank == 1 || originalRank == 2, originalRank, &comm);
     context.updateComm(comm);
     auto deadRanks = context.getRanksDiedSinceLastCall();
-    deadRanks      = context.getRanksDiedSinceLastCall();
+    EXPECT_EQ(2, deadRanks.size());
+    deadRanks = context.getRanksDiedSinceLastCall();
     EXPECT_EQ(0, deadRanks.size());
 }
 

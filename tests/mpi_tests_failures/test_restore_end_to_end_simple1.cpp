@@ -1,9 +1,10 @@
 #include <algorithm>
-#include <functional>
-#include <signal.h>
-#include <sstream>
+#include <assert.h>
+#include <cstddef>
+#include <optional>
+#include <vector>
 
-#include "itertools.hpp"
+#include "range.hpp"
 #include <gmock/gmock.h>
 #include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
@@ -12,9 +13,7 @@
 
 #include "restore/common.hpp"
 #include "restore/core.hpp"
-#include "restore/helpers.hpp"
 
-#include "mocks.hpp"
 #include "mpi_helpers.hpp"
 #include "restore/mpi_context.hpp"
 
@@ -47,7 +46,6 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
         data.size() * static_cast<size_t>(numRanks()));
 
     // No failure
-
     {
         std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
         for (int rank = 0; rank < numRanks(); ++rank) {

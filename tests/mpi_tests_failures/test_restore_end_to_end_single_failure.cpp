@@ -1,10 +1,9 @@
 #include <algorithm>
 #include <cstddef>
-#include <functional>
-#include <signal.h>
-#include <sstream>
+#include <memory>
+#include <optional>
 
-#include "itertools.hpp"
+#include "range.hpp"
 #include <gmock/gmock.h>
 #include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
@@ -13,10 +12,7 @@
 
 #include "restore/common.hpp"
 #include "restore/core.hpp"
-#include "restore/helpers.hpp"
 
-#include "mocks.hpp"
-#include "mpi_helpers.hpp"
 #include "restore/mpi_context.hpp"
 #include "test_with_failures_fixture.hpp"
 
