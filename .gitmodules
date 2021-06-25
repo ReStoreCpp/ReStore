@@ -15,4 +15,4 @@
 	url = https://github.com/google/benchmark
 [submodule "extern/backward-cpp"]
 	path = extern/backward-cpp
-	url = git@github.com:bombela/backward-cpp.git
+	url = https://github.com/bombela/backward-cpp.git
