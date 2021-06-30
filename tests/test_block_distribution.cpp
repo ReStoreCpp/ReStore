@@ -36,7 +36,7 @@ TEST(BlockDistributionTest, BlockRange) {
             3,    // replication level,
             mpiContext);
 
-        ASSERT_ANY_THROW(BlockRange(101, blockDistribution)); // Range id greater than the number of ranges
+        ASSERT_ANY_THROW(BlockRange(101, &blockDistribution)); // Range id greater than the number of ranges
     }
 
     {
@@ -46,7 +46,7 @@ TEST(BlockDistributionTest, BlockRange) {
             3,   // replication level,
             mpiContext);
 
-        auto range = BlockRange(0, blockDistribution);
+        auto range = BlockRange(0, &blockDistribution);
         ASSERT_EQ(range.id(), 0);
         ASSERT_EQ(range.start(), 0);
         ASSERT_EQ(range.length(), 10);
@@ -68,7 +68,7 @@ TEST(BlockDistributionTest, BlockRange) {
             3,   // replication level,
             mpiContext);
 
-        auto range = BlockRange(2, blockDistribution);
+        auto range = BlockRange(2, &blockDistribution);
         ASSERT_EQ(range.id(), 2);
         ASSERT_EQ(range.start(), 20);
         ASSERT_EQ(range.length(), 10);
@@ -96,7 +96,7 @@ TEST(BlockDistributionTest, BlockRange) {
         // range 0: 0, 1, 2, 3
         // range 1: 4, 5, 6
         // range 2: 7, 8, 9
-        auto range0 = BlockRange(0, blockDistribution);
+        auto range0 = BlockRange(0, &blockDistribution);
         ASSERT_TRUE(range0.contains(0));
         ASSERT_TRUE(range0.contains(1));
         ASSERT_TRUE(range0.contains(2));
@@ -108,7 +108,7 @@ TEST(BlockDistributionTest, BlockRange) {
         ASSERT_FALSE(range0.contains(8));
         ASSERT_FALSE(range0.contains(9));
 
-        auto range1 = BlockRange(1, blockDistribution);
+        auto range1 = BlockRange(1, &blockDistribution);
         ASSERT_FALSE(range1.contains(0));
         ASSERT_FALSE(range1.contains(1));
         ASSERT_FALSE(range1.contains(2));
@@ -120,7 +120,7 @@ TEST(BlockDistributionTest, BlockRange) {
         ASSERT_FALSE(range1.contains(8));
         ASSERT_FALSE(range1.contains(9));
 
-        auto range2 = BlockRange(2, blockDistribution);
+        auto range2 = BlockRange(2, &blockDistribution);
         ASSERT_FALSE(range2.contains(0));
         ASSERT_FALSE(range2.contains(1));
         ASSERT_FALSE(range2.contains(2));
@@ -144,7 +144,7 @@ TEST(BlockDistributionTest, BlockRange) {
         // range1: 2, 3
         // range2: 4
         // range3: 5
-        auto range0 = BlockRange(0, blockDistribution);
+        auto range0 = BlockRange(0, &blockDistribution);
         ASSERT_TRUE(range0.contains(0));
         ASSERT_TRUE(range0.contains(1));
         ASSERT_FALSE(range0.contains(2));
@@ -152,7 +152,7 @@ TEST(BlockDistributionTest, BlockRange) {
         ASSERT_FALSE(range0.contains(4));
         ASSERT_FALSE(range0.contains(5));
 
-        auto range1 = BlockRange(1, blockDistribution);
+        auto range1 = BlockRange(1, &blockDistribution);
         ASSERT_FALSE(range1.contains(0));
         ASSERT_FALSE(range1.contains(1));
         ASSERT_TRUE(range1.contains(2));
@@ -160,7 +160,7 @@ TEST(BlockDistributionTest, BlockRange) {
         ASSERT_FALSE(range1.contains(4));
         ASSERT_FALSE(range1.contains(5));
 
-        auto range2 = BlockRange(2, blockDistribution);
+        auto range2 = BlockRange(2, &blockDistribution);
         ASSERT_FALSE(range2.contains(0));
         ASSERT_FALSE(range2.contains(1));
         ASSERT_FALSE(range2.contains(2));
@@ -168,7 +168,7 @@ TEST(BlockDistributionTest, BlockRange) {
         ASSERT_TRUE(range2.contains(4));
         ASSERT_FALSE(range2.contains(5));
 
-        auto range3 = BlockRange(3, blockDistribution);
+        auto range3 = BlockRange(3, &blockDistribution);
         ASSERT_FALSE(range3.contains(0));
         ASSERT_FALSE(range3.contains(1));
         ASSERT_FALSE(range3.contains(2));
@@ -190,21 +190,21 @@ TEST(BlockDistributionTest, BlockRange) {
             mpiContext);
 
         // Different block distributions
-        ASSERT_NE(BlockRange(0, blockDistribution1), BlockRange(1, blockDistribution2));
-        ASSERT_NE(BlockRange(1, blockDistribution1), BlockRange(0, blockDistribution2));
+        ASSERT_NE(BlockRange(0, &blockDistribution1), BlockRange(1, &blockDistribution2));
+        ASSERT_NE(BlockRange(1, &blockDistribution1), BlockRange(0, &blockDistribution2));
 
         // Different id
-        ASSERT_NE(BlockRange(0, blockDistribution1), BlockRange(1, blockDistribution1));
-        ASSERT_NE(BlockRange(0, blockDistribution2), BlockRange(1, blockDistribution2));
+        ASSERT_NE(BlockRange(0, &blockDistribution1), BlockRange(1, &blockDistribution1));
+        ASSERT_NE(BlockRange(0, &blockDistribution2), BlockRange(1, &blockDistribution2));
 
         // Different id and different block distribution
-        ASSERT_NE(BlockRange(42, blockDistribution1), BlockRange(1, blockDistribution2));
-        ASSERT_NE(BlockRange(42, blockDistribution2), BlockRange(1, blockDistribution1));
+        ASSERT_NE(BlockRange(42, &blockDistribution1), BlockRange(1, &blockDistribution2));
+        ASSERT_NE(BlockRange(42, &blockDistribution2), BlockRange(1, &blockDistribution1));
 
         // Same id and block distribution
-        ASSERT_EQ(BlockRange(13, blockDistribution1), BlockRange(13, blockDistribution1));
-        ASSERT_EQ(BlockRange(0, blockDistribution2), BlockRange(0, blockDistribution2));
-        ASSERT_EQ(BlockRange(12, blockDistribution2), BlockRange(12, blockDistribution2));
+        ASSERT_EQ(BlockRange(13, &blockDistribution1), BlockRange(13, &blockDistribution1));
+        ASSERT_EQ(BlockRange(0, &blockDistribution2), BlockRange(0, &blockDistribution2));
+        ASSERT_EQ(BlockRange(12, &blockDistribution2), BlockRange(12, &blockDistribution2));
     }
 }
 

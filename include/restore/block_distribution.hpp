@@ -41,31 +41,41 @@ class BlockDistribution {
         //
         // Build a block range from the given block id. We need to know the number of blocks and the number ranges
         // to compute the starting block and number of block in this BlockRange.
-        BlockRange(size_t range_id, const BlockDistribution& blockDistribution)
+        BlockRange(size_t range_id, const BlockDistribution* blockDistribution)
             : _id(range_id),
               _blockDistribution(blockDistribution) {
-            if (range_id > _blockDistribution.numRanges()) {
+            if (range_id > _blockDistribution->numRanges()) {
                 throw std::runtime_error("This range does not exists (id too large).");
             }
         }
 
         // Copying and copy assignment is fine ...
-        BlockRange(const BlockRange&) = default;
-        BlockRange& operator=(const BlockRange&) = default;
+        BlockRange(const BlockRange& that) : _id(that._id), _blockDistribution(that._blockDistribution) {}
+
+        BlockRange& operator=(const BlockRange& that) {
+            this->_id                = that._id;
+            this->_blockDistribution = that._blockDistribution;
+            return *this;
+        }
 
         // ... as is moving and move assignment
-        BlockRange(BlockRange&&) = default;
-        BlockRange& operator=(BlockRange&&) = default;
+        BlockRange(BlockRange&& that) : _id(that._id), _blockDistribution(that._blockDistribution) {}
+
+        BlockRange& operator=(BlockRange&& that) {
+            this->_id                = that._id;
+            this->_blockDistribution = that._blockDistribution;
+            return *this;
+        }
 
         block_id_t start() const {
-            size_t blocksPerRange                = _blockDistribution.blocksPerRange();
-            size_t numRangesWithAdditionalBlock  = _blockDistribution.numRangesWithAdditionalBlock();
+            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
+            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution.numBlocks());
+            assert(blocksPerRange <= _blockDistribution->numBlocks());
             assert(
-                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
-                == _blockDistribution.numBlocks());
+                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
+                == _blockDistribution->numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
             size_t start;
@@ -79,14 +89,14 @@ class BlockDistribution {
         }
 
         size_t length() const {
-            size_t blocksPerRange                = _blockDistribution.blocksPerRange();
-            size_t numRangesWithAdditionalBlock  = _blockDistribution.numRangesWithAdditionalBlock();
+            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
+            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
 
             assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution.numBlocks());
+            assert(blocksPerRange <= _blockDistribution->numBlocks());
             assert(
-                blocksPerRange * _blockDistribution.numRanges() + numRangesWithAdditionalBlock
-                == _blockDistribution.numBlocks());
+                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
+                == _blockDistribution->numBlocks());
 
             // Do we - and all blocks with a lower id than us - have an additional block?
             size_t length;
@@ -132,7 +142,7 @@ class BlockDistribution {
 
         private:
         size_t                   _id;
-        const BlockDistribution& _blockDistribution;
+        const BlockDistribution* _blockDistribution;
     };
 
     BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
@@ -179,7 +189,7 @@ class BlockDistribution {
     //
     // A factory method to build a BlockRange by its id.
     BlockRange blockRangeById(size_t rangeId) const {
-        return BlockRange(rangeId, *this);
+        return BlockRange(rangeId, this);
     }
 
     // rangeOfBlock()

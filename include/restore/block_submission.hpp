@@ -213,8 +213,10 @@ class BlockSubmissionCommunication {
         BlockIDSerialization<block_id_t> blockIDSerializationManager(
             BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, storeStream);
 
-        bool doneSerializingBlocks = false;
         // Loop over the nextBlock generator to fetch all block we need to serialize
+        bool doneSerializingBlocks = false;
+        std::optional<typename BlockDistr::BlockRange> currentRange = std::nullopt;
+        std::vector<ReStoreMPI::original_rank_t> ranks;
         do {
             std::optional<NextBlock<BlockType>> next = nextBlock();
             if (!next.has_value()) {
@@ -229,11 +231,15 @@ class BlockSubmissionCommunication {
 
                 // Determine which ranks will get this block; assume that no failures occurred
                 assert(_mpiContext.numFailuresSinceReset() == 0);
-                auto ranks = _blockDistribution.ranksBlockIsStoredOn(blockId);
+                // Only recompute the destination ranks if they have changed
+                if (!currentRange || !(currentRange->contains(blockId))) {
+                    currentRange = _blockDistribution.rangeOfBlock(blockId);
+                    ranks = _blockDistribution.ranksBlockRangeIsStoredOn(*currentRange);
 
-                // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
-                // operator and automatically copies the written bytes to every destination rank's send buffer.
-                storeStream.setDestinationRanks(ranks);
+                    // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
+                    // operator and automatically copies the written bytes to every destination rank's send buffer.
+                    storeStream.setDestinationRanks(ranks);
+                } 
 
                 // Write the block's id to the stream
                 blockIDSerializationManager.writeId(blockId, ranks);
