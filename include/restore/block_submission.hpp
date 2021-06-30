@@ -154,7 +154,7 @@ class BlockSubmissionCommunication {
         IDType deserializeId(size_t position) {
             const auto startOfDescriptor = position;
             if (startOfDescriptor + DESCRIPTOR_SIZE >= _dataStream.size()) {
-                throw new std::runtime_error("Trying to read the id descriptor past the end of the data stream.");
+                throw std::runtime_error("Trying to read the id descriptor past the end of the data stream.");
             }
 
             UNUSED(position);
