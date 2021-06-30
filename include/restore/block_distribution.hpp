@@ -50,7 +50,7 @@ class BlockDistribution {
         }
 
         // Copying and copy assignment is fine ...
-        BlockRange(const BlockRange& that) : _id(that._id), _blockDistribution(that._blockDistribution) {}
+        BlockRange(const BlockRange& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {}
 
         BlockRange& operator=(const BlockRange& that) {
             this->_id                = that._id;
@@ -59,9 +59,9 @@ class BlockDistribution {
         }
 
         // ... as is moving and move assignment
-        BlockRange(BlockRange&& that) : _id(that._id), _blockDistribution(that._blockDistribution) {}
+        BlockRange(BlockRange&& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {}
 
-        BlockRange& operator=(BlockRange&& that) {
+        BlockRange& operator=(BlockRange&& that) noexcept {
             this->_id                = that._id;
             this->_blockDistribution = that._blockDistribution;
             return *this;
