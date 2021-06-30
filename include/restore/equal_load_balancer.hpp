@@ -61,10 +61,12 @@ class EqualLoadBalancer {
         block_id_t numBlocksPerRank       = numBlocks / _ranks.size();
         int        numRanksWithMoreBlocks = asserting_cast<int>(numBlocks % _ranks.size());
 
-        std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
-        ReStoreMPI::original_rank_t                                                                rankCounter = 0;
-        size_t blockRangeIndexIndex                                                                            = 0;
-        size_t numBlocksUsedFromCurrentRange                                                                   = 0;
+        using block_range_external_t = std::pair<block_id_t, size_t>;
+        using request_t              = std::pair<block_range_external_t, ReStoreMPI::current_rank_t>;
+        std::vector<request_t>      requests;
+        ReStoreMPI::original_rank_t rankCounter                   = 0;
+        size_t                      blockRangeIndexIndex          = 0;
+        size_t                      numBlocksUsedFromCurrentRange = 0;
         for (const auto rank: _ranks) {
             const block_id_t lowerBound = numBlocksPerRank * asserting_cast<block_id_t>(rankCounter)
                                           + asserting_cast<block_id_t>(std::min(rankCounter, numRanksWithMoreBlocks));
@@ -81,10 +83,10 @@ class EqualLoadBalancer {
                 size_t numBlocksRemainingInBlockRange = blockRange.first.second - numBlocksUsedFromCurrentRange;
                 size_t numBlocksTakenFromRange = std::min(numBlocksRemainingInBlockRange, numBlocksRemainingForRank);
 
+                auto startBlock = blockRange.first.first + numBlocksUsedFromCurrentRange;
                 requests.emplace_back(std::make_pair(
                     std::make_pair(
-                        asserting_cast<ReStore::block_id_t>(blockRange.first.first + numBlocksUsedFromCurrentRange),
-                        asserting_cast<size_t>(numBlocksTakenFromRange)),
+                        asserting_cast<block_id_t>(startBlock), asserting_cast<size_t>(numBlocksTakenFromRange)),
                     rank));
 
                 numBlocksRemainingForRank -= numBlocksTakenFromRange;
