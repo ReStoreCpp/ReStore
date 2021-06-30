@@ -219,20 +219,25 @@ class SerializedBlockStorage {
             throw std::runtime_error("The data argument might not be a nullptr.");
         }
 
-        auto rangeOfBlock = _blockDistribution->rangeOfBlock(blockId);
-        if (!hasRange(rangeOfBlock)) {
-            registerRange(rangeOfBlock);
+        if (!_writingState || !(_writingState->range.contains(blockId))) {
+            auto range = _blockDistribution->rangeOfBlock(blockId);
+            if (!hasRange(range)) {
+                registerRange(range);
+            }
+            auto indexOpt = indexOf(range);
+            assert(indexOpt);
+            _writingState.emplace(range, _data[*indexOpt]);
         }
 
-        auto index = indexOf(rangeOfBlock);
-        assert(index);
-        auto& rangeData = _data[*index];
+        auto& rangeOfBlock = _writingState->range;
+        auto& dest         = _writingState->data;
         assert(_constOffset > 0);
-        assert(_data[*index].size() == rangeOfBlock.length() * _constOffset);
+        assert(dest.size() == rangeOfBlock.length() * _constOffset);
         assert(blockId >= rangeOfBlock.start());
+
         auto offsetInBlockRange = (blockId - rangeOfBlock.start()) * _constOffset;
-        auto blockDest          = rangeData.begin()
-                         + asserting_cast<typename decltype(rangeData.begin())::difference_type>(offsetInBlockRange);
+        auto blockDest =
+            dest.begin() + asserting_cast<typename decltype(dest.begin())::difference_type>(offsetInBlockRange);
         std::copy(data, data + _constOffset, blockDest);
     }
 
@@ -283,14 +288,21 @@ class SerializedBlockStorage {
     }
 
     private:
-    const OffsetMode _offsetMode;
-    const size_t     _constOffset; // only in ConstOffset mode
-    std::vector<std::pair<size_t, size_t>>
-                                        _rangeIndices; // Maps a rangeId to its indices in following vectors; unordered
-    std::vector<BlockRange>             _ranges;       // For all outer vectors, the indices correspond
-    std::vector<std::vector<size_t>>    _offsets;      // A sentinel points to last elem + 1; only in LUT mode
-    std::vector<std::vector<std::byte>> _data;
+    const OffsetMode                       _offsetMode;
+    const size_t                           _constOffset;  // only in ConstOffset mode
+    std::vector<std::pair<size_t, size_t>> _rangeIndices; // Maps rangeId to its indices in following vectors; unordered
+    std::vector<BlockRange>                _ranges;       // For all outer vectors, the indices correspond
+    std::vector<std::vector<size_t>>       _offsets;      // A sentinel points to last elem + 1; only in LUT mode
+    std::vector<std::vector<std::byte>>    _data;
     const std::shared_ptr<const BlockDistribution<MPIContext>> _blockDistribution;
+
+    struct WritingState {
+        WritingState(BlockRange _range, std::vector<std::byte>& _data) : range(_range), data(_data) {}
+
+        BlockRange              range;
+        std::vector<std::byte>& data;
+    };
+    std::optional<WritingState> _writingState;
 
     // Return the index this range has in the outer vectors
     std::optional<size_t> indexOf(BlockRange blockRange) const {
