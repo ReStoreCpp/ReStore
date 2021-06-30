@@ -41,10 +41,14 @@ class BlockSubmissionCommunication {
             IDType last;
         };
 
-        BlockIDSerialization(BlockIDMode mode, SerializedBlockStoreStream& stream) : _mode(mode), _stream(stream) {
+        BlockIDSerialization(BlockIDMode mode, SerializedBlockStoreStream& stream, ReStoreMPI::original_rank_t numRanks)
+            : _mode(mode),
+              _stream(stream),
+              _currentRanges(asserting_cast<size_t>(numRanks), std::nullopt) {
             if (mode != BlockIDMode::RANGES) {
                 throw std::runtime_error("Currently, only the RANGES mode is supported.");
             }
+            assert(_currentRanges.size() == asserting_cast<size_t>(numRanks));
         }
 
         void writeId(IDType id, std::vector<ReStoreMPI::original_rank_t> ranks) {
@@ -55,28 +59,26 @@ class BlockSubmissionCommunication {
 
         void writeId(IDType id, ReStoreMPI::original_rank_t rank) {
             // Get the range state of this rank
-            auto iter = _currentRanges.find(rank);
+            assert(rank >= 0);
+            assert(rank < asserting_cast<decltype(rank)>(_currentRanges.size()));
 
+            auto& rangeState = _currentRanges[asserting_cast<size_t>(rank)];
             // Is this the first id?
-            if (iter == _currentRanges.end()) {
+            if (!rangeState) {
                 BlockIDRange range(id);
                 auto         positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
-                auto [kv, inserted]           = _currentRanges.try_emplace(rank, range, positionInStream);
-                UNUSED(inserted);
-                UNUSED(kv);
-                assert(inserted);
+                rangeState.emplace(range, positionInStream);
             } else { // This is not the first id
-                auto& rangeState = iter->second;
                 // Is this a consecutive id range?
-                if (rangeState.range.last == id - 1) {
-                    rangeState.range.last++;
+                if (rangeState->range.last == id - 1) {
+                    rangeState->range.last++;
                 } else { // Not a consecutive id
                     // close and write out previous range
-                    serializeBlockIDRange(rangeState.positionInStream, rangeState.range);
-                    rangeState.range.first = rangeState.range.last = id;
+                    serializeBlockIDRange(rangeState->positionInStream, rangeState->range);
+                    rangeState->range.first = rangeState->range.last = id;
 
                     // start a new range
-                    rangeState.positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
+                    rangeState->positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
                 }
             }
         }
@@ -84,8 +86,10 @@ class BlockSubmissionCommunication {
         // Closes up the current range and writes it to the stream.
         void finalize() {
             if (!finalized) {
-                for (auto& [rankId, rangeState]: _currentRanges) {
-                    serializeBlockIDRange(rangeState.positionInStream, rangeState.range);
+                for (auto& rangeState: _currentRanges) {
+                    if (rangeState) {
+                        serializeBlockIDRange(rangeState->positionInStream, rangeState->range);
+                    }
                 }
             }
             finalized = true;
@@ -115,10 +119,10 @@ class BlockSubmissionCommunication {
             assert(positionInStream.bytesLeft() == 0);
         }
 
-        const BlockIDMode                                             _mode;
-        SerializedBlockStoreStream&                                   _stream;
-        std::unordered_map<ReStoreMPI::original_rank_t, IDRangeState> _currentRanges;
-        bool                                                          finalized = false;
+        const BlockIDMode                        _mode;
+        SerializedBlockStoreStream&              _stream;
+        std::vector<std::optional<IDRangeState>> _currentRanges; // One range per rank
+        bool                                     finalized = false;
     };
 
     template <typename IDType, class = std::enable_if<std::is_unsigned_v<IDType>>>
@@ -211,12 +215,12 @@ class BlockSubmissionCommunication {
 
         // Create the object resposible for serializing the range ids
         BlockIDSerialization<block_id_t> blockIDSerializationManager(
-            BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, storeStream);
+            BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, storeStream, _mpiContext.getOriginalSize());
 
         // Loop over the nextBlock generator to fetch all block we need to serialize
-        bool doneSerializingBlocks = false;
-        std::optional<typename BlockDistr::BlockRange> currentRange = std::nullopt;
-        std::vector<ReStoreMPI::original_rank_t> ranks;
+        bool                                           doneSerializingBlocks = false;
+        std::optional<typename BlockDistr::BlockRange> currentRange          = std::nullopt;
+        std::vector<ReStoreMPI::original_rank_t>       ranks;
         do {
             std::optional<NextBlock<BlockType>> next = nextBlock();
             if (!next.has_value()) {
@@ -234,12 +238,12 @@ class BlockSubmissionCommunication {
                 // Only recompute the destination ranks if they have changed
                 if (!currentRange || !(currentRange->contains(blockId))) {
                     currentRange = _blockDistribution.rangeOfBlock(blockId);
-                    ranks = _blockDistribution.ranksBlockRangeIsStoredOn(*currentRange);
+                    ranks        = _blockDistribution.ranksBlockRangeIsStoredOn(*currentRange);
 
                     // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
                     // operator and automatically copies the written bytes to every destination rank's send buffer.
                     storeStream.setDestinationRanks(ranks);
-                } 
+                }
 
                 // Write the block's id to the stream
                 blockIDSerializationManager.writeId(blockId, ranks);
