@@ -21,13 +21,13 @@ class SerializedBlockStoreStream {
     SerializedBlockStoreStream(std::vector<std::vector<std::byte>>& buffers, ReStoreMPI::original_rank_t numRanks)
         : _bytesWritten(0),
           _buffers(buffers) {
-              if (numRanks <= 0) {
-                  throw new std::runtime_error("numRanks might not be less than or equal to zero");
-              }
-              if (buffers.size() != asserting_cast<size_t>(numRanks)) {
-                  throw new std::runtime_error("There send buffers are not allocated.");
-              }
-          }
+        if (numRanks <= 0) {
+            throw std::runtime_error("numRanks might not be less than or equal to zero");
+        }
+        if (buffers.size() != asserting_cast<size_t>(numRanks)) {
+            throw std::runtime_error("There send buffers are not allocated.");
+        }
+    }
 
     void setDestinationRanks(std::vector<current_rank_t> ranks) {
         if (ranks.size() == 0) {
@@ -90,7 +90,7 @@ class SerializedBlockStoreStream {
     // Return the number of bytes written to the buffers.
     size_t bytesWritten(current_rank_t rank) const {
         if (rank < 0 || throwing_cast<size_t>(rank) >= _buffers.size()) {
-            throw new std::runtime_error("Invalid rank id.");
+            throw std::runtime_error("Invalid rank id.");
         }
         return _buffers[asserting_cast<size_t>(rank)].size();
     }
@@ -129,9 +129,9 @@ class SerializedBlockStoreStream {
     // Reserve n bytes at the current stream position. We can use the returned handle to later write to these bytes.
     WritableStreamPosition reserveBytesForWriting(ReStoreMPI::original_rank_t rank, size_t n) {
         if (rank < 0) {
-            throw new std::runtime_error("Negative rank not allowed.");
+            throw std::runtime_error("Negative rank not allowed.");
         } else if (asserting_cast<size_t>(rank) >= _buffers.size()) {
-            throw new std::runtime_error("Rank ID larger or equal to the number of ranks.");
+            throw std::runtime_error("Rank ID larger or equal to the number of ranks.");
         }
 
         auto&                  buffer = _buffers[asserting_cast<size_t>(rank)];
@@ -150,7 +150,7 @@ class SerializedBlockStoreStream {
         auto  bytesToWrite = length != 0 ? length : position.bytesLeft();
 
         if (bytesToWrite > position.bytesLeft()) {
-            throw new std::runtime_error("Trying to write more bytes than there are left for this handle.");
+            throw std::runtime_error("Trying to write more bytes than there are left for this handle.");
         }
 
         std::copy(
@@ -214,25 +214,30 @@ class SerializedBlockStorage {
     void writeBlock(block_id_t blockId, const std::byte* data) {
         // TODO implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
-        // if (_offsetMode == OffsetMode::constant && blockId != numBlocks()) {
-        //    throw std::
-        //}
 
         if (data == nullptr) {
             throw std::runtime_error("The data argument might not be a nullptr.");
         }
 
-        auto rangeOfBlock = _blockDistribution->rangeOfBlock(blockId);
-        if (!hasRange(rangeOfBlock)) {
-            registerRange(rangeOfBlock);
+        if (!_writingState || !(_writingState->range.contains(blockId))) {
+            auto range = _blockDistribution->rangeOfBlock(blockId);
+            if (!hasRange(range)) {
+                registerRange(range);
+            }
+            auto indexOpt = indexOf(range);
+            assert(indexOpt);
+            _writingState.emplace(range, _data[*indexOpt]);
         }
-        auto& rangeData = _data[indexOf(rangeOfBlock)];
+
+        auto& rangeOfBlock = _writingState->range;
+        auto& dest         = _writingState->data;
         assert(_constOffset > 0);
-        assert(_data[indexOf(rangeOfBlock)].size() == rangeOfBlock.length() * _constOffset);
+        assert(dest.size() == rangeOfBlock.length() * _constOffset);
         assert(blockId >= rangeOfBlock.start());
+
         auto offsetInBlockRange = (blockId - rangeOfBlock.start()) * _constOffset;
-        auto blockDest          = rangeData.begin()
-                         + asserting_cast<typename decltype(rangeData.begin())::difference_type>(offsetInBlockRange);
+        auto blockDest =
+            dest.begin() + asserting_cast<typename decltype(dest.begin())::difference_type>(offsetInBlockRange);
         std::copy(data, data + _constOffset, blockDest);
     }
 
@@ -246,7 +251,11 @@ class SerializedBlockStorage {
             const BlockRange blockRangeInternal = _blockDistribution->rangeOfBlock(currentBlockId);
             assert(blockRangeInternal.contains(currentBlockId));
             assert(currentBlockId >= blockRangeInternal.start());
-            const size_t blockRangeIndex = indexOf(blockRangeInternal);
+            auto indexOpt = indexOf(blockRangeInternal);
+            if (!indexOpt) {
+                throw std::invalid_argument("Range does not exist in the serialization buffer.");
+            }
+            const size_t blockRangeIndex = *indexOpt;
             assert(blockRangeIndex < _ranges.size());
             assert(blockRangeIndex < _data.size());
             assert(_offsetMode == OffsetMode::constant || blockRangeIndex < _offsets.size());
@@ -279,25 +288,40 @@ class SerializedBlockStorage {
     }
 
     private:
-    const OffsetMode                    _offsetMode;
-    const size_t                        _constOffset;  // only in ConstOffset mode
-    std::unordered_map<size_t, size_t>  _rangeIndices; // Maps a rangeId to its indices in following vectors
-    std::vector<BlockRange>             _ranges;       // For all outer vectors, the indices correspond
-    std::vector<std::vector<size_t>>    _offsets;      // A sentinel points to last elem + 1; only in LUT mode
-    std::vector<std::vector<std::byte>> _data;
+    const OffsetMode                       _offsetMode;
+    const size_t                           _constOffset;  // only in ConstOffset mode
+    std::vector<std::pair<size_t, size_t>> _rangeIndices; // Maps rangeId to its indices in following vectors; unordered
+    std::vector<BlockRange>                _ranges;       // For all outer vectors, the indices correspond
+    std::vector<std::vector<size_t>>       _offsets;      // A sentinel points to last elem + 1; only in LUT mode
+    std::vector<std::vector<std::byte>>    _data;
     const std::shared_ptr<const BlockDistribution<MPIContext>> _blockDistribution;
 
+    struct WritingState {
+        WritingState(BlockRange _range, std::vector<std::byte>& _data) : range(_range), data(_data) {}
+
+        BlockRange              range;
+        std::vector<std::byte>& data;
+    };
+    std::optional<WritingState> _writingState;
+
     // Return the index this range has in the outer vectors
-    size_t indexOf(BlockRange blockRange) const {
-        // If we want to get rid of this map, we could sort the _ranges vector and use a binary_search instead
-        auto indexIt = _rangeIndices.find(blockRange.id());
+    std::optional<size_t> indexOf(BlockRange blockRange) const {
+        return indexOf(blockRange.id());
+    }
+
+    // Return the index this range has in the outer vectors
+    std::optional<size_t> indexOf(size_t rangeId) const {
+        auto indexIt = find_if(_rangeIndices.begin(), _rangeIndices.end(), [rangeId](std::pair<size_t, size_t> kv) {
+            return kv.first == rangeId;
+        });
+
         if (indexIt == _rangeIndices.end()) {
-            throw std::invalid_argument("BlockRange not stored");
+            return std::nullopt;
+        } else {
+            assert(_ranges.size() == _data.size());
+            assert(indexIt->second < _data.size());
+            return std::make_optional(indexIt->second);
         }
-        size_t index = indexIt->second;
-        assert(index < _data.size());
-        assert(_ranges.size() == _data.size());
-        return index;
     }
 
     // hasRange()
@@ -308,7 +332,7 @@ class SerializedBlockStorage {
     }
 
     bool hasRange(size_t blockId) const {
-        return _rangeIndices.find(blockId) != _rangeIndices.end();
+        return indexOf(blockId).has_value();
     }
 
     // registerRange()
@@ -317,20 +341,20 @@ class SerializedBlockStorage {
     // this object.
     // ranges: The block range we should reserve storage for
     void registerRange(const BlockRange& range) {
-        if (_rangeIndices.find(range.id()) != _rangeIndices.end()) {
+        if (hasRange(range)) {
             throw std::runtime_error("This range already exists.");
         }
 
         size_t numRanges = this->numRanges();
         _ranges.push_back(range);
         _data.emplace_back(range.length() * _constOffset);
-        _rangeIndices[range.id()] = numRanges;
+        _rangeIndices.emplace_back(range.id(), numRanges);
         // TODO implement LUT mode
 
         assert(_ranges.size() == _data.size());
         assert(_offsets.size() == 0);
         assert(_rangeIndices.size() == _ranges.size());
-        assert(_data[indexOf(range)].size() == range.length() * _constOffset);
+        assert(_data[*indexOf(range)].size() == range.length() * _constOffset);
     }
 
     // numRanges()
