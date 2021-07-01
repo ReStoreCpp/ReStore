@@ -96,9 +96,9 @@ BENCHMARK(BM_submitBlocks)          ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->ArgsProduct({
-        {8, KiB(1), MiB(1)},                // block sizes
-        {2, 3, 4},                          // replication level
-        {MiB(1), MiB(16), MiB(32), MiB(64)} //, MiB(128)} // bytes per rank
+        {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
+        {1, 2, 3, 4},                                   // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)}             //, MiB(128)} // bytes per rank
     });
 
 static void BM_pushBlocks(benchmark::State& state) {
