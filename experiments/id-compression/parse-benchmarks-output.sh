@@ -2,6 +2,7 @@
 
 NO_COMPRESSION_FILENAME=microbenchmarks-no-compression.csv
 YES_COMPRESSION_FILENAME=microbenchmarks-yes-compression.csv
+TUNED_COMPRESSION_FILENAME=microbenchmarks-tuned-compression.csv
 
 remove-summary-rows() {
     sed -e "/_mean/d" -e "/_median/d" -e "/_stddev/d"
@@ -26,3 +27,4 @@ remove-csv-header() {
 
 cat "$YES_COMPRESSION_FILENAME" | remove-summary-rows | keep-first-five-fields | expand-name-field | add-code-field "with-id-compression"
 cat "$NO_COMPRESSION_FILENAME" | remove-summary-rows | keep-first-five-fields | expand-name-field | add-code-field "without-id-compression" | remove-csv-header
+cat "$TUNED_COMPRESSION_FILENAME" | remove-summary-rows | keep-first-five-fields | expand-name-field | add-code-field "tuned-id-compression" | remove-csv-header
