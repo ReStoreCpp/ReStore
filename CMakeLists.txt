@@ -74,7 +74,7 @@ set("NEEDS_GOOGLETEST" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENC
 set("NEEDS_CPPITERTOOLS" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_CXXOPTS" ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_GOOGLEBENCHMARK" ${PROJECT_NAME}_BUILD_BENCHMARKS)
-set("NEEDS_BACKWARDCPP" ${PROJECT_NAME}_BUILD_TESTS)
+set("NEEDS_BACKWARDCPP" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
 
 if(NEEDS_GOOGLETEST)
     message("Using googletest")
@@ -244,6 +244,11 @@ if(NEEDS_GOOGLEBENCHMARK)
     set_target_properties(benchmark PROPERTIES FOLDER googlebenchmark)
 endif()
 
+# Load and include backward-cpp
+if (NEEDS_BACKWARDCPP)
+    set(Backward_DIR "${PROJECT_SOURCE_DIR}/extern/backward-cpp")
+    find_package(Backward)
+endif()
 
 ### Subdirectories ###
 # Build the unit tests

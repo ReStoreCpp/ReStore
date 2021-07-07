@@ -55,10 +55,6 @@ function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     #)
 endfunction(add_mpi_test)
 
-# Load the backward-cpp library
-set(Backward_DIR "${PROJECT_SOURCE_DIR}/extern/backward-cpp")
-find_package(Backward)
-
 # Register our tests
 ## Without MPI
 restore_add_test(test_block_distribution "ReStore::ReStore;cppitertools" test_block_distribution.cpp)
