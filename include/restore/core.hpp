@@ -155,6 +155,11 @@ class ReStore {
 
             // All blocks have been serialized, send & receive replicas
             auto receivedMessages = comm.exchangeData(sendBuffers);
+            
+            // Deallocate sendBuffers, they are no longer needed and take up replicationLevel * bytesPerRank memory.
+            // By deallocating them now, before the received messages are stored into the serialized block storage,
+            // we can reduce the peak memory consumption of this algorithm.
+            sendBuffers = decltype(sendBuffers)();
 
             // Store the received blocks into our local block storage
             comm.parseAllIncomingMessages(
