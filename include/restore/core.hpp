@@ -95,6 +95,10 @@ class ReStore {
         _mpiContext.updateComm(newComm);
     }
 
+    std::vector<ReStoreMPI::original_rank_t> getRanksDiedSinceLastCall() {
+        return _mpiContext.getRanksDiedSinceLastCall();
+    }
+
     // submitBlocks()
     //
     // Submits blocks to the replicated storage. They will be replicated among the ranks and can be
