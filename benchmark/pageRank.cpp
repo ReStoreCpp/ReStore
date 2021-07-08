@@ -1,7 +1,11 @@
+#include "restore/block_serialization.hpp"
+#include "restore/common.hpp"
 #include "restore/core.hpp"
+#include "restore/equal_load_balancer.hpp"
+#include "restore/helpers.hpp"
+#include "restore/mpi_context.hpp"
 
 #include <algorithm>
-#include <stdint.h>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -12,9 +16,7 @@
 #include <mpi.h>
 #include <numeric>
 #include <optional>
-#include <restore/block_serialization.hpp>
-#include <restore/common.hpp>
-#include <restore/helpers.hpp>
+#include <stdint.h>
 #include <streambuf>
 #include <string.h>
 #include <string>
@@ -43,7 +45,10 @@ struct edge_t {
 auto comm    = MPI_COMM_WORLD;
 bool amIDead = false;
 
-std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>> readGraph(std::string graph) {
+using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>>;
+
+std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>, block_distribution_t>
+readGraph(std::string graph) {
     int myRank, numRanks;
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
@@ -52,15 +57,16 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
 
     std::string line;
 
-    node_t              numVertices           = 0;
-    edge_id_t           numEdges              = 0;
-    edge_id_t           numEdgesRead          = 0;
-    edge_id_t           numEdgesPerRank       = 0;
-    int                 numRanksWithMoreEdges = 0;
-    std::vector<edge_t> edges;
-    std::vector<node_t> outDegrees;
-    edge_id_t           lowerBound = 0;
-    edge_id_t           upperBound = 0;
+    node_t               numVertices           = 0;
+    edge_id_t            numEdges              = 0;
+    edge_id_t            numEdgesRead          = 0;
+    edge_id_t            numEdgesPerRank       = 0;
+    int                  numRanksWithMoreEdges = 0;
+    std::vector<edge_t>  edges;
+    std::vector<node_t>  outDegrees;
+    edge_id_t            lowerBound = 0;
+    edge_id_t            upperBound = 0;
+    block_distribution_t blockDistribution;
     while (std::getline(infile, line)) {
         if (line.empty()) {
             continue;
@@ -90,6 +96,14 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
                          + asserting_cast<edge_id_t>(std::min(myRank, numRanksWithMoreEdges));
             upperBound =
                 numEdgesPerRank * asserting_cast<edge_id_t>((myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges));
+
+            for (int rank = 0; rank < numRanks; ++rank) {
+                ReStore::block_id_t rankLowerBound = numEdgesPerRank * asserting_cast<edge_id_t>(rank)
+                                                     + asserting_cast<edge_id_t>(std::min(rank, numRanksWithMoreEdges));
+                size_t rankUpperBound =
+                    numEdgesPerRank * asserting_cast<edge_id_t>((rank + 1) + std::min(rank + 1, numRanksWithMoreEdges));
+                blockDistribution.emplace_back(std::make_pair(rankLowerBound, rankUpperBound - rankLowerBound), rank);
+            }
         } else if (letter == 'e') {
             node_t firstNum, secondNum;
             iss >> firstNum >> secondNum;
@@ -128,7 +142,7 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
         exit(1);
     }
     assert(static_cast<edge_id_t>(edges.size()) == numEdgesPerRank + (myRank < numRanksWithMoreEdges));
-    return std::make_tuple(numVertices, numEdges, lowerBound, edges, outDegrees);
+    return std::make_tuple(numVertices, numEdges, lowerBound, edges, outDegrees, blockDistribution);
 }
 
 // double calcL2Norm(const std::vector<double>& vec) {
@@ -152,39 +166,23 @@ double calcDiffL2Norm(const std::vector<double>& lhs, const std::vector<double>&
 }
 
 void recoverFromFailure(
-    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStore<edge_t>& reStore, int& myRank,
-    int& numRanks) {
+    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStore<edge_t>& reStore,
+    ReStore::EqualLoadBalancer& loadBalancer, int& myRank, int& numRanks) {
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
     reStore.updateComm(comm);
+    UNUSED(numEdges);
 
-    edge_id_t numEdgesPerRank       = numEdges / asserting_cast<edge_id_t>(numRanks);
-    int       numRanksWithMoreEdges = asserting_cast<int>(numEdges % asserting_cast<edge_id_t>(numRanks));
-    std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
-    for (int rank = 0; rank < numRanks; ++rank) {
-        const edge_id_t lowerBound =
-            numEdgesPerRank * asserting_cast<edge_id_t>(rank + std::min(rank, numRanksWithMoreEdges));
-        const edge_id_t upperBound =
-            numEdgesPerRank * asserting_cast<edge_id_t>((rank + 1) + std::min(rank + 1, numRanksWithMoreEdges));
-        const edge_id_t numEdgesForThisRank = upperBound - lowerBound;
-        requests.emplace_back(std::make_pair(
-            std::make_pair(
-                asserting_cast<ReStore::block_id_t>(lowerBound), asserting_cast<size_t>(numEdgesForThisRank)),
-            rank));
-    }
-    const edge_id_t myLowerBound =
-        numEdgesPerRank * asserting_cast<edge_id_t>(myRank + std::min(myRank, numRanksWithMoreEdges));
-    const edge_id_t myUpperBound =
-        numEdgesPerRank * asserting_cast<edge_id_t>((myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges));
-    const edge_id_t myNumEdges = myUpperBound - myLowerBound;
-    edges.clear();
-    edges.resize(asserting_cast<size_t>(myNumEdges));
-    reStore.pushBlocksCurrentRankIds(
-        requests, [&edges, myLowerBound](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
+    auto diedRanks = reStore.getRanksDiedSinceLastCall();
+    auto requests  = loadBalancer.getNewBlocksAfterFailure(diedRanks);
+    reStore.pushBlocksOriginalRankIds(
+        requests, [&edges](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             assert(sizeof(edge_t) == size);
             UNUSED(size);
-            edges[blockId - asserting_cast<size_t>(myLowerBound)] = *reinterpret_cast<const edge_t*>(dataPtr);
+            UNUSED(blockId);
+            edges.push_back(*reinterpret_cast<const edge_t*>(dataPtr));
         });
+    loadBalancer.commitToPreviousCall();
     assert(std::all_of(edges.begin(), edges.end(), [](edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
 }
@@ -261,8 +259,8 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
 
 std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
-    const std::vector<node_t>& nodeDegrees, const double dampening, const double tol,
-    ReStore::ReStore<edge_t>& reStore) {
+    const std::vector<node_t>& nodeDegrees, const double dampening, const double tol, ReStore::ReStore<edge_t>& reStore,
+    ReStore::EqualLoadBalancer& loadBalancer) {
     UNUSED(numEdges);
     int myRank;
     int numRanks;
@@ -290,19 +288,18 @@ std::vector<double> pageRank(
                 }
                 currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
             }
-            // static int crashCounter = 0;
-            // if ((crashCounter++ % 10) == 0) {
-            //     ranksToKill = {0};
-            // }
+            static int crashCounter = 0;
+            if ((crashCounter++ % 100) == 5) {
+                ranksToKill = {0};
+            }
             if (!fault_tolerant_mpi_call([&]() {
                     return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
                 })) {
-                // TODO Change so that only edges from failed ranks are reloaded and only those new edges are
-                // iterated over again
+                // TODO Change so that we only iterate over the new edges again
                 if (amIDead) {
                     return currPageRanks;
                 }
-                recoverFromFailure(numEdges, edges, reStore, myRank, numRanks);
+                recoverFromFailure(numEdges, edges, reStore, loadBalancer, myRank, numRanks);
                 repeat = true;
             }
         } while (repeat);
@@ -411,10 +408,19 @@ int main(int argc, char** argv) {
 
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
 
-    auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees] = readGraph(options["graph"].as<std::string>());
+    auto start = MPI_Wtime();
+    auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees, blockDistribution] =
+        readGraph(options["graph"].as<std::string>());
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
+    auto end  = MPI_Wtime();
+    auto time = end - start;
+    if (myRank == 0) {
+        std::cout << "Reading graph took " << time << " s" << std::endl;
+    }
 
+    ReStore::EqualLoadBalancer loadBalancer(blockDistribution, numRanks);
 
+    start = MPI_Wtime();
     ReStore::ReStore<edge_t> reStore(
         comm, asserting_cast<uint16_t>(numReplications), ReStore::OffsetMode::constant, sizeof(edge_t));
 
@@ -435,17 +441,22 @@ int main(int argc, char** argv) {
     };
 
     reStore.submitBlocks(serializeBlock, getNextBlock, asserting_cast<ReStore::block_id_t>(numEdges));
+    end  = MPI_Wtime();
+    time = end - start;
+    if (myRank == 0) {
+        std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
+    }
 
     if (myRank == 0)
         std::cout << "Starting with " << numRanks << " ranks" << std::endl;
 
     std::vector<double> result;
-    auto                start = MPI_Wtime();
+    start = MPI_Wtime();
     for (size_t i = 0; i < numRepetitions; ++i) {
-        result = pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore);
+        result = pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore, loadBalancer);
     }
-    auto end        = MPI_Wtime();
-    auto time       = end - start;
+    end             = MPI_Wtime();
+    time            = end - start;
     auto timePerRun = time / static_cast<double>(numRepetitions);
 
     MPI_Comm_rank(comm, &myRank);
