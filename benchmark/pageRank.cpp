@@ -184,7 +184,6 @@ void recoverFromFailure(
         });
     loadBalancer.commitToPreviousCall();
     assert(std::all_of(edges.begin(), edges.end(), [](edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
-    std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
 }
 
 std::unordered_set<int> ranksToKill;
@@ -273,11 +272,13 @@ std::vector<double> pageRank(
     const double        teleport = (1.0 - dampening) / n;
     while (calcDiffL2Norm(prevPageRanks, currPageRanks) > tol) {
         std::swap(prevPageRanks, currPageRanks);
-        bool repeat = false;
+        std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
+        size_t i            = 0;
+        bool   updatedEdges = false;
+        bool   anotherPass  = false;
         do {
-            repeat = false;
-            std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
-            for (size_t i = 0; i < edges.size(); ++i) {
+            anotherPass = false;
+            for (; i < edges.size(); ++i) {
                 const size_t from             = static_cast<size_t>(edges[i].from);
                 const size_t to               = static_cast<size_t>(edges[i].to);
                 const size_t prefetchDistance = 20;
@@ -295,18 +296,22 @@ std::vector<double> pageRank(
             if (!fault_tolerant_mpi_call([&]() {
                     return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
                 })) {
-                // TODO Change so that we only iterate over the new edges again
                 if (amIDead) {
                     return currPageRanks;
                 }
                 recoverFromFailure(numEdges, edges, reStore, loadBalancer, myRank, numRanks);
-                repeat = true;
+                updatedEdges = true;
+                anotherPass  = true;
             }
-        } while (repeat);
+        } while (anotherPass);
         std::swap(currPageRanks, tempPageRanks);
         std::for_each(currPageRanks.begin(), currPageRanks.end(), [teleport, dampening](double& value) {
             value = getActualPageRank(value, teleport, dampening);
         });
+        if (updatedEdges) {
+            std::sort(
+                edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
+        }
     }
     const double sum = std::accumulate(currPageRanks.begin(), currPageRanks.end(), 0.0);
     std::for_each(currPageRanks.begin(), currPageRanks.end(), [sum](double& value) { value /= sum; });
@@ -450,6 +455,7 @@ int main(int argc, char** argv) {
     if (myRank == 0)
         std::cout << "Starting with " << numRanks << " ranks" << std::endl;
 
+    MPI_Barrier(comm);
     std::vector<double> result;
     start = MPI_Wtime();
     for (size_t i = 0; i < numRepetitions; ++i) {
