@@ -289,10 +289,10 @@ std::vector<double> pageRank(
                 }
                 currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
             }
-            static int crashCounter = 0;
-            if ((crashCounter++ % 100) == 5) {
-                ranksToKill = {0};
-            }
+            // static int crashCounter = 0;
+            // if ((crashCounter++ % 100) == 5) {
+            //     ranksToKill = {0};
+            // }
             if (!fault_tolerant_mpi_call([&]() {
                     return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
                 })) {
