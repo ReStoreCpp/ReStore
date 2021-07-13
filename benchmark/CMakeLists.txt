@@ -30,6 +30,24 @@ target_include_directories(${PAGERANK} SYSTEM PRIVATE ../include/)
 target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxxopts")
 target_compile_options(${PAGERANK} PRIVATE -O3 "${WARNING_FLAGS}")
 
+# TODO Shall we put this in the root CMakeLists.txt?
+# Load the backward-cpp library
+set(Backward_DIR "${PROJECT_SOURCE_DIR}/extern/backward-cpp")
+find_package(Backward)
+
+# k-means
+set(KMEANS "k-means")
+if(${PROJECT_NAME}_BACKWARD_ENABLED)
+    add_executable(${KMEANS} k-means.cpp "${${PROJECT_NAME}_BACKWARDCPP_DIR}/backward.cpp")
+else()
+    add_executable(${KMEANS} k-means.cpp)
+endif()
+target_include_directories(${KMEANS} SYSTEM PRIVATE ../extern/)
+target_include_directories(${KMEANS} PRIVATE ../include/)
+target_include_directories(${KMEANS} PRIVATE ./include/)
+target_link_libraries(${KMEANS} "ReStore::ReStore" Backward::Backward)
+target_compile_options(${KMEANS} PRIVATE -O3 "${WARNING_FLAGS}")
+
 # microbenchmarks
 add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
 add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)

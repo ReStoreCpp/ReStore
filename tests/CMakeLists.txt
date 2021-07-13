@@ -80,5 +80,9 @@ add_mpi_test(mpi_tests_failures/test_restore_end_to_end_complex_data_type.cpp te
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_irrecoverable_data_loss.cpp test_restore_end_to_end_irrecoverable_data_loss TestRestore_EndToEnd_IrrecoverableDataLoss 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(test_mpi_context.cpp test_mpi_context MPIContext 4 "")
 
+## Benchmarks
+restore_add_test(test_kmeans_single_rank "ReStore::ReStore" benchmarks/test_kmeans_single_rank.cpp)
+target_include_directories(test_kmeans_single_rank PRIVATE "../benchmark/include/")
+
 # Make ctest play nicely with Demian's spacemacs
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --force-new-ctest-process --output-on-failure)
