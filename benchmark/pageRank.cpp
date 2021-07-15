@@ -1,3 +1,4 @@
+#include "probabilisticFailureSimulator.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/common.hpp"
 #include "restore/core.hpp"
@@ -259,7 +260,7 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
 std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
     const std::vector<node_t>& nodeDegrees, const double dampening, const double tol, ReStore::ReStore<edge_t>& reStore,
-    ReStore::EqualLoadBalancer& loadBalancer) {
+    ReStore::EqualLoadBalancer& loadBalancer, ProbabilisticFailureSimulator& failureSimulator) {
     UNUSED(numEdges);
     int myRank;
     int numRanks;
@@ -289,10 +290,20 @@ std::vector<double> pageRank(
                 }
                 currPageRanks[to] += prevPageRanks[from] / nodeDegrees[from];
             }
-            // static int crashCounter = 0;
-            // if ((crashCounter++ % 100) == 5) {
-            //     ranksToKill = {0};
+
+            // Failure simulation
+            MPI_Comm_rank(comm, &myRank);
+            MPI_Comm_size(comm, &numRanks);
+            ranksToKill.clear();
+            failureSimulator.getFailingRanks(numRanks, ranksToKill);
+            // if (myRank == 0) {
+            //     std::cout << "Killing ranks ";
+            //     for (const auto rankToKill: ranksToKill) {
+            //         std::cout << rankToKill << " ";
+            //     }
+            //     std::cout << std::endl;
             // }
+
             if (!fault_tolerant_mpi_call([&]() {
                     return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
                 })) {
@@ -367,7 +378,10 @@ int main(int argc, char** argv) {
          cxxopts::value<double>()->default_value("0.000000001"))                                         ///
         ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("10")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
-         cxxopts::value<size_t>()->default_value("3")) ///
+         cxxopts::value<size_t>()->default_value("3"))                                                     ///
+        ("seed", "The seed for failure simulation.", cxxopts::value<unsigned long>()->default_value("42")) ///
+        ("prob", "Probability for a rank to fail on every communication round.",
+         cxxopts::value<double>()->default_value("0.1")) ///
         ("h,help", "Print help message.");
 
     cliParser.parse_positional({"graph"});
@@ -412,6 +426,11 @@ int main(int argc, char** argv) {
     const double tolerance      = options["tolerance"].as<double>();
 
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
+
+    const auto seed               = options["seed"].as<unsigned long>();
+    const auto failureProbability = options["prob"].as<double>();
+
+    auto failureSimulator = ProbabilisticFailureSimulator(seed, failureProbability);
 
     auto start = MPI_Wtime();
     auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees, blockDistribution] =
@@ -459,7 +478,8 @@ int main(int argc, char** argv) {
     std::vector<double> result;
     start = MPI_Wtime();
     for (size_t i = 0; i < numRepetitions; ++i) {
-        result = pageRank(numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore, loadBalancer);
+        result = pageRank(
+            numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore, loadBalancer, failureSimulator);
     }
     end             = MPI_Wtime();
     time            = end - start;
