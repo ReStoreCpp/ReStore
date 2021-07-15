@@ -2,7 +2,6 @@
 #define MPI_CONTEXT_H
 
 #include <algorithm>
-#include <stdint.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +10,7 @@
 #include <mpi.h>
 #include <numeric>
 #include <optional>
+#include <stdint.h>
 #include <vector>
 
 #if USE_FTMPI
@@ -197,7 +197,7 @@ class RankManager {
         MPI_Group_translate_ranks(
             difference, numRanksDied, groupRankIds.data(), _originalGroup, originalRankIds.data());
         MPI_Group_free(&_lastDiedRanksRequestedGroup);
-        _lastDiedRanksRequestedGroup = _currentGroup;
+        MPI_Group_union(_currentGroup, MPI_GROUP_EMPTY, &_lastDiedRanksRequestedGroup);
         return originalRankIds;
     }
 
