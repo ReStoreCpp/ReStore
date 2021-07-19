@@ -49,6 +49,7 @@ target_link_libraries(${KMEANS} "ReStore::ReStore" Backward::Backward)
 target_compile_options(${KMEANS} PRIVATE -O3 "${WARNING_FLAGS}")
 
 # microbenchmarks
+# TODO move this one level up
 add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
 add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
 set(MICROBENCHMARKS_TARGET "microbenchmarks")

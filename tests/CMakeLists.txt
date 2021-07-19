@@ -34,7 +34,12 @@ macro(restore_add_test TESTNAME LIBRARIES)
 endmacro()
 
 function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
-    add_executable(${NAME} ${FILE})
+    # create an exectuable in which the tests will be stored
+    if(${PROJECT_NAME}_BACKWARD_ENABLED)
+        add_executable(${NAME} ${FILE} "${${PROJECT_NAME}_BACKWARDCPP_DIR}/backward.cpp")
+    else()
+        add_executable(${NAME} ${FILE})
+    endif()
     target_include_directories(${NAME} SYSTEM PRIVATE ../extern/)
     target_include_directories(${NAME} SYSTEM PRIVATE ../include/)
     target_include_directories(${NAME} PRIVATE .)
@@ -48,7 +53,7 @@ function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     )
 
     add_test(NAME ${DISPLAY_NAME} COMMAND "./mpi_test_wrapper.sh" ${MPIEXEC_EXECUTABLE} ${NO_MPI_PROC} "./${NAME}")
-    target_compile_options(${NAME} PRIVATE -g -Og ${WARNING_FLAGS})
+    target_compile_options(${NAME} PRIVATE -g -O0 ${WARNING_FLAGS})
     #set_tests_properties(${DISPLAY_NAME} PROPERTIES
     #    FAIL_REGULAR_EXPRESSION " FAILED "
     #    PASS_REGULAR_EXPRESSION " PASSED "
@@ -70,8 +75,10 @@ restore_add_test(test_equal_load_balancer "ReStore::ReStore" test_equal_load_bal
 add_mpi_test(mpi_tests_failures/test_restore_constructor.cpp test_restore_constructor TestRestoreConstructor 4 "ReStore::ReStore;cppitertools")
 
 ## With MPI
+# TODO Move this one level up or change to target_compile_definitions?
 add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
 add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
+
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple1.cpp test_restore_end_to_end_simple1 TestRestore_EndToEnd_Simple1 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_simple2.cpp test_restore_end_to_end_simple2 TestRestore_EndToEnd_Simple2 4 "ReStore::ReStore;cppitertools")
 add_mpi_test(mpi_tests_failures/test_restore_end_to_end_single_failure.cpp test_restore_end_to_end_single_failure TestRestore_EndToEnd_SingleFailure 4 "ReStore::ReStore;cppitertools")
@@ -81,8 +88,10 @@ add_mpi_test(mpi_tests_failures/test_restore_end_to_end_irrecoverable_data_loss.
 add_mpi_test(test_mpi_context.cpp test_mpi_context MPIContext 4 "")
 
 ## Benchmarks
-restore_add_test(test_kmeans_single_rank "ReStore::ReStore" benchmarks/test_kmeans_single_rank.cpp)
+# TODO Rename add_mpi_test or restore_mpi_test and unify interface -> merge in one function/macro?
+add_mpi_test(benchmarks/test_kmeans_single_rank.cpp test_kmeans_single_rank "test_kmeans_single_rank" 1 "ReStore::ReStore")
 target_include_directories(test_kmeans_single_rank PRIVATE "../benchmark/include/")
+target_compile_definitions(test_kmeans_single_rank PUBLIC USE_MPI)
 
 # Make ctest play nicely with Demian's spacemacs
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --force-new-ctest-process --output-on-failure)

@@ -6,8 +6,8 @@
 
 #include <dbg.h>
 
-#include "restore/helpers.hpp"
 #include "k-means.hpp"
+#include "restore/helpers.hpp"
 
 int main(int argc, char** argv) {
     using namespace kmeans;
@@ -22,9 +22,11 @@ int main(int argc, char** argv) {
     const size_t numIterations = 10;
     const size_t numDimensions = 2;
 
-    auto kmeansInstance = kmeans::kMeansAlgorithm<float>(
-        kmeans::generateRandomData<float>(numDataPoints, numDimensions), numCenters, numIterations);
-    kmeansInstance();
+    auto kmeansInstance =
+        kmeans::kMeansAlgorithm<float>(kmeans::generateRandomData<float>(numDataPoints, numDimensions));
+
+    kmeansInstance.pickCentersRandomly(numCenters);
+    kmeansInstance.performIterations(numIterations);
 
     dbg("done");
     MPI_Finalize();
