@@ -374,9 +374,11 @@ class kMeansAlgorithm {
             for (size_t centerIdx = 0; centerIdx < numCenters(); centerIdx++) {
                 data_t distanceToCenter = 0;
                 for (size_t dimension = 0; dimension < numDimensions(); dimension++) {
-                    auto delta = _data.getElementDimension(dataIdx, dimension) - _centers->getElementDimension(centerIdx, dimension);
+                    auto delta = _data.getElementDimension(dataIdx, dimension)
+                                 - _centers->getElementDimension(centerIdx, dimension);
                     distanceToCenter += delta * delta;
                 }
+                // TODO We probably don't need this
                 distanceToCenter = std::sqrt(distanceToCenter);
 
                 if (distanceToCenter < distanceToClosestCenter) {
@@ -407,38 +409,47 @@ class kMeansAlgorithm {
             throw std::runtime_error("I don't have any cluster centers.");
         }
 
-        kMeansData<data_t> contribToCenterPosition(numDataPoints(), numDimensions(), 0);
+        // This array accumulates the contributions of the data points assigned to a center to that center.
+        kMeansData<data_t> contribToCenterPosition(numCenters(), numDimensions(), 0);
 
         // Compute contribution of local data points to the positions of the new centers
         for (size_t dataIdx = 0; dataIdx < numDataPoints(); dataIdx++) {
             auto centerIdx = _pointToCenterAssignment->assignedCenter[dataIdx];
             for (uint64_t dimension = 0; dimension < numDimensions(); dimension++) {
-                contribToCenterPosition[dataIdx + dimension] += _data[dataIdx + dimension];
+                contribToCenterPosition.getElementDimension(centerIdx, dimension) +=
+                    _data.getElementDimension(dataIdx, dimension);
             }
-            _pointToCenterAssignment->numPointsAssignedToCenter[centerIdx]++;
         }
 
         // Allreduce the local contributions to the center positions
         MPI_Allreduce(
-            MPI_IN_PLACE, contribToCenterPosition.data(), asserting_cast<int>(contribToCenterPosition.dataSize()),
-            get_mpi_type<data_t>(), MPI_SUM, MPI_COMM_WORLD);
+            MPI_IN_PLACE,                                            // source buffer
+            contribToCenterPosition.data(),                          // receive buffer
+            asserting_cast<int>(contribToCenterPosition.dataSize()), // number of elements
+            get_mpi_type<data_t>(),                                  // of data type data_t,
+            MPI_SUM,                                                 // operation
+            MPI_COMM_WORLD                                           // communicator
+        );
         MPI_Allreduce(
-            MPI_IN_PLACE, _pointToCenterAssignment->numPointsAssignedToCenter.data(),
-            asserting_cast<int>(_pointToCenterAssignment->numPointsAssignedToCenter.size()), get_mpi_type<data_t>(),
-            MPI_SUM, MPI_COMM_WORLD);
+            MPI_IN_PLACE,                                                                    // source buffer
+            _pointToCenterAssignment->numPointsAssignedToCenter.data(),                      // receive buffer
+            asserting_cast<int>(_pointToCenterAssignment->numPointsAssignedToCenter.size()), // number of elements
+            get_mpi_type<data_t>(),                                                          // data type
+            MPI_SUM,                                                                         // operation
+            MPI_COMM_WORLD                                                                   // communicator
+        );
         assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
 
         // Calculate new center positions
         for (size_t centerIdx = 0; centerIdx < numCenters(); centerIdx++) {
-            for (size_t dimension = 0; dimension < numDimensions(); dimension++) {
-                auto numPointsAssignedToCenter =
-                    static_cast<data_t>(_pointToCenterAssignment->numPointsAssignedToCenter[centerIdx]);
-                // If no point is assigned to this center, we leave the center where it is.
-                if (numPointsAssignedToCenter > 0) {
-                    (*_centers)[centerIdx + dimension] =
-                        contribToCenterPosition[centerIdx + dimension] / numPointsAssignedToCenter;
+            auto numPointsAssignedToCenter =
+                static_cast<data_t>(_pointToCenterAssignment->numPointsAssignedToCenter[centerIdx]);
+            if (numPointsAssignedToCenter > 0) {
+                for (size_t dimension = 0; dimension < numDimensions(); dimension++) {
+                    _centers->getElementDimension(centerIdx, dimension) =
+                        contribToCenterPosition.getElementDimension(centerIdx, dimension) / numPointsAssignedToCenter;
                 }
-            }
+            } // If no point is assigned to this center, we leave the center where it is.
         }
     }
 
