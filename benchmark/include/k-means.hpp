@@ -256,7 +256,8 @@ class kMeansAlgorithm {
         }
     }
 
-    // Sets the centers to the provided data, takes ownership of the data object
+    // Sets the centers to the provided data, takes ownership of the data object. Must be called with the same
+    // parameters on all ranks.
     template <typename T>
     void setCenters(T&& centers) {
         if constexpr (std::is_same_v<std::remove_reference_t<T>, kMeansData<data_t>>) {
@@ -434,20 +435,22 @@ class kMeansAlgorithm {
             MPI_IN_PLACE,                                                                    // source buffer
             _pointToCenterAssignment->numPointsAssignedToCenter.data(),                      // receive buffer
             asserting_cast<int>(_pointToCenterAssignment->numPointsAssignedToCenter.size()), // number of elements
-            get_mpi_type<data_t>(),                                                          // data type
+            get_mpi_type<uint64_t>(),                                                        // data type
             MPI_SUM,                                                                         // operation
             MPI_COMM_WORLD                                                                   // communicator
         );
         assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
+        assert(contribToCenterPosition.numDataPoints() == numCenters());
 
         // Calculate new center positions
         for (size_t centerIdx = 0; centerIdx < numCenters(); centerIdx++) {
-            auto numPointsAssignedToCenter =
+            auto numPointsAssignedToThisCenter =
                 static_cast<data_t>(_pointToCenterAssignment->numPointsAssignedToCenter[centerIdx]);
-            if (numPointsAssignedToCenter > 0) {
+            if (numPointsAssignedToThisCenter > 0) {
                 for (size_t dimension = 0; dimension < numDimensions(); dimension++) {
                     _centers->getElementDimension(centerIdx, dimension) =
-                        contribToCenterPosition.getElementDimension(centerIdx, dimension) / numPointsAssignedToCenter;
+                        contribToCenterPosition.getElementDimension(centerIdx, dimension)
+                        / numPointsAssignedToThisCenter;
                 }
             } // If no point is assigned to this center, we leave the center where it is.
         }
