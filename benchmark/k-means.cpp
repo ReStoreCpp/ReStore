@@ -4,8 +4,6 @@
 #include <random>
 #include <vector>
 
-#include <dbg.h>
-
 #include "k-means.hpp"
 #include "restore/helpers.hpp"
 
@@ -28,7 +26,6 @@ int main(int argc, char** argv) {
     kmeansInstance.pickCentersRandomly(numCenters);
     kmeansInstance.performIterations(numIterations);
 
-    dbg("done");
     MPI_Finalize();
     return 0;
 }

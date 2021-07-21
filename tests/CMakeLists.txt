@@ -89,9 +89,11 @@ add_mpi_test(test_mpi_context.cpp test_mpi_context MPIContext 4 "")
 
 ## Benchmarks
 # TODO Rename add_mpi_test or restore_mpi_test and unify interface -> merge in one function/macro?
-add_mpi_test(benchmarks/test_kmeans_single_rank.cpp test_kmeans_single_rank "test_kmeans_single_rank" 1 "ReStore::ReStore")
+add_mpi_test(benchmarks/test_kmeans_single_rank.cpp test_kmeans_single_rank "kmeansSingleRank" 1 "ReStore::ReStore")
 target_include_directories(test_kmeans_single_rank PRIVATE "../benchmark/include/")
-target_compile_definitions(test_kmeans_single_rank PUBLIC USE_MPI)
+
+add_mpi_test(benchmarks/test_kmeans_multi_rank.cpp test_kmeans_multi_rank "kmeansMutliRank" 4 "ReStore::ReStore")
+target_include_directories(test_kmeans_multi_rank PRIVATE "../benchmark/include/")
 
 # Make ctest play nicely with Demian's spacemacs
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --force-new-ctest-process --output-on-failure)

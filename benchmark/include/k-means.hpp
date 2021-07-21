@@ -6,8 +6,6 @@
 #include <random>
 #include <vector>
 
-#include <dbg.h>
-
 #include "restore/helpers.hpp"
 
 // TODO Pick initial centers not only from the data on the first rank
@@ -469,6 +467,55 @@ class kMeansAlgorithm {
             // Compute contribution of local data points to the positions of the new centers
             updateCenters();
         }
+    }
+
+    std::vector<uint64_t> collectClusterAssignments() {
+        if (!_pointToCenterAssignment) {
+            throw std::runtime_error(
+                "I don't have any point-to-center assignments. Please perform an interation first.");
+        }
+
+        // First, collect the number of data points per rank
+        int myNumDataPoints = throwing_cast<int>(numDataPoints());
+        assert(numDataPoints() == _pointToCenterAssignment->assignedCenter.size());
+        assert(numRanks() == 4); // This test was designed with 4 ranks in mind.
+        auto numDataPointsPerRank = std::vector<int>(numRanks(), 0);
+        assert(numDataPointsPerRank.size() == numRanks());
+
+        MPI_Gather(
+            &myNumDataPoints,                          // send buffer
+            1,                                         // send count
+            get_mpi_type<decltype(myNumDataPoints)>(), // send type
+            numDataPointsPerRank.data(),               // receive buffer
+            1,                                         // receive count
+            get_mpi_type<decltype(myNumDataPoints)>(), // receive type
+            0,                                         // root
+            MPI_COMM_WORLD                             // communicator
+        );
+        // There was a buffer overflow here...
+        assert(numDataPointsPerRank.size() == numRanks());
+
+        // Next, collect the cluster assignments
+        std::vector<int>      displacements(numRanks() + 1, 0);
+        assert(numDataPointsPerRank.size() + 1 == displacements.size());
+        std::partial_sum(numDataPointsPerRank.begin(), numDataPointsPerRank.end(), displacements.begin() + 1);
+        assert(displacements[0] == 0);
+        auto numDataPointsGlobal = asserting_cast<size_t>(displacements[displacements.size() - 1]);
+        assert(numDataPointsGlobal > numDataPoints());
+        std::vector<uint64_t> clusterAssignments(numDataPointsGlobal, 0);
+
+        MPI_Gatherv(
+            &_pointToCenterAssignment->assignedCenter, // send buffer
+            asserting_cast<int>(numDataPoints()),      // send count
+            get_mpi_type<size_t>(),                    // send type
+            clusterAssignments.data(),                 // receive buffer
+            numDataPointsPerRank.data(),               // receive count
+            displacements.data(),                      // displacements into the receive buffer
+            get_mpi_type<size_t>(),                    // receive type
+            0, MPI_COMM_WORLD                          // root rank and communicator
+        );
+
+        return clusterAssignments;
     }
 
     private:
