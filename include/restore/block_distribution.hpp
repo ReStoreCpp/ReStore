@@ -249,7 +249,6 @@ class BlockDistribution {
             assert(static_cast<size_t>(nextRank) < _numRanks);
             rankIds.push_back(nextRank);
         }
-        // TODO Check if rank ids are unique
 
         return _mpiContext.getOnlyAlive(rankIds);
     }
@@ -297,7 +296,6 @@ class BlockDistribution {
             assert(nextRange.id() < _numRanges);
             rangeIds.push_back(nextRange);
         }
-        // TODO Assert there are replication many
 
         return rangeIds;
     }

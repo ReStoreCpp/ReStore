@@ -82,7 +82,6 @@ class ReStore {
         return this->_replicationLevel;
     }
 
-    // TODO this is an artifact. Use only OffsetMode Descriptors throughout the whole ReStore class
     // offsetMode()
     //
     // Get the offset mode that defines how the serialized blocks are aligned in memory.

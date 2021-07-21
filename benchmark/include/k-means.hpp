@@ -10,10 +10,7 @@
 
 // TODO Pick initial centers not only from the data on the first rank
 // TODO Abstract away MPI functionality
-// TODO Accept number of data points that are not evenly divisible by the number of ranks
 // TODO Use asynchronous MPI calls
-// TODO Code Cleanup!
-// TODO Add assertions
 // TODO User proper iterators
 
 namespace kmeans {

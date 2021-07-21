@@ -12,8 +12,6 @@ set_target_properties(gtest_main PROPERTIES FOLDER extern)
 set_target_properties(gmock PROPERTIES FOLDER extern)
 set_target_properties(gmock_main PROPERTIES FOLDER extern)
 
-# TODO Get rid of the googletest and googlemock dependencies
-
 # simulate-failures-until-data-loss
 set(SIM_TILL_DATA_LOSS_TARGET "simulate-failures-until-data-loss")
 add_executable(${SIM_TILL_DATA_LOSS_TARGET} simulate_failures_until_data_loss.cpp)
