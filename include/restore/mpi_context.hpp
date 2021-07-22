@@ -2,7 +2,6 @@
 #define MPI_CONTEXT_H
 
 #include <algorithm>
-#include <stdint.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +10,10 @@
 #include <mpi.h>
 #include <numeric>
 #include <optional>
+#include <stdint.h>
 #include <vector>
+
+#include "restore/helpers.hpp"
 
 #if USE_FTMPI
     #include <mpi-ext.h>
@@ -278,6 +280,7 @@ std::vector<RecvMessage> SparseAllToAll(const std::vector<SendMessage>& messages
     return result;
 }
 
+
 class MPIContext {
     public:
     explicit MPIContext(MPI_Comm comm) : _comm(comm), _rankManager(comm) {}
@@ -340,11 +343,97 @@ class MPIContext {
         return ReStoreMPI::SparseAllToAll(messages, _comm, tag);
     }
 
+    // TODO compile time enable exceptions instead of assertions
+    template <class data_t>
+    void broadcast(data_t* data, size_t numDataElements = 1, int root = 0) {
+        static_assert(std::is_pod_v<data_t>, "broadcast only works for POD data");
+        int _numDataElements = asserting_cast<int>(numDataElements);
+        return successOrThrowMpiCall(
+            [&]() { return MPI_Bcast(data, _numDataElements, get_mpi_type<data_t>(), root, _comm); });
+    }
+
+    template <class data_t>
+    std::vector<data_t> broadcast(std::vector<data_t>& data, int root = 0) {
+        static_assert(std::is_pod_v<data_t>, "broadcast only works for POD data");
+        return broadcast(data.data(), data.size(), root, _comm);
+    }
+
+    template <class data_t>
+    void allreduce(data_t* data, MPI_Op operation, size_t numDataElements = 1) {
+        static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
+        int _numDataElements = asserting_cast<int>(numDataElements);
+        return successOrThrowMpiCall([&]() {
+            return MPI_Allreduce(MPI_IN_PLACE, data, _numDataElements, get_mpi_type<data_t>(), operation, _comm);
+        });
+    }
+
+    template <class data_t>
+    void allreduce(std::vector<data_t>& data, MPI_Op operation) {
+        static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
+        return allreduce(data.data(), operation, data.size());
+    }
+
+    template <class data_t>
+    std::vector<data_t> gatherv(std::vector<data_t>& data, int root = 0) {
+        static_assert(std::is_pod_v<data_t>, "gatherv only works for POD data");
+
+        // First, gather the number of data elements per rank
+        int myNumDataElements = throwing_cast<int>(data.size());
+
+        std::vector<int> numDataElementsPerRank;
+        if (_rankManager.getMyCurrentRank() == root) {
+            numDataElementsPerRank.resize(asserting_cast<size_t>(_rankManager.getCurrentSize()));
+        }
+
+        successOrThrowMpiCall([&]() {
+            return MPI_Gather(
+                &myNumDataElements,                          // send buffer
+                1,                                           // send count
+                get_mpi_type<decltype(myNumDataElements)>(), // send type
+                numDataElementsPerRank.data(),               // receive buffer
+                1,                                           // receive count
+                get_mpi_type<decltype(myNumDataElements)>(), // receive type
+                root,                                        // root
+                _comm                                        // communicator
+            );
+        });
+
+        // Next, compute the displacements for the gatherv operation
+        std::vector<int> displacements(asserting_cast<size_t>(_rankManager.getCurrentSize()) + 1, 0);
+        assert(_rankManager.getMyCurrentRank() != root || numDataElementsPerRank.size() + 1 == displacements.size());
+
+        std::partial_sum(numDataElementsPerRank.begin(), numDataElementsPerRank.end(), displacements.begin() + 1);
+        assert(displacements[0] == 0);
+
+        auto numDataElementsGlobal = asserting_cast<size_t>(displacements[displacements.size() - 1]);
+        assert(_rankManager.getMyCurrentRank() != root || numDataElementsGlobal > myNumDataElements);
+        assert(_rankManager.getMyCurrentRank() == root || numDataElementsGlobal == 0);
+        assert(_rankManager.getMyCurrentRank() != root || numDataElementsGlobal > 0);
+
+        // Finally, gatherv the data
+        std::vector<data_t> receiveBuffer(numDataElementsGlobal, 0);
+        assert(receiveBuffer.size() == numDataElementsGlobal);
+
+        successOrThrowMpiCall([&]() {
+            return MPI_Gatherv(
+                data.data(),                            // send buffer
+                asserting_cast<int>(myNumDataElements), // send count
+                get_mpi_type<data_t>(),                 // send type
+                receiveBuffer.data(),                   // receive buffer
+                numDataElementsPerRank.data(),          // receive count
+                displacements.data(),                   // displacements into the receive buffer
+                get_mpi_type<data_t>(),                 // receive type
+                0, MPI_COMM_WORLD                       // root rank and communicator
+            );
+        });
+
+        return receiveBuffer;
+    }
+
     private:
     MPI_Comm    _comm;
     RankManager _rankManager;
 };
 
 } // namespace ReStoreMPI
-
 #endif // MPI_CONTEXT_H

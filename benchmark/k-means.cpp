@@ -6,6 +6,7 @@
 
 #include "k-means.hpp"
 #include "restore/helpers.hpp"
+#include "restore/mpi_context.hpp"
 
 int main(int argc, char** argv) {
     using namespace kmeans;
@@ -15,13 +16,15 @@ int main(int argc, char** argv) {
 
     MPI_Init(&argc, &argv);
 
+    ReStoreMPI::MPIContext mpiContext(MPI_COMM_WORLD);
+
     const size_t numDataPoints = 10000;
     const size_t numCenters    = 10;
     const size_t numIterations = 10;
     const size_t numDimensions = 2;
 
-    auto kmeansInstance =
-        kmeans::kMeansAlgorithm<float>(kmeans::generateRandomData<float>(numDataPoints, numDimensions));
+    auto kmeansInstance = kmeans::kMeansAlgorithm<float, ReStoreMPI::MPIContext>(
+        kmeans::generateRandomData<float>(numDataPoints, numDimensions), mpiContext);
 
     kmeansInstance.pickCentersRandomly(numCenters);
     kmeansInstance.performIterations(numIterations);

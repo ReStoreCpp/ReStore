@@ -5,14 +5,20 @@
 #include <gtest/gtest.h>
 
 #include "k-means.hpp"
+#include "restore/mpi_context.hpp"
 
 using namespace ::testing;
 using namespace kmeans;
+using namespace ReStoreMPI;
 
 TEST(kMeansAlgorithm, updateCenters) {
+    // Initialize the MPI context
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
     { // If the centers already match the data, nothing should change
-        // All ranks supply the same data
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 1);
+        // All ranks supply the same data.
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext);
         kmeansInstance.setCenters({0, 1});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 1));
         kmeansInstance.assignPointsToCenters();
@@ -26,7 +32,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
     { // If the centers already match the data, nothing should change
         // All ranks supply the same data
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 1, 1, 0, 0}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1, 1, 1, 0, 0}, 2, mpiContext);
         kmeansInstance.setCenters({0, 0, 1, 1});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 0, 1, 1));
         kmeansInstance.assignPointsToCenters();
@@ -36,7 +42,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
     { // If the centers are already at their optimal position, nothing should change
         // All ranks supply the same data
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 1);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0., 0, 1, 1}, 1, mpiContext);
         kmeansInstance.setCenters({0.5});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5));
         kmeansInstance.assignPointsToCenters();
@@ -46,7 +52,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
     { // If the centers are already at their optimal position, nothing should change
         // All ranks supply the same data
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0., 0, 1, 1}, 2, mpiContext);
         kmeansInstance.setCenters({0.5, 0.5});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5, 0.5));
         kmeansInstance.assignPointsToCenters();
@@ -56,7 +62,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
     { // Else, the centers should be updated
         // All ranks supply the same data
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0., 0, 1, 1}, 2, mpiContext);
         kmeansInstance.setCenters({0, 0});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 0));
         kmeansInstance.assignPointsToCenters();
@@ -66,7 +72,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
     { // A center not getting assigned to any points should not be a problem
         // All ranks supply the same data
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 1);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0., 0, 1, 1}, 1, mpiContext);
         kmeansInstance.setCenters({0, 20});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 20));
         kmeansInstance.assignPointsToCenters();
@@ -83,7 +89,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
     { // Updating centers works with distributed data - centers already optimal
         std::vector<double> data;
-        switch (rank()) {
+        switch (mpiContext.getMyCurrentRank()) {
             case 0:
                 data = {0, 0};
                 break;
@@ -99,7 +105,7 @@ TEST(kMeansAlgorithm, updateCenters) {
             default:
                 assert(false && "Invalid number of ranks for this test");
         }
-        auto kmeansInstance = kMeansAlgorithm<double>(std::move(data), 1);
+        auto kmeansInstance = kMeansAlgorithm<double, MPIContext>(std::move(data), 1, mpiContext);
         kmeansInstance.setCenters({0.5, 5.5});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5, 5.5));
         kmeansInstance.assignPointsToCenters();
@@ -110,7 +116,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
     { // Updating centers works with distributed data - centers need updating
         std::vector<double> data;
-        switch (rank()) {
+        switch (mpiContext.getMyCurrentRank()) {
             case 0:
                 data = {0, 0};
                 break;
@@ -126,7 +132,7 @@ TEST(kMeansAlgorithm, updateCenters) {
             default:
                 assert(false && "Invalid number of ranks for this test");
         }
-        auto kmeansInstance = kMeansAlgorithm<double>(std::move(data), 1);
+        auto kmeansInstance = kMeansAlgorithm(std::move(data), 1, mpiContext);
         kmeansInstance.setCenters({0, 7});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 7));
         kmeansInstance.assignPointsToCenters();
@@ -139,8 +145,11 @@ TEST(kMeansAlgorithm, updateCenters) {
 TEST(kMeansAlgorithm, performIterations) {
     // All ranks supply the same data
 
+    // Initialize the MPI context
+    ReStoreMPI::MPIContext mpiContext(MPI_COMM_WORLD);
+
     { // 0 iterations does nothing
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0., 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext);
         kmeansInstance.setCenters({5, 5, 8, 8});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
         kmeansInstance.performIterations(0);
@@ -148,7 +157,7 @@ TEST(kMeansAlgorithm, performIterations) {
     }
 
     { // single iteration
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0., 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext);
         kmeansInstance.setCenters({5, 5, 8, 8});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
         kmeansInstance.performIterations(1);
@@ -156,7 +165,7 @@ TEST(kMeansAlgorithm, performIterations) {
     }
 
     { // two iterations
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0., 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext);
         kmeansInstance.setCenters({5, 5, 8, 8});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
         kmeansInstance.performIterations(2);
@@ -166,7 +175,11 @@ TEST(kMeansAlgorithm, performIterations) {
 
 TEST(kMeansAlgorithm, smallExampleAllIdenticalData) {
     // All ranks supply the same data
-    auto kmeansInstance = kMeansAlgorithm<double>({1, 1, 2, 10, 13, 18, 20, 21}, 1);
+
+    // Initialize the MPI context
+    ReStoreMPI::MPIContext mpiContext(MPI_COMM_WORLD);
+
+    auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({1., 1, 2, 10, 13, 18, 20, 21}, 1, mpiContext);
     kmeansInstance.setCenters({5, 17});
     ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 17));
 
@@ -185,7 +198,10 @@ TEST(kMeansAlgorithm, slightlyLargerExampleAllIdenticalData) {
     // All ranks supply the same data
     // Data taken from https://scistatcalc.blogspot.com/2014/01/k-means-clustering-calculator.html
 
-    auto kMeansInstance = kMeansAlgorithm<double>(
+    // Initialize the MPI context
+    ReStoreMPI::MPIContext mpiContext(MPI_COMM_WORLD);
+
+    auto kMeansInstance = kMeansAlgorithm(
         {1.870,  1.991,  2.007,  2.186,  2.137,  1.982,  1.883,  2.103,  1.917,  2.019,  1.935,  2.083,  1.849,  2.087,
          0.122,  -0.223, 2.003,  2.031,  0.055,  0.029,  0.054,  0.107,  0.827,  0.981,  0.980,  0.887,  1.222,  0.883,
          1.056,  0.921,  2.080,  1.996,  1.021,  1.066,  -0.055, 0.016,  0.970,  1.027,  1.125,  0.860,  1.023,  0.978,
@@ -215,7 +231,7 @@ TEST(kMeansAlgorithm, slightlyLargerExampleAllIdenticalData) {
          1.210,  0.872,  -0.003, -0.159, 1.926,  2.076,  2.127,  2.007,  -0.010, 0.234,  2.094,  1.938,  -0.183, -0.136,
          1.989,  2.211,  -0.008, 0.033,  1.946,  1.911,  2.215,  1.822,  1.917,  1.968,  2.077,  2.110,  2.190,  1.934,
          1.009,  0.995,  0.042,  0.028,  1.977,  2.179,  1.018,  1.014},
-        2);
+        2, mpiContext);
 
     kMeansInstance.setCenters({2.045, 1.987, 1.589, 0.764, -0.12, 0.43});
     kMeansInstance.performIterations(10);
@@ -231,8 +247,11 @@ TEST(kMeansAlgorithm, slightlyLargerExampleAllIdenticalData) {
 }
 
 TEST(kMeansAlgorithm, smallExampleDistributedData) {
+    // Initialize the MPI context
+    ReStoreMPI::MPIContext mpiContext(MPI_COMM_WORLD);
+
     std::vector<double> data;
-    switch (rank()) {
+    switch (mpiContext.getMyCurrentRank()) {
         case 0:
             data = {1, 1};
             break;
@@ -248,7 +267,7 @@ TEST(kMeansAlgorithm, smallExampleDistributedData) {
         default:
             assert(false && "Invalid number of ranks for this test");
     }
-    auto kmeansInstance = kMeansAlgorithm<double>(std::move(data), 1);
+    auto kmeansInstance = kMeansAlgorithm(std::move(data), 1, mpiContext);
     kmeansInstance.setCenters({5, 17});
     ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 17));
 
@@ -260,18 +279,21 @@ TEST(kMeansAlgorithm, smallExampleDistributedData) {
     ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 4));
     ASSERT_THAT(kmeansInstance.centers(), ElementsAre(3.5, 18));
 
-    return;
     auto clusterAssignments = kmeansInstance.collectClusterAssignments();
-    ASSERT_THAT(clusterAssignments, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1));
+    if (mpiContext.getMyCurrentRank() == 0) {
+        ASSERT_THAT(clusterAssignments, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1));
+    }
 }
 
 TEST(kMeansAlgorithm, slightlyLargerExampleDistributedData) {
     // All ranks supply the same data
     // Data taken from https://scistatcalc.blogspot.com/2014/01/k-means-clustering-calculator.html
-    
-    return;
+
+    // Initialize the MPI context
+    ReStoreMPI::MPIContext mpiContext(MPI_COMM_WORLD);
+
     std::vector<double> data;
-    switch (rank()) {
+    switch (mpiContext.getMyCurrentRank()) {
         case 0:
             data = {
                 1.870,  1.991,  2.007,  2.186,  2.137,  1.982, 1.883,  2.103,  1.917,  2.019,  1.935,  2.083,
@@ -322,20 +344,22 @@ TEST(kMeansAlgorithm, slightlyLargerExampleDistributedData) {
             assert(false && "Invalid number of ranks for this test");
     }
 
-    auto kMeansInstance = kMeansAlgorithm<double>(std::move(data), 2);
+    auto kMeansInstance = kMeansAlgorithm(std::move(data), 2, mpiContext);
 
     kMeansInstance.setCenters({2.045, 1.987, 1.589, 0.764, -0.12, 0.43});
     kMeansInstance.performIterations(10);
-    kMeansInstance.collectClusterAssignments();
-    ASSERT_THAT(
-        kMeansInstance.pointToCenterAssignment().assignedCenter,
-        ElementsAre(
-            0, 0, 0, 0, 0, 0, 0, 2, 0, 2, 2, 1, 1, 1, 1, 0, 1, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 0, 2, 0, 1, 1, 0, 0, 2, 1,
-            1, 0, 1, 2, 2, 2, 0, 0, 1, 0, 2, 0, 2, 2, 1, 0, 0, 2, 0, 0, 0, 2, 2, 1, 0, 1, 2, 1, 2, 1, 1, 2, 0, 2, 1, 0,
-            2, 1, 0, 2, 2, 1, 0, 2, 2, 1, 0, 2, 2, 0, 0, 2, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 2, 2, 1, 1, 2, 0, 0, 2, 2, 1,
-            2, 2, 1, 0, 1, 2, 1, 2, 2, 2, 2, 0, 1, 0, 2, 2, 0, 2, 0, 1, 0, 0, 1, 1, 2, 1, 1, 2, 0, 1, 1, 2, 0, 2, 1, 0,
-            0, 0, 1, 1, 1, 2, 2, 2, 1, 2, 1, 2, 2, 1, 2, 2, 0, 1, 1, 2, 0, 1, 2, 0, 0, 2, 1, 2, 1, 2, 0, 1, 0, 1, 0, 0,
-            0, 1, 1, 2, 0, 0, 2, 0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 2, 0, 1));
+    auto clusterAssignments = kMeansInstance.collectClusterAssignments();
+    if (mpiContext.getMyCurrentRank() == 0) {
+        ASSERT_THAT(
+            clusterAssignments,
+            ElementsAre(
+                0, 0, 0, 0, 0, 0, 0, 2, 0, 2, 2, 1, 1, 1, 1, 0, 1, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 0, 2, 0, 1, 1, 0, 0, 2,
+                1, 1, 0, 1, 2, 2, 2, 0, 0, 1, 0, 2, 0, 2, 2, 1, 0, 0, 2, 0, 0, 0, 2, 2, 1, 0, 1, 2, 1, 2, 1, 1, 2, 0, 2,
+                1, 0, 2, 1, 0, 2, 2, 1, 0, 2, 2, 1, 0, 2, 2, 0, 0, 2, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 2, 2, 1, 1, 2, 0, 0,
+                2, 2, 1, 2, 2, 1, 0, 1, 2, 1, 2, 2, 2, 2, 0, 1, 0, 2, 2, 0, 2, 0, 1, 0, 0, 1, 1, 2, 1, 1, 2, 0, 1, 1, 2,
+                0, 2, 1, 0, 0, 0, 1, 1, 1, 2, 2, 2, 1, 2, 1, 2, 2, 1, 2, 2, 0, 1, 1, 2, 0, 1, 2, 0, 0, 2, 1, 2, 1, 2, 0,
+                1, 0, 1, 0, 0, 0, 1, 1, 2, 0, 0, 2, 0, 2, 0, 2, 0, 0, 0, 0, 0, 1, 2, 0, 1));
+    }
 }
 
 int main(int argc, char** argv) {
@@ -348,7 +372,9 @@ int main(int argc, char** argv) {
     MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
     // These tests have been designed with 4 ranks in mind
-    if (numRanks() != 4) {
+    int numRanks = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &numRanks);
+    if (numRanks != 4) {
         throw std::runtime_error("Please run these tests with 4 mpi ranks.");
     }
 

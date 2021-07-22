@@ -9,27 +9,10 @@
 #include "restore/helpers.hpp"
 
 // TODO Pick initial centers not only from the data on the first rank
-// TODO Abstract away MPI functionality
 // TODO Use asynchronous MPI calls
-// TODO User proper iterators
 
 namespace kmeans {
 
-// ----- MPI Helpers -----
-
-// Returns the rank of this MPI process in MPI_COMM_WORLD
-size_t rank() {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    return asserting_cast<size_t>(rank);
-}
-
-// Returns the number of MPI ranks in MPI_COMM_WORLD
-size_t numRanks() {
-    int numRanks;
-    MPI_Comm_size(MPI_COMM_WORLD, &numRanks);
-    return asserting_cast<size_t>(numRanks);
-}
 
 // kMeansData class to abstract away the handling of the multi-dimensional data
 template <class data_t>
@@ -128,15 +111,6 @@ class kMeansData {
     }
 
     // TODO We need a prettier interface for this
-    // Access the underlying vector object, this is ugly and should be changed
-    // const data_t operator[](size_t idx) const {
-    //     return _data[idx];
-    // }
-
-    // // Access the underlying vector object, this is ugly and should be changed
-    // data_t& operator[](size_t idx) {
-    //     return _data[idx];
-    // }
     const data_t getElementDimension(uint64_t dataIdx, uint64_t dimension) const {
         assert(dataIdx < numDataPoints());
         assert(dimension < numDimensions());
@@ -190,7 +164,7 @@ class kMeansData {
 };
 
 // k-means algorithm
-template <class data_t>
+template <class data_t, class MPI_Context>
 class kMeansAlgorithm {
     static_assert(std::is_floating_point_v<data_t>, "Only floating point data types are supported, sorry.");
 
@@ -215,10 +189,11 @@ class kMeansAlgorithm {
     // TODO: Simplify these constructors using templating and forwarding
     // Constructor, takes a rvalue reference to data, which we take ownership of, the number of centers/clusters to
     // compute and the number of iterations to perform.
-    kMeansAlgorithm(kMeansData<data_t>&& data)
+    kMeansAlgorithm(kMeansData<data_t>&& data, MPI_Context& mpiContext)
         : _data(std::move(data)),
           _centers(std::nullopt),
-          _pointToCenterAssignment(std::nullopt) {
+          _pointToCenterAssignment(std::nullopt),
+          _mpiContext(mpiContext) {
         if (_data.numDataPoints() == 0) {
             throw std::invalid_argument("The data vector is empty -> No datapoints given.");
         } else if (!_data.valid()) {
@@ -227,10 +202,12 @@ class kMeansAlgorithm {
     }
 
     // Constructor
-    kMeansAlgorithm(std::initializer_list<data_t> initializerList, uint64_t numDimensions)
+    kMeansAlgorithm(
+        std::initializer_list<data_t> initializerList, uint64_t numDimensions, MPI_Context& mpiContext)
         : _data(initializerList, numDimensions),
           _centers(std::nullopt),
-          _pointToCenterAssignment(std::nullopt) {
+          _pointToCenterAssignment(std::nullopt),
+          _mpiContext(mpiContext) {
         if (_data.numDataPoints() == 0) {
             throw std::invalid_argument("The data vector is empty -> No datapoints given.");
         } else if (!_data.valid()) {
@@ -240,10 +217,11 @@ class kMeansAlgorithm {
 
     // Constructor, takes a rvalue reference to data, which we take ownership of, the number of centers/clusters to
     // compute and the number of iterations to perform.
-    kMeansAlgorithm(std::vector<data_t>&& data, uint64_t numDimensions)
+    kMeansAlgorithm(std::vector<data_t>&& data, uint64_t numDimensions, MPI_Context& mpiContext)
         : _data(std::move(data), numDimensions),
           _centers(std::nullopt),
-          _pointToCenterAssignment(std::nullopt) {
+          _pointToCenterAssignment(std::nullopt),
+          _mpiContext(mpiContext) {
         if (_data.numDataPoints() == 0) {
             throw std::invalid_argument("The data vector is empty -> No datapoints given.");
         } else if (!_data.valid()) {
@@ -281,7 +259,7 @@ class kMeansAlgorithm {
         _centers.emplace(numDimensions());
 
         assert(_centers->numDataPoints() == 0);
-        if (rank() == 0) {
+        if (_mpiContext.getMyCurrentRank() == 0) {
             std::random_device                    randomDevice;
             std::mt19937                          generator(randomDevice());
             std::uniform_int_distribution<size_t> randomDataPointIndex(0, numDataPoints() - 1);
@@ -298,12 +276,8 @@ class kMeansAlgorithm {
             _centers->resize(numCenters);
         }
         assert(_centers->numDataPoints() == numCenters);
-        MPI_Bcast(
-            _centers->data(), asserting_cast<int>(_centers->dataSize()), get_mpi_type<data_t>(), 0, MPI_COMM_WORLD);
+        _mpiContext.broadcast(_centers->data(), _centers->dataSize());
     }
-
-    // TODO Implement and test function to set the initial centers
-    // Currently not needed
 
     // Returns the number of dimensions our data has.
     uint64_t numDimensions() const {
@@ -418,22 +392,8 @@ class kMeansAlgorithm {
         }
 
         // Allreduce the local contributions to the center positions
-        MPI_Allreduce(
-            MPI_IN_PLACE,                                            // source buffer
-            contribToCenterPosition.data(),                          // receive buffer
-            asserting_cast<int>(contribToCenterPosition.dataSize()), // number of elements
-            get_mpi_type<data_t>(),                                  // of data type data_t,
-            MPI_SUM,                                                 // operation
-            MPI_COMM_WORLD                                           // communicator
-        );
-        MPI_Allreduce(
-            MPI_IN_PLACE,                                                                    // source buffer
-            _pointToCenterAssignment->numPointsAssignedToCenter.data(),                      // receive buffer
-            asserting_cast<int>(_pointToCenterAssignment->numPointsAssignedToCenter.size()), // number of elements
-            get_mpi_type<uint64_t>(),                                                        // data type
-            MPI_SUM,                                                                         // operation
-            MPI_COMM_WORLD                                                                   // communicator
-        );
+        _mpiContext.allreduce(contribToCenterPosition.data(), MPI_SUM, contribToCenterPosition.dataSize());
+        _mpiContext.allreduce(_pointToCenterAssignment->numPointsAssignedToCenter, MPI_SUM);
         assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
         assert(contribToCenterPosition.numDataPoints() == numCenters());
 
@@ -472,47 +432,7 @@ class kMeansAlgorithm {
                 "I don't have any point-to-center assignments. Please perform an interation first.");
         }
 
-        // First, collect the number of data points per rank
-        int myNumDataPoints = throwing_cast<int>(numDataPoints());
-        assert(numDataPoints() == _pointToCenterAssignment->assignedCenter.size());
-        assert(numRanks() == 4); // This test was designed with 4 ranks in mind.
-        auto numDataPointsPerRank = std::vector<int>(numRanks(), 0);
-        assert(numDataPointsPerRank.size() == numRanks());
-
-        MPI_Gather(
-            &myNumDataPoints,                          // send buffer
-            1,                                         // send count
-            get_mpi_type<decltype(myNumDataPoints)>(), // send type
-            numDataPointsPerRank.data(),               // receive buffer
-            1,                                         // receive count
-            get_mpi_type<decltype(myNumDataPoints)>(), // receive type
-            0,                                         // root
-            MPI_COMM_WORLD                             // communicator
-        );
-        // There was a buffer overflow here...
-        assert(numDataPointsPerRank.size() == numRanks());
-
-        // Next, collect the cluster assignments
-        std::vector<int>      displacements(numRanks() + 1, 0);
-        assert(numDataPointsPerRank.size() + 1 == displacements.size());
-        std::partial_sum(numDataPointsPerRank.begin(), numDataPointsPerRank.end(), displacements.begin() + 1);
-        assert(displacements[0] == 0);
-        auto numDataPointsGlobal = asserting_cast<size_t>(displacements[displacements.size() - 1]);
-        assert(numDataPointsGlobal > numDataPoints());
-        std::vector<uint64_t> clusterAssignments(numDataPointsGlobal, 0);
-
-        MPI_Gatherv(
-            &_pointToCenterAssignment->assignedCenter, // send buffer
-            asserting_cast<int>(numDataPoints()),      // send count
-            get_mpi_type<size_t>(),                    // send type
-            clusterAssignments.data(),                 // receive buffer
-            numDataPointsPerRank.data(),               // receive count
-            displacements.data(),                      // displacements into the receive buffer
-            get_mpi_type<size_t>(),                    // receive type
-            0, MPI_COMM_WORLD                          // root rank and communicator
-        );
-
-        return clusterAssignments;
+        return _mpiContext.gatherv(_pointToCenterAssignment->assignedCenter);
     }
 
     private:
@@ -520,6 +440,7 @@ class kMeansAlgorithm {
     // Will be empty after construction, before the initial centers are picked.
     std::optional<kMeansData<data_t>>      _centers;
     std::optional<PointToCenterAssignment> _pointToCenterAssignment;
+    MPI_Context&                     _mpiContext;
 };
 
 template <class data_t>

@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "k-means.hpp"
+#include "restore/mpi_context.hpp"
 
 using namespace ::testing;
 using namespace kmeans;
@@ -188,16 +189,20 @@ TEST(kMeansHelper, generateRandomData) {
 }
 
 TEST(kMeansAlgorithm, constructor) {
+    // Initialize the MPI_Context
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
     // Constructing with no data points should fail
-    ASSERT_THROW(kMeansAlgorithm(generateRandomData<double>(0, 1)), std::invalid_argument);
-    ASSERT_THROW(kMeansAlgorithm(generateRandomData<float>(0, 3)), std::invalid_argument);
+    ASSERT_THROW(kMeansAlgorithm(generateRandomData<double>(0, 1), mpiContext), std::invalid_argument);
+    ASSERT_THROW(kMeansAlgorithm(generateRandomData<float>(0, 3), mpiContext), std::invalid_argument);
 
     { // Constructing with an invalid data object should fail
         auto data = kMeansData<float>(2);
         ASSERT_TRUE(data.valid());
         data << 2.5f;
         ASSERT_FALSE(data.valid());
-        ASSERT_THROW(kMeansAlgorithm<float>(std::move(data)), std::invalid_argument);
+        ASSERT_THROW((kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext)), std::invalid_argument);
     }
 
     { // Constructing with a piecewise constructed kMeansData object should work
@@ -208,30 +213,35 @@ TEST(kMeansAlgorithm, constructor) {
         data << 2.5f;
         data << typename kMeansData<float>::FinalizeDataPoint();
         ASSERT_TRUE(data.valid());
-        ASSERT_NO_THROW(kMeansAlgorithm<float>(std::move(data)));
+        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext)));
     }
 
     { // Constructing with a valid, non-empty data object should work
         auto data1 = generateRandomData<double>(100, 30);
-        ASSERT_NO_THROW(kMeansAlgorithm<double>(std::move(data1)));
+        ASSERT_NO_THROW((kMeansAlgorithm<double, MPIContext>(std::move(data1), mpiContext)));
 
         auto data2 = kMeansData<double>(2, 2, 2);
-        ASSERT_NO_THROW(kMeansAlgorithm<double>(std::move(data2)));
+        ASSERT_NO_THROW((kMeansAlgorithm<double, MPIContext>(std::move(data2), mpiContext)));
     }
 
     { // Length of input vector not evenly dividible by the number of dimensions should fail
-        ASSERT_THROW(kMeansAlgorithm<float>(std::vector<float>{1, 2, 3}, 2), std::invalid_argument);
-        ASSERT_THROW(kMeansAlgorithm<float>({1, 2, 3}, 2), std::invalid_argument);
+        ASSERT_THROW(
+            (kMeansAlgorithm<float, MPIContext>(std::vector<float>{1, 2, 3}, 2, mpiContext)), std::invalid_argument);
+        ASSERT_THROW((kMeansAlgorithm<float, MPIContext>({1, 2, 3}, 2, mpiContext)), std::invalid_argument);
     }
 
     { // Is fine
-        ASSERT_NO_THROW(kMeansAlgorithm<float>(std::vector<float>{1, 2, 3, 4}, 2));
-        ASSERT_NO_THROW(kMeansAlgorithm<float>({1, 2, 3, 4}, 2));
+        ASSERT_NO_THROW((kMeansAlgorithm(std::vector<float>{1, 2, 3, 4}, 2, mpiContext)));
+        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>({1, 2, 3, 4}, 2, mpiContext)));
     }
 }
 
 TEST(kMeansAlgorithm, pickCentersRandomly) {
-    auto kmeansInstance = kMeansAlgorithm<float>(generateRandomData<float>(100, 3));
+    // Initialize the MPIContext
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
+    auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(generateRandomData<float>(100, 3), mpiContext);
     ASSERT_EQ(kmeansInstance.numCenters(), 0);
     ASSERT_EQ(kmeansInstance.numDataPoints(), 100);
     ASSERT_EQ(kmeansInstance.numDimensions(), 3);
@@ -269,7 +279,11 @@ TEST(kMeansAlgorithm, pickCentersRandomly) {
 }
 
 TEST(kMeansAlgorithm, setCenters) {
-    auto kmeansInstance = kMeansAlgorithm<float>(generateRandomData<float>(100, 3));
+    // Initialize the MPIContext
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
+    auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(generateRandomData<float>(100, 3), mpiContext);
     ASSERT_EQ(kmeansInstance.numCenters(), 0);
     ASSERT_EQ(kmeansInstance.numDataPoints(), 100);
     ASSERT_EQ(kmeansInstance.numDimensions(), 3);
@@ -292,9 +306,13 @@ TEST(kMeansAlgorithm, setCenters) {
 }
 
 TEST(kMeansAlgorithm, assignPointsToCenters) {
+    // Initialize the MPIContext
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
     {
         auto data           = kMeansData<float>(5, 2, 0);
-        auto kmeansInstance = kMeansAlgorithm<float>(std::move(data));
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext);
 
         kmeansInstance.setCenters(std::vector<float>{0, 0});
         kmeansInstance.assignPointsToCenters();
@@ -305,7 +323,7 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0, 0));
     }
     {
-        auto kmeansInstance = kMeansAlgorithm<float>({1, 2, 3, 7, 8, 9}, 1);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({1, 2, 3, 7, 8, 9}, 1, mpiContext);
         kmeansInstance.setCenters({2, 8});
         kmeansInstance.assignPointsToCenters();
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 1, 1, 1));
@@ -318,8 +336,8 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
     }
 
     {
-        // auto kmeansInstance = kMeansAlgorithm<float>({0, 0.5f, 1, 1.1f, 2, 2, 6, 6, 7, 7, 9, 10}, 2);
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 9, 10}, 2);
+        // auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0.5f, 1, 1.1f, 2, 2, 6, 6, 7, 7, 9, 10}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 9, 10}, 2, mpiContext);
         kmeansInstance.setCenters({1, 1, 8, 8});
         kmeansInstance.assignPointsToCenters();
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 1, 1, 1));
@@ -327,7 +345,7 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
     }
 
     { // A center not getting assigned to any points should not be a problem
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 1);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext);
         kmeansInstance.setCenters({0, 20});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 20));
         ASSERT_NO_THROW(kmeansInstance.assignPointsToCenters());
@@ -337,8 +355,12 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
 }
 
 TEST(kMeansAlgorithm, updateCenters) {
+    // Initialize the MPIContext
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
     { // If the centers already match the data, nothing should change
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 1);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext);
         kmeansInstance.setCenters({0, 1});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 1));
         kmeansInstance.assignPointsToCenters();
@@ -351,7 +373,7 @@ TEST(kMeansAlgorithm, updateCenters) {
     }
 
     { // If the centers already match the data, nothing should change
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 1, 1, 0, 0}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1, 1, 1, 0, 0}, 2, mpiContext);
         kmeansInstance.setCenters({0, 0, 1, 1});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 0, 1, 1));
         kmeansInstance.assignPointsToCenters();
@@ -360,7 +382,7 @@ TEST(kMeansAlgorithm, updateCenters) {
     }
 
     { // If the centers are already at their optimal position, nothing should change
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 1);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext);
         kmeansInstance.setCenters({0.5});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5));
         kmeansInstance.assignPointsToCenters();
@@ -369,7 +391,7 @@ TEST(kMeansAlgorithm, updateCenters) {
     }
 
     { // If the centers are already at their optimal position, nothing should change
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 2, mpiContext);
         kmeansInstance.setCenters({0.5, 0.5});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5, 0.5));
         kmeansInstance.assignPointsToCenters();
@@ -378,7 +400,7 @@ TEST(kMeansAlgorithm, updateCenters) {
     }
 
     { // Else, the centers should be updated
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 2, mpiContext);
         kmeansInstance.setCenters({0, 0});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 0));
         kmeansInstance.assignPointsToCenters();
@@ -387,7 +409,7 @@ TEST(kMeansAlgorithm, updateCenters) {
     }
 
     { // A center not getting assigned to any points should not be a problem
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1}, 1);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext);
         kmeansInstance.setCenters({0, 20});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 20));
         kmeansInstance.assignPointsToCenters();
@@ -401,8 +423,12 @@ TEST(kMeansAlgorithm, updateCenters) {
 }
 
 TEST(kMeansAlgorithm, performIterations) {
+    // Initialize the MPIContext
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
     { // 0 iterations does nothing
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext);
         kmeansInstance.setCenters({5, 5, 8, 8});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
         kmeansInstance.performIterations(0);
@@ -410,7 +436,7 @@ TEST(kMeansAlgorithm, performIterations) {
     }
 
     { // single iteration
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext);
         kmeansInstance.setCenters({5, 5, 8, 8});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
         kmeansInstance.performIterations(1);
@@ -418,7 +444,7 @@ TEST(kMeansAlgorithm, performIterations) {
     }
 
     { // two iterations
-        auto kmeansInstance = kMeansAlgorithm<float>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2);
+        auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext);
         kmeansInstance.setCenters({5, 5, 8, 8});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
         kmeansInstance.performIterations(2);
@@ -427,7 +453,11 @@ TEST(kMeansAlgorithm, performIterations) {
 }
 
 TEST(kMeansAlgorithm, smallExample) {
-    auto kmeansInstance = kMeansAlgorithm<double>({1, 1, 2, 10, 13, 18, 20, 21}, 1);
+    // Initialize the MPIContext
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
+    auto kmeansInstance = kMeansAlgorithm<double, MPIContext>({1, 1, 2, 10, 13, 18, 20, 21}, 1, mpiContext);
     kmeansInstance.setCenters({5, 17});
     ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 17));
 
@@ -443,8 +473,12 @@ TEST(kMeansAlgorithm, smallExample) {
 }
 
 TEST(kMeansAlgorithm, slightlyLargerExample) {
+    // Initialize the MPIContext
+    using MPIContext = ReStoreMPI::MPIContext;
+    MPIContext mpiContext(MPI_COMM_WORLD);
+
     // Data taken from https://scistatcalc.blogspot.com/2014/01/k-means-clustering-calculator.html
-    auto kMeansInstance = kMeansAlgorithm<double>(
+    auto kMeansInstance = kMeansAlgorithm<double, MPIContext>(
         {1.870,  1.991,  2.007,  2.186,  2.137,  1.982,  1.883,  2.103,  1.917,  2.019,  1.935,  2.083,  1.849,  2.087,
          0.122,  -0.223, 2.003,  2.031,  0.055,  0.029,  0.054,  0.107,  0.827,  0.981,  0.980,  0.887,  1.222,  0.883,
          1.056,  0.921,  2.080,  1.996,  1.021,  1.066,  -0.055, 0.016,  0.970,  1.027,  1.125,  0.860,  1.023,  0.978,
@@ -474,7 +508,7 @@ TEST(kMeansAlgorithm, slightlyLargerExample) {
          1.210,  0.872,  -0.003, -0.159, 1.926,  2.076,  2.127,  2.007,  -0.010, 0.234,  2.094,  1.938,  -0.183, -0.136,
          1.989,  2.211,  -0.008, 0.033,  1.946,  1.911,  2.215,  1.822,  1.917,  1.968,  2.077,  2.110,  2.190,  1.934,
          1.009,  0.995,  0.042,  0.028,  1.977,  2.179,  1.018,  1.014},
-        2);
+        2, mpiContext);
 
     kMeansInstance.setCenters({2.045, 1.987, 1.589, 0.764, -0.12, 0.43});
     kMeansInstance.performIterations(10);
