@@ -19,7 +19,7 @@ namespace ReStore {
 //   Let k be the replication level
 //   Let s be the shift width
 //   - Blocks with adjacent global ids are grouped together into one block range.
-//   - The goal is to distrubute the blocks as evenly as possible among the ranks. Let's call the number of blocks
+//   - The goal is to distribute the blocks as evenly as possible among the ranks. Let's call the number of blocks
 //     the _range_ with the fewest blocks has bpr (blocks per range). No range has more than bpr+1 blocks.
 //   - It the first range, there are the blocks [0..bpr-1], in the second ranges there are the blocks [bpr..2bpr-1].
 //     If the number of blocks is not evenly dividable by the number of blocks, the last few ranges will get one
