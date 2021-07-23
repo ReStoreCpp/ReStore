@@ -15,7 +15,7 @@ class ProbabilisticFailureSimulator {
 
     void getFailingRanks(const int numRanks, std::unordered_set<int>& outVec) {
         // Equals comparison with double seems to work here.
-        if (prob == 0)
+        if (prob <= 0)
             return;
         int pos = 0;
         while (pos < numRanks) {
