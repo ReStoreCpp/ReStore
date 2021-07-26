@@ -21,7 +21,7 @@ struct OffsetModeDescriptor {
 // TODO Do we need local ids? If we do, describe the difference between global and local block ids
 using block_id_t = std::size_t;
 
-// returned by the nextBlock() functions to descripe the next block (or nullopt if there is none)
+// returned by the nextBlock() functions to describe the next block (or nullopt if there is none)
 template <class BlockType>
 struct NextBlock {
     block_id_t       blockId;
@@ -29,7 +29,7 @@ struct NextBlock {
 };
 
 class UnrecoverableDataLossException : public std::exception {
-    virtual const char* what() const throw() override {
+    virtual const char* what() const noexcept override {
         return "Unrecoverable data loss occurred.";
     }
 };

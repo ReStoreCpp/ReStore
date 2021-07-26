@@ -10,16 +10,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <cxxopts.hpp>
 #include <fstream>
 #include <iostream>
-#include <math.h>
 #include <mpi.h>
 #include <numeric>
 #include <optional>
-#include <stdint.h>
 #include <streambuf>
-#include <string.h>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -50,9 +48,12 @@ using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t
 
 std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>, block_distribution_t>
 readGraph(std::string graph) {
-    int myRank, numRanks;
+    int myRank   = -1;
+    int numRanks = -1;
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
+    assert(myRank > 0);
+    assert(numRanks > 0);
 
     std::ifstream infile(graph);
 
@@ -76,7 +77,7 @@ readGraph(std::string graph) {
             continue;
         }
         std::istringstream iss(line);
-        char               letter;
+        char               letter = ' ';
         iss >> letter;
         if (letter == 'p') {
             if (numVertices != 0 || numEdges != 0) {
@@ -85,11 +86,12 @@ readGraph(std::string graph) {
                 exit(1);
             }
             assert(numEdgesRead == 0);
-            node_t    firstNum;
-            edge_id_t secondNum;
+            node_t    firstNum  = -1;
+            edge_id_t secondNum = 0;
             iss >> firstNum >> secondNum;
             numVertices = firstNum;
             numEdges    = secondNum;
+            assert(firstNum > 0);
             outDegrees.resize(static_cast<size_t>(numVertices));
             numEdgesPerRank       = numEdges / asserting_cast<edge_id_t>(numRanks);
             numRanksWithMoreEdges = asserting_cast<int>(numEdges % asserting_cast<edge_id_t>(numRanks));
@@ -106,8 +108,11 @@ readGraph(std::string graph) {
                 blockDistribution.emplace_back(std::make_pair(rankLowerBound, rankUpperBound - rankLowerBound), rank);
             }
         } else if (letter == 'e') {
-            node_t firstNum, secondNum;
+            node_t firstNum  = -1;
+            node_t secondNum = -1;
             iss >> firstNum >> secondNum;
+            assert(firstNum > 0);
+            assert(secondNum > 0);
             --firstNum;
             --secondNum;
             if (numVertices == 0 || numEdges == 0) {
@@ -117,13 +122,15 @@ readGraph(std::string graph) {
                 exit(1);
             }
             if (firstNum > numVertices) {
-                if (myRank == 0)
+                if (myRank == 0) {
                     std::cout << "Invalid vertex id " << firstNum << std::endl;
+                }
                 exit(1);
             }
             if (secondNum > numVertices) {
-                if (myRank == 0)
+                if (myRank == 0) {
                     std::cout << "Invalid vertex id " << secondNum << std::endl;
+                }
                 exit(1);
             }
             ++outDegrees[static_cast<size_t>(firstNum)];
@@ -132,14 +139,16 @@ readGraph(std::string graph) {
             }
             ++numEdgesRead;
         } else {
-            if (myRank == 0)
+            if (myRank == 0) {
                 std::cout << "Unsupported type: " << letter << std::endl;
+            }
             exit(1);
         }
     }
     if (numEdges != numEdgesRead) {
-        if (myRank == 0)
+        if (myRank == 0) {
             std::cout << "Expected " << numEdges << " edges but found " << numEdgesRead << std::endl;
+        }
         exit(1);
     }
     assert(static_cast<edge_id_t>(edges.size()) == numEdgesPerRank + (myRank < numRanksWithMoreEdges));
@@ -455,8 +464,9 @@ int main(int argc, char** argv) {
             return std::nullopt;
         } else {
             ++currentEdgeId;
-            return ReStore::NextBlock<edge_t>{asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
-                                              edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
+            return ReStore::NextBlock<edge_t>{
+                asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
+                edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
         }
     };
 
@@ -469,10 +479,8 @@ int main(int argc, char** argv) {
     time = end - start;
     if (myRank == 0) {
         std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
-    }
-
-    if (myRank == 0)
         std::cout << "Starting with " << numRanks << " ranks" << std::endl;
+    }
 
     MPI_Barrier(comm);
     std::vector<double> result;

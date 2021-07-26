@@ -10,6 +10,7 @@
 #include <mpi.h>
 #include <numeric>
 #include <optional>
+#include <restore/helpers.hpp>
 #include <stdint.h>
 #include <vector>
 
@@ -95,13 +96,13 @@ struct RecvMessage {
 // }
 
 class FaultException : public std::exception {
-    virtual const char* what() const throw() override {
+    virtual const char* what() const noexcept override {
         return "A rank in the communicator failed";
     }
 };
 
 class RevokedException : public std::exception {
-    virtual const char* what() const throw() override {
+    virtual const char* what() const noexcept override {
         return "The communicator used has been revoked. Call updateComm with the new communicator before trying to "
                "communicate again.";
     }
@@ -164,7 +165,7 @@ class RankManager {
 
     std::vector<original_rank_t> getOnlyAlive(const std::vector<original_rank_t>& in) const {
         std::vector<original_rank_t> out(in.size());
-        MPI_Group_translate_ranks(_originalGroup, (int)in.size(), in.data(), _currentGroup, out.data());
+        MPI_Group_translate_ranks(_originalGroup, asserting_cast<int>(in.size()), in.data(), _currentGroup, out.data());
         for (size_t i = 0; i < in.size(); ++i) {
             out[i] = out[i] == MPI_UNDEFINED ? MPI_UNDEFINED : in[i];
         }
@@ -177,7 +178,8 @@ class RankManager {
     std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
         std::vector<current_rank_t> currentRanks(originalRanks.size());
         MPI_Group_translate_ranks(
-            _originalGroup, (int)originalRanks.size(), originalRanks.data(), _currentGroup, currentRanks.data());
+            _originalGroup, asserting_cast<int>(originalRanks.size()), originalRanks.data(), _currentGroup,
+            currentRanks.data());
         currentRanks.erase(
             std::remove_if(
                 currentRanks.begin(), currentRanks.end(),
@@ -259,7 +261,8 @@ std::vector<RecvMessage> SparseAllToAll(const std::vector<SendMessage>& messages
         receiveNewMessage(result, comm, tag);
         // This might be improved by using the status and removing all finished requests
         successOrThrowMpiCall([&]() {
-            return MPI_Testall((int)requests.size(), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
+            return MPI_Testall(
+                asserting_cast<int>(requests.size()), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
         });
     }
 

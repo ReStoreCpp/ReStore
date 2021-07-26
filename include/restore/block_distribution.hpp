@@ -410,9 +410,7 @@ class BlockDistribution {
 
     bool validateConstructorArguments(
         uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext) const {
-        if (numRanks <= 0) {
-            throw std::runtime_error("There has to be at least one rank.");
-        } else if (numBlocks == 0) {
+        if (numBlocks == 0) {
             throw std::runtime_error("There has to be at least one block.");
         } else if (replicationLevel == 0) {
             throw std::runtime_error("A replication level of 0 is probably not what you want.");
