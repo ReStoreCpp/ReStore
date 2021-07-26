@@ -36,7 +36,7 @@ endmacro()
 function(add_mpi_test FILE NAME DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     add_executable(${NAME} ${FILE})
     target_include_directories(${NAME} SYSTEM PRIVATE ../extern/)
-    target_include_directories(${NAME} SYSTEM PRIVATE ../include/)
+    target_include_directories(${NAME} PRIVATE ../include/)
     target_include_directories(${NAME} PRIVATE .)
     target_link_libraries(${NAME} gtest gmock Backward::Backward ${MPI_LIBRARIES} ${LIBRARIES})
 
