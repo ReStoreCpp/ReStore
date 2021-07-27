@@ -6,7 +6,7 @@
 
 #include "range.hpp"
 #include <gmock/gmock.h>
-#include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
+#include <gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
 #include <mpi.h>
 #include <utility>

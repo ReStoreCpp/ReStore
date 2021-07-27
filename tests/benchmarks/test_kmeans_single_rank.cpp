@@ -1,6 +1,6 @@
 #include <cstddef>
 #include <gmock/gmock.h>
-#include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
+#include <gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
 
 #include "k-means.hpp"
