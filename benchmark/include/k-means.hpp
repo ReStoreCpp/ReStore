@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "restore/helpers.hpp"
+#include "restore/mpi_context.hpp"
+#include "restore/two_phase_commit.hpp"
 
 // TODO Pick initial centers not only from the data on the first rank
 // TODO Use asynchronous MPI calls
@@ -202,8 +204,7 @@ class kMeansAlgorithm {
     }
 
     // Constructor
-    kMeansAlgorithm(
-        std::initializer_list<data_t> initializerList, uint64_t numDimensions, MPI_Context& mpiContext)
+    kMeansAlgorithm(std::initializer_list<data_t> initializerList, uint64_t numDimensions, MPI_Context& mpiContext)
         : _data(initializerList, numDimensions),
           _centers(std::nullopt),
           _pointToCenterAssignment(std::nullopt),
@@ -230,7 +231,7 @@ class kMeansAlgorithm {
     }
 
     // Sets the centers to the provided data, takes ownership of the data object. Must be called with the same
-    // parameters on all ranks.
+    // parameters on all ranks. Local operation, does therefore not report rank failures.
     template <typename T>
     void setCenters(T&& centers) {
         if constexpr (std::is_same_v<std::remove_reference_t<T>, kMeansData<data_t>>) {
@@ -247,7 +248,8 @@ class kMeansAlgorithm {
         _centers.emplace(initializerList, numDimensions());
     }
 
-    // Picks the initial centers. Will override the current centers
+    // Picks the initial centers. Will override the current centers. This is a global operation, and might therefore
+    // report rank failures by throwing a FaultException.
     void pickCentersRandomly(uint64_t numCenters) {
         if (numCenters == 0) {
             throw std::invalid_argument("I don't know how to handle 0 centers, sorry.");
@@ -276,18 +278,18 @@ class kMeansAlgorithm {
             _centers->resize(numCenters);
         }
         assert(_centers->numDataPoints() == numCenters);
-        _mpiContext.broadcast(_centers->data(), _centers->dataSize());
+        _mpiContext.broadcast(_centers->data(), _centers->dataSize()); // May throw a FaultException
     }
 
-    // Returns the number of dimensions our data has.
+    // Returns the number of dimensions our data has. This is a local operation and will not report rank failures.
     uint64_t numDimensions() const {
-        assert(!_centers || _centers->numDimensions() == _data.numDimensions());
+        assert(!_centers.hasValue() || _centers->numDimensions() == _data.numDimensions());
         return _data.numDimensions();
     }
 
-    // Returns the number of centers/clusters we use.
+    // Returns the number of centers/clusters we use. This is a local operation and will not report rank failures.
     uint64_t numCenters() const {
-        if (!_centers) {
+        if (!_centers.hasValue()) {
             return 0;
         } else {
             assert(_centers->numDimensions() == _data.numDimensions());
@@ -296,28 +298,29 @@ class kMeansAlgorithm {
         }
     }
 
-    // Return the number of data points we have.
+    // Return the number of data points we have. This is a local operations and will therefore not report rank failures.
     uint64_t numDataPoints() const {
         return _data.numDataPoints();
     }
 
-    // Returns our current centers
+    // Returns our current centers. This is a local operation and will not report rank failures.
     const kMeansData<data_t>& centers() const {
         return *_centers;
     }
 
-    // Returns a reference to our data. Only valid for as long as this object lives.
+    // Returns a reference to our data. Only valid for as long as this object lives. This is a local operation and will
+    // therefore not report rank failures.
     const kMeansData<data_t>& data() const {
         return _data;
     }
 
-    // Return the points to center assignment
+    // Return the points to center assignment. This is a local operation and will therefore not report rank failures.
     const PointToCenterAssignment& pointToCenterAssignment() const {
         return *_pointToCenterAssignment;
     }
 
-    // Assign each data point to the closest center
-    // Consider using performIterations(...) if you have no special needs.
+    // Assign each (local) data point to the closest center. This is a local operation and will therefore not report
+    // rank failures. Consider using performIterations(...) if you have no special needs.
     void assignPointsToCenters() {
         assert(_data.valid());
 
@@ -369,8 +372,8 @@ class kMeansAlgorithm {
         assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
     }
 
-    // Do one update round of the center positions with the current data.
-    // Consider using performIterations(...) if you have no special needs.
+    // Do one update round of the center positions with the current data. This is a global operation and might throw
+    // FaultExceptions. Consider using performIterations(...) if you have no special needs.
     void updateCenters() {
         assert(_data.valid());
         if (numDataPoints() == 0) {
@@ -411,18 +414,35 @@ class kMeansAlgorithm {
         }
     }
 
-    // Perform the number of k-means iterations provided.
-    // Passing numIterations = 0 does nothing
+    // Perform the number of k-means iterations provided. Rank failures will be automatically handled.
+    // Passing numIterations = 0 does nothing.
     void performIterations(uint64_t numIterations) {
         assert(_data.valid());
 
         // Perform numIterations k-means iterations
         for (uint64_t iteration = 0; iteration < numIterations; iteration++) {
-            // Assign the points to centers
-            assignPointsToCenters();
+            try {
+                // Assign the points to centers. Calling this twice won't do any harm.
+                assignPointsToCenters();
 
-            // Compute contribution of local data points to the positions of the new centers
-            updateCenters();
+                // Compute contribution of local data points to the positions of the new centers
+                updateCenters();
+                _mpiContext.ft_barrier();
+                _centers.commit();
+            } catch (typename ReStoreMPI::FaultException& e) {
+                // Roll back to the latest checkpoint of the center positions
+                _centers.rollback();
+
+                // Fix the communicator
+                MPI_Comm oldComm = _mpiContext.getComm();
+                MPI_Comm newComm = MPI_COMM_NULL;
+                MPIX_Comm_shrink(oldComm, &newComm);
+                if (newComm == MPI_COMM_NULL) {
+                    throw std::runtime_error("Fixing the communicator failed.");
+                }
+                MPI_Comm_free(&oldComm);
+                _mpiContext.updateComm(newComm);
+            }
         }
     }
 
@@ -438,9 +458,9 @@ class kMeansAlgorithm {
     private:
     kMeansData<data_t> _data;
     // Will be empty after construction, before the initial centers are picked.
-    std::optional<kMeansData<data_t>>      _centers;
+    TwoPhaseCommit<kMeansData<data_t>>     _centers;
     std::optional<PointToCenterAssignment> _pointToCenterAssignment;
-    MPI_Context&                     _mpiContext;
+    MPI_Context&                           _mpiContext;
 };
 
 template <class data_t>

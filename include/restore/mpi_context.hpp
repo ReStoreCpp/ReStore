@@ -290,6 +290,10 @@ class MPIContext {
         _rankManager.updateComm(newComm);
     }
 
+    MPI_Comm getComm() const {
+        return _comm;
+    }
+
     void resetOriginalCommToCurrentComm() {
         _rankManager.resetOriginalCommToCurrentComm();
     }
@@ -429,6 +433,15 @@ class MPIContext {
 
         return receiveBuffer;
     }
+
+#ifdef USE_FTMPI
+    void ft_barrier() {
+        successOrThrowMpiCall([&]() {
+            int flag = 42;
+            return MPIX_Comm_agree(_comm, &flag);
+        });
+    }
+#endif
 
     private:
     MPI_Comm    _comm;
