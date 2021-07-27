@@ -107,15 +107,6 @@ endif()
 # Organize targets into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-#configure_file(
-#    "version.hpp.in"
-#    "version.hpp"
-#)
-#configure_file(
-#    "system_config.hpp.in"
-#    "system_config.hpp"
-#)
-
 # The target to be linked against by other targets. This library is an
 # interface target and as such does not generate any artefacts. It rather sets
 # include directories and required compiler flags.
@@ -125,14 +116,6 @@ target_include_directories(
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-
-# Include sources generated at build time. When installing the headers/library,
-# these sources will be copied to appropriate locations such that no additional
-# directories have to be included.
-#target_include_directories(
-#    "${PROJECT_NAME}" INTERFACE
-#    $<BUILD_INTERFACE:${PROJECT_CURRENT_BINARY_DIR}>
-#)
 
 ### Compiler and linker settings ###
 # This interface reflects the requirements to the compiler for building targets
@@ -150,7 +133,7 @@ target_link_libraries("${PROJECT_NAME}" INTERFACE "${PROJECT_NAME}_compile_requi
 add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 
 # Not added as link target to avoid propagation of warning
-# flags.    Only to be used by internal targets that compile the library.
+# flags. Only to be used by internal targets that compile the library.
 add_library("${PROJECT_NAME}_warnings" INTERFACE)
 
 list(
@@ -271,56 +254,3 @@ if(${PROJECT_NAME}_BUILD_EXAMPLES)
 else()
     message("Building examples: NO")
 endif()
-
-#if(${PROJECT_NAME}_INSTALL)
-#    include(InstallRequiredSystemLibraries)
-#    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/License.txt")
-#    set(CPACK_RESOURCE_FILE_README ${CMAKE_CURRENT_LIST_DIR}/README.md)
-#    include(CPack)
-#    set(INSTALL_MODULEDIR "${CMAKE_INSTALL_LIBDIR}/cmake")
-#    set(INSTALL_CMAKEDIR "${INSTALL_MODULEDIR}/${PROJECT_NAME}")
-#    configure_package_config_file(
-#        "${CMAKE_CURRENT_LIST_DIR}/cmake/${PROJECT_NAME}Config.cmake.in"
-#        "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
-#        INSTALL_DESTINATION "${INSTALL_CMAKEDIR}"
-#        PATH_VARS INSTALL_MODULEDIR
-#    )
-#    write_basic_package_version_file(
-#        "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-#        VERSION ${PROJECT_VERSION}
-#        COMPATIBILITY
-#        SameMajorVersion
-#        ARCH_INDEPENDENT
-#    )
-#    # On install, copy the header files to the appropriate location.
-#    install(
-#        DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/"
-#        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-#        FILES_MATCHING PATTERN "*.hpp"
-#    )
-#    # Also copy the artefacts generated at build time into the include directory.
-#    install(
-#        FILES "${CMAKE_CURRENT_BINARY_DIR}/version.hpp"
-#        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-#    )
-#    install(TARGETS "${PROJECT_NAME}" "${PROJECT_NAME}_compile_requirements" EXPORT "${PROJECT_NAME}Export")
-#    install(
-#        FILES
-#        "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
-#        "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-#        DESTINATION
-#        "${INSTALL_CMAKEDIR}"
-#    )
-#    install(
-#        EXPORT "${PROJECT_NAME}Export"
-#        DESTINATION "${INSTALL_MODULEDIR}"
-#        NAMESPACE "${PROJECT_NAME}::"
-#        FILE "${PROJECT_NAME}Targets.cmake"
-#    )
-#    if(${PROJECT_NAME}_INSTALL_DOCS)
-#        install(
-#            DIRECTORY docs/
-#            DESTINATION "${CMAKE_INSTALL_DOCDIR}"
-#        )
-#    endif()
-#endif()
