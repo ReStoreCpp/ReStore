@@ -97,13 +97,13 @@ struct RecvMessage {
 // }
 
 class FaultException : public std::exception {
-    virtual const char* what() const throw() override {
+    virtual const char* what() const noexcept override {
         return "A rank in the communicator failed";
     }
 };
 
 class RevokedException : public std::exception {
-    virtual const char* what() const throw() override {
+    virtual const char* what() const noexcept override {
         return "The communicator used has been revoked. Call updateComm with the new communicator before trying to "
                "communicate again.";
     }
@@ -409,14 +409,14 @@ class MPIContext {
         std::partial_sum(numDataElementsPerRank.begin(), numDataElementsPerRank.end(), displacements.begin() + 1);
         assert(displacements[0] == 0);
 
-        auto numDataElementsGlobal = asserting_cast<size_t>(displacements[displacements.size() - 1]);
+        auto numDataElementsGlobal = displacements[displacements.size() - 1];
         assert(_rankManager.getMyCurrentRank() != root || numDataElementsGlobal > myNumDataElements);
         assert(_rankManager.getMyCurrentRank() == root || numDataElementsGlobal == 0);
         assert(_rankManager.getMyCurrentRank() != root || numDataElementsGlobal > 0);
 
         // Finally, gatherv the data
-        std::vector<data_t> receiveBuffer(numDataElementsGlobal, 0);
-        assert(receiveBuffer.size() == numDataElementsGlobal);
+        std::vector<data_t> receiveBuffer(asserting_cast<size_t>(numDataElementsGlobal), 0);
+        assert(receiveBuffer.size() == asserting_cast<size_t>(numDataElementsGlobal));
 
         successOrThrowMpiCall([&]() {
             return MPI_Gatherv(
