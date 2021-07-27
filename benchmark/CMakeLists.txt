@@ -58,9 +58,6 @@ target_link_libraries(${KMEANS} "ReStore::ReStore;Backward::Backward;ReStore::km
 target_compile_options(${KMEANS} PRIVATE -O3 "${WARNING_FLAGS}")
 
 # microbenchmarks
-# TODO move this one level up
-add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
-add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
 set(MICROBENCHMARKS_TARGET "microbenchmarks")
 add_executable(${MICROBENCHMARKS_TARGET} microbenchmarks.cpp)
 target_include_directories(${MICROBENCHMARKS_TARGET} SYSTEM PRIVATE ../extern/)

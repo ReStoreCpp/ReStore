@@ -66,6 +66,10 @@ endif()
 message(" ## Using simulated failures: ${SIMULATE_FAILURES}")
 message(" ## Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
 
+# Populate some of the options to the source code
+add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
+add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
+
 # Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
 
