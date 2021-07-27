@@ -111,6 +111,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # interface target and as such does not generate any artefacts. It rather sets
 # include directories and required compiler flags.
 add_library("${PROJECT_NAME}" INTERFACE)
+target_sources("${PROJECT_NAME}" INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(
     "${PROJECT_NAME}" INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

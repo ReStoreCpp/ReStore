@@ -33,17 +33,28 @@ target_compile_options(${PAGERANK} PRIVATE -O3 "${WARNING_FLAGS}")
 set(Backward_DIR "${PROJECT_SOURCE_DIR}/extern/backward-cpp")
 find_package(Backward)
 
-# k-means
+# k-means - library
+add_library("${PROJECT_NAME}_kmeans" INTERFACE)
+target_sources("${PROJECT_NAME}_kmeans" INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(
+    "${PROJECT_NAME}_kmeans" INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+target_link_libraries("${PROJECT_NAME}_kmeans" INTERFACE "${PROJECT_NAME}_compile_requirements")
+add_library("${PROJECT_NAME}::kmeans" ALIAS "${PROJECT_NAME}_kmeans")
+
+# k-means - benchmark
 set(KMEANS "k-means")
 if(${PROJECT_NAME}_BACKWARD_ENABLED)
     add_executable(${KMEANS} k-means.cpp "${${PROJECT_NAME}_BACKWARDCPP_DIR}/backward.cpp")
 else()
     add_executable(${KMEANS} k-means.cpp)
 endif()
-target_include_directories(${KMEANS} SYSTEM PRIVATE ../extern/)
-target_include_directories(${KMEANS} PRIVATE ../include/)
-target_include_directories(${KMEANS} PRIVATE ./include/)
-target_link_libraries(${KMEANS} "ReStore::ReStore" Backward::Backward)
+# target_include_directories(${KMEANS} SYSTEM PRIVATE ../extern/)
+# target_include_directories(${KMEANS} PRIVATE ../include/)
+# target_include_directories(${KMEANS} PRIVATE ./include/)
+target_link_libraries(${KMEANS} "ReStore::ReStore;Backward::Backward;ReStore::kmeans")
 target_compile_options(${KMEANS} PRIVATE -O3 "${WARNING_FLAGS}")
 
 # microbenchmarks
