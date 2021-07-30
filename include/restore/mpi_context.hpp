@@ -366,7 +366,7 @@ class MPIContext {
     void allreduce(data_t* data, MPI_Op operation, size_t numDataElements = 1) {
         static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
         int _numDataElements = asserting_cast<int>(numDataElements);
-        return successOrThrowMpiCall([&]() {
+        successOrThrowMpiCall([&]() {
             return MPI_Allreduce(MPI_IN_PLACE, data, _numDataElements, get_mpi_type<data_t>(), operation, _comm);
         });
     }
@@ -374,7 +374,24 @@ class MPIContext {
     template <class data_t>
     void allreduce(std::vector<data_t>& data, MPI_Op operation) {
         static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
-        return allreduce(data.data(), operation, data.size());
+        allreduce(data.data(), operation, data.size());
+    }
+
+    template <class data_t>
+    data_t allreduce(data_t value, MPI_Op operation) {
+        static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
+        allreduce(&value, operation, 1);
+        return value;
+    }
+
+    template <class data_t>
+    std::vector<data_t> allgather(const data_t& value) {
+        std::vector<data_t> recvbuffer(asserting_cast<size_t>(getCurrentSize()));
+        successOrThrowMpiCall([&]() {
+            return MPI_Allgather(
+                &value, 1, get_mpi_type<data_t>(), recvbuffer.data(), 1, get_mpi_type<data_t>(), _comm);
+        });
+        return recvbuffer;
     }
 
     template <class data_t>
@@ -434,19 +451,73 @@ class MPIContext {
         return receiveBuffer;
     }
 
-#ifdef USE_FTMPI
+    //// ! Untested
+    // template <class data_t>
+    // std::vector<data_t> inclusive_scan(data_t value, MPI_Op operation) {
+    //    static_assert(std::is_pod_v<data_t>, "inclusive_scan only works for POD data");
+    //    std::vector<data_t> result(getCurrentSize(), 0);
+    //    return successOrThrowMpiCall(
+    //        [&]() { return MPI_Scan(&value, result, 1, get_mpi_type<data_t>(), operation, _comm); });
+    //    return result;
+    //}
+
+    template <class data_t>
+    data_t exclusive_scan(data_t value, MPI_Op operation) {
+        static_assert(std::is_pod_v<data_t>, "inclusive_scan only works for POD data");
+
+        successOrThrowMpiCall(
+            [&]() { return MPI_Exscan(MPI_IN_PLACE, &value, 1, get_mpi_type<data_t>(), operation, _comm); });
+
+        // MPI leaves the values on rank 0 undefined. I prefere returing a valid value.
+        if (getMyCurrentRank() == 0) {
+            return mpi_op_identity<data_t>(operation);
+        } else {
+            return value;
+        }
+    }
+
+    // Performs a fault-tolerant global MPI barrier. If SIMULATE_FAILURES is defined, this will degrade into a
+    // MPI_Barrier.
     void ft_barrier() {
         successOrThrowMpiCall([&]() {
+#ifndef SIMULATE_FAILURES
             int flag = 42;
             return MPIX_Comm_agree(_comm, &flag);
+#endif
+            return MPI_Barrier(_comm);
         });
     }
+
+    // Revokes the current the current communictor. If SIMULATE_FAILURES is defined, this will degrade into a NOP.
+    void revokeComm() {
+#ifndef SIMULATE_FAILURES
+        MPIX_Comm_revoke(_comm);
 #endif
+    }
+
+    // This will fix the communicator (i.e. create a new communicator with all the dead ranks from the old communicator
+    // removed). If SIMULATE_FAILURES is defined, this degreades into a NOP.
+    void fixComm() {
+#ifndef SIMULATE_FAILURES
+        // Build a new communicator without the failed ranks
+        MPI_Comm newComm = MPI_COMM_NULL;
+        int      rc      = -1;
+        if ((rc = MPIX_Comm_shrink(_comm, &newComm)) != MPI_SUCCESS) {
+            throw std::runtime_error("A rank failure was detected, but building the new communicator failed.");
+        }
+        assert(_comm != MPI_COMM_NULL);
+
+        // As for the ULFM documentation, freeing the communicator is recommended but will probably
+        // not succeed. This is why we do not check for an error here.
+        MPI_Comm_free(&_comm);
+        updateComm(newComm);
+#endif
+    }
 
     private:
     MPI_Comm    _comm;
     RankManager _rankManager;
-};
+}; // namespace ReStoreMPI
 
 } // namespace ReStoreMPI
 #endif // MPI_CONTEXT_H
