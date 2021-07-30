@@ -226,8 +226,8 @@ class BlockSubmissionCommunication {
             if (!next.has_value()) {
                 doneSerializingBlocks = true;
             } else {
-                block_id_t       blockId = next.value().blockId;
-                const BlockType& block   = next.value().block;
+                block_id_t       blockId = next->blockId;
+                const BlockType& block   = next->block;
                 if (blockId >= _blockDistribution.numBlocks()) {
                     throw std::runtime_error("The block id is bigger than the number of blocks. Have you passed "
                                              "the number of block *in total* (not only on this rank)?");
@@ -323,7 +323,7 @@ class BlockSubmissionCommunication {
     // exchangeData()
     //
     // A wrapper around a SparseAllToAll. Transmits the sendBuffers' content and receives data addressed to us.
-    // Sending no data is fine, you may still retreive data.
+    // Sending no data is fine, you may still retrieve data.
     std::vector<ReStoreMPI::RecvMessage> exchangeData(const SendBuffers& sendBuffers) {
         std::vector<ReStoreMPI::SendMessage> sendMessages;
         for (ReStoreMPI::original_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
