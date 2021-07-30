@@ -42,7 +42,6 @@ class RankFailureManager {
     MPI_Comm failRanks(std::vector<ReStoreMPI::original_rank_t> failedRanks) {
         assert(!iFailed());
         _iFailed = std::find(failedRanks.begin(), failedRanks.end(), myRankId(_comm)) != failedRanks.end();
-        std::cout << myRankId() << ": " << _iFailed << std::endl;
 
 #if SIMULATE_FAILURES
         return simulateFailure(_iFailed);
