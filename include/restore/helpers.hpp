@@ -2,13 +2,13 @@
 #define RESTORE_HELPERS_H
 
 #include <cassert>
+#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <mpi.h>
 #include <stdexcept>
 #include <type_traits>
-#include <complex>
 
 // Suppress compiler warnings about unused variables
 #define UNUSED(expr) (void)(expr)
@@ -94,6 +94,16 @@ constexpr To throwing_cast(From value) {
     }
 }
 
+template <size_t N>
+MPI_Datatype mpi_custom_continuous_type() {
+  static MPI_Datatype type = nullptr;
+  if (type == nullptr) {
+    MPI_Type_contiguous(N, MPI_CHAR, &type);
+    MPI_Type_commit(&type);
+  }
+  return type;
+}
+
 // Translate template parameter T to an MPI_Datatype
 // Based on https://gist.github.com/2b-t/50d85115db8b12ed263f8231abf07fa2
 template <typename T>
@@ -154,11 +164,40 @@ template <typename T>
         mpi_type = MPI_C_DOUBLE_COMPLEX;
     } else if constexpr (std::is_same_v<T, std::complex<long double>>) {
         mpi_type = MPI_C_LONG_DOUBLE_COMPLEX;
+    } else {
+        mpi_type = mpi_custom_continuous_type<sizeof(T)>();
     }
 
     assert(mpi_type != MPI_DATATYPE_NULL);
 
     return mpi_type;
+}
+
+// Returns the identity for the requested MPI operation (MPI_Op). MINLOC und MAXLOC are undefined.
+template <class data_t>
+[[nodiscard]] constexpr data_t mpi_op_identity(MPI_Op op) {
+    // We cannot use a switch, as MPI_OP is not a integer type.
+    if (op == MPI_MAX) {
+        return std::numeric_limits<data_t>::lowest();
+    } else if (op == MPI_MIN) {
+        return std::numeric_limits<data_t>::max();
+    } else if (op == MPI_SUM) {
+        return 0;
+    } else if (op == MPI_PROD) {
+        return 1;
+    } else if (op == MPI_LAND) {
+        return true;
+    } else if (op == MPI_LOR) {
+        return false;
+    } else if (op == MPI_BAND) {
+        return static_cast<data_t>(-1);
+    } else if (op == MPI_BOR) {
+        return 0;
+    } else if (MPI_MAXLOC || op == MPI_MINLOC) {
+        throw std::runtime_error("MPI_MAXLOC and MPI_MINLOC are not implemented");
+    } else {
+        throw std::runtime_error("Unknown MPI_Op");
+    }
 }
 
 #endif // Include guard
