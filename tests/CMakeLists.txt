@@ -137,6 +137,11 @@ restore_add_mpi_test(
 )
 
 restore_add_mpi_test(
+    mpi_tests_failures/test_restore_end_to_end_proxy_blocktype.cpp TestRestore_EndToEnd_ProxyBlockType
+    4 "ReStore::ReStore"
+)
+
+restore_add_mpi_test(
     test_mpi_context.cpp MPIContext
     4 "ReStore::ReStore"
 )
