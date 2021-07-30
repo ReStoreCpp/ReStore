@@ -105,7 +105,7 @@ class RankFailureManager {
     // resetCommunicator()
     //
     // Reset the communicator to the one given as comm. We can use this if there was a failure somewhere else in the
-    // progam.
+    // program.
     void resetCommunicator(MPI_Comm comm) noexcept {
         _comm = comm;
     }
