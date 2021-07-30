@@ -61,7 +61,7 @@ class EqualLoadBalancer {
         block_id_t numBlocksPerRank       = numBlocks / _ranks.size();
         int        numRanksWithMoreBlocks = asserting_cast<int>(numBlocks % _ranks.size());
 
-        std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
+        std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
         ReStoreMPI::original_rank_t                                                                rankCounter = 0;
         size_t blockRangeIndexIndex                                                                            = 0;
         size_t numBlocksUsedFromCurrentRange                                                                   = 0;
@@ -83,7 +83,7 @@ class EqualLoadBalancer {
 
                 requests.emplace_back(std::make_pair(
                     std::make_pair(
-                        asserting_cast<ReStore::block_id_t>(blockRange.first.first + numBlocksUsedFromCurrentRange),
+                        asserting_cast<block_id_t>(blockRange.first.first + numBlocksUsedFromCurrentRange),
                         asserting_cast<size_t>(numBlocksTakenFromRange)),
                     rank));
 
