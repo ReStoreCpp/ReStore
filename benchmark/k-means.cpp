@@ -22,9 +22,10 @@ int main(int argc, char** argv) {
     const size_t numCenters    = 10;
     const size_t numIterations = 10;
     const size_t numDimensions = 2;
+    const uint16_t replicationLevel = 3;
 
     auto kmeansInstance = kmeans::kMeansAlgorithm<float, ReStoreMPI::MPIContext>(
-        kmeans::generateRandomData<float>(numDataPoints, numDimensions), mpiContext);
+        kmeans::generateRandomData<float>(numDataPoints, numDimensions), mpiContext, replicationLevel);
 
     kmeansInstance.pickCentersRandomly(numCenters);
     kmeansInstance.performIterations(numIterations);

@@ -6,8 +6,11 @@
 #include <random>
 #include <vector>
 
+#include "restore/core.hpp"
+#include "restore/equal_load_balancer.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
+#include "restore/restore_vector.hpp"
 #include "restore/two_phase_commit.hpp"
 
 // TODO Pick initial centers not only from the data on the first rank
@@ -138,6 +141,14 @@ class kMeansData {
         return _data.data();
     }
 
+    const std::vector<data_t>& dataVector() const {
+        return _data;
+    }
+
+    std::vector<data_t>& dataVector() {
+        return _data;
+    }
+
     const data_t* data() const {
         return _data.data();
     }
@@ -191,44 +202,32 @@ class kMeansAlgorithm {
     // TODO: Simplify these constructors using templating and forwarding
     // Constructor, takes a rvalue reference to data, which we take ownership of, the number of centers/clusters to
     // compute and the number of iterations to perform.
-    kMeansAlgorithm(kMeansData<data_t>&& data, MPI_Context& mpiContext)
+    kMeansAlgorithm(kMeansData<data_t>&& data, MPI_Context& mpiContext, uint16_t replicationLevel)
         : _data(std::move(data)),
           _centers(std::nullopt),
           _pointToCenterAssignment(std::nullopt),
-          _mpiContext(mpiContext) {
+          _mpiContext(mpiContext),
+          _reStoreWrapper(numDimensions(), _mpiContext.getComm(), replicationLevel),
+          _loadBalancer(_initialBlockRanges(), _mpiContext.getCurrentSize()) {
         if (_data.numDataPoints() == 0) {
             throw std::invalid_argument("The data vector is empty -> No datapoints given.");
         } else if (!_data.valid()) {
             throw std::invalid_argument("The data object has to be in a valid state.");
         }
+
+        // Submit the data points to the ReStore so we are able to recover them after a failure.
+        _reStoreWrapper.submitData(_data.dataVector());
     }
 
-    // Constructor
-    kMeansAlgorithm(std::initializer_list<data_t> initializerList, uint64_t numDimensions, MPI_Context& mpiContext)
-        : _data(initializerList, numDimensions),
-          _centers(std::nullopt),
-          _pointToCenterAssignment(std::nullopt),
-          _mpiContext(mpiContext) {
-        if (_data.numDataPoints() == 0) {
-            throw std::invalid_argument("The data vector is empty -> No datapoints given.");
-        } else if (!_data.valid()) {
-            throw std::invalid_argument("The data object has to be in a valid state.");
-        }
-    }
 
-    // Constructor, takes a rvalue reference to data, which we take ownership of, the number of centers/clusters to
-    // compute and the number of iterations to perform.
-    kMeansAlgorithm(std::vector<data_t>&& data, uint64_t numDimensions, MPI_Context& mpiContext)
-        : _data(std::move(data), numDimensions),
-          _centers(std::nullopt),
-          _pointToCenterAssignment(std::nullopt),
-          _mpiContext(mpiContext) {
-        if (_data.numDataPoints() == 0) {
-            throw std::invalid_argument("The data vector is empty -> No datapoints given.");
-        } else if (!_data.valid()) {
-            throw std::invalid_argument("The data object has to be in a valid state.");
-        }
-    }
+    kMeansAlgorithm(
+        std::initializer_list<data_t> initializerList, uint64_t numDimensions, MPI_Context& mpiContext,
+        uint16_t replicationLevel)
+        : kMeansAlgorithm(kMeansData<data_t>(initializerList, numDimensions), mpiContext, replicationLevel) {}
+
+    kMeansAlgorithm(
+        std::vector<data_t>&& data, uint64_t numDimensions, MPI_Context& mpiContext, uint16_t replicationLevel)
+        : kMeansAlgorithm(kMeansData<data_t>(std::move(data), numDimensions), mpiContext, replicationLevel) {}
 
     // Sets the centers to the provided data, takes ownership of the data object. Must be called with the same
     // parameters on all ranks. Local operation, does therefore not report rank failures.
@@ -416,36 +415,56 @@ class kMeansAlgorithm {
 
     // Perform the number of k-means iterations provided. Rank failures will be automatically handled.
     // Passing numIterations = 0 does nothing.
-    void performIterations(uint64_t numIterations) {
+    void performIterations(const uint64_t numIterations) {
         assert(_data.valid());
 
         // Perform numIterations k-means iterations
-        for (uint64_t iteration = 0; iteration < numIterations; iteration++) {
+        uint64_t iteration = 0;
+        while (iteration < numIterations) {
             try {
-                // Assign the points to centers. Calling this twice won't do any harm.
+                // Assign the points to centers. Calling this again after a failure won't do any harm.
                 assignPointsToCenters();
 
                 // Compute contribution of local data points to the positions of the new centers
                 updateCenters();
+
+                // Has everyone completed this iteration without detecting a rank failure?
                 _mpiContext.ft_barrier();
+
+                // Nobody failed, commit to this iteration's changes.
                 _centers.commit();
+                iteration++;
             } catch (typename ReStoreMPI::FaultException& e) {
-                // Roll back to the latest checkpoint of the center positions
+                // Roll back to the latest checkpoint of the center positions, this is a local operation and therefore
+                // works even with a broken communicator.
+                // Multiple calls to .rollback() will all roll back to the same (most recent) checkpoint.
                 _centers.rollback();
 
                 // Fix the communicator
-                MPI_Comm oldComm = _mpiContext.getComm();
-                MPI_Comm newComm = MPI_COMM_NULL;
-                MPIX_Comm_shrink(oldComm, &newComm);
-                if (newComm == MPI_COMM_NULL) {
-                    throw std::runtime_error("Fixing the communicator failed.");
-                }
-                MPI_Comm_free(&oldComm);
-                _mpiContext.updateComm(newComm);
+                _mpiContext.fixComm();
+                _reStoreWrapper.updateComm(_mpiContext.getComm());
+
+                // Until we commit to this new data distribution, calling the follwing function twice will return the
+                // same data.
+                auto newBlocksPerRank = _loadBalancer.getNewBlocksAfterFailure(_mpiContext.getRanksDiedSinceLastCall());
+
+                // ReStore the input data that resided on the failed ranks.
+                _reStoreWrapper.restoreDataAppend(_data.dataVector(), newBlocksPerRank);
+
+                // Update local data structures to reflect the new data distribution
+                _pointToCenterAssignment.emplace(numDataPoints(), numCenters());
+
+                // Has everyone completed the restoration successfully?
+                _mpiContext.ft_barrier();
+
+                // Everyone completed the restoration successfully, we can commit to the new data distribution.
+                _loadBalancer.commitToPreviousCall();
             }
         }
     }
 
+    // TODO Handle rank failures, in this function and in the assignment points to centers. (Currently, the points have
+    // no ids and are redistributed upon a failure. This means we have no way of identifying them after a failure.)
     std::vector<uint64_t> collectClusterAssignments() {
         if (!_pointToCenterAssignment) {
             throw std::runtime_error(
@@ -456,12 +475,27 @@ class kMeansAlgorithm {
     }
 
     private:
+    using BlockRange     = std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::original_rank_t>;
+    using BlockRangeList = std::vector<BlockRange>;
+
+    BlockRangeList _initialBlockRanges() {
+        auto myNumBlocks = _data.numDataPoints();
+        auto myRank      = _mpiContext.getMyCurrentRank();
+
+        auto myFirstBlockId = _mpiContext.exclusive_scan(myNumBlocks, MPI_SUM);
+
+        BlockRange myBlockRange = std::make_pair(std::make_pair(myFirstBlockId, myNumBlocks), myRank);
+        return _mpiContext.allgather(myBlockRange);
+    }
+
     kMeansData<data_t> _data;
     // Will be empty after construction, before the initial centers are picked.
     TwoPhaseCommit<kMeansData<data_t>>     _centers;
     std::optional<PointToCenterAssignment> _pointToCenterAssignment;
     MPI_Context&                           _mpiContext;
-};
+    ReStore::ReStoreVector<data_t>         _reStoreWrapper;
+    ReStore::EqualLoadBalancer             _loadBalancer;
+}; // namespace kmeans
 
 template <class data_t>
 kMeansData<data_t> generateRandomData(size_t numDataPoints, uint64_t numDimensions) {

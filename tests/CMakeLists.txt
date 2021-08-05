@@ -164,9 +164,23 @@ restore_add_mpi_test(
     4 "ReStore::ReStore;ReStore::kmeans"
 )
 
-#target_include_directories(test_kmeans_single_rank PRIVATE "../benchmark/include/")
 restore_add_mpi_test(
-    mpi_tests_failures/test_kmeans_update_centers_throws_on_failure "TestKMeans_updateCenters_throwsOnDFailure"
+    mpi_tests_failures/test_kmeans_update_centers_throws_on_failure.cpp "TestKMeans_updateCenters_throwsOnDFailure"
+    4 "ReStore::ReStore;ReStore::kmeans"
+)
+
+restore_add_mpi_test(
+    mpi_tests_failures/test_kmeans_end_to_end_single_failure.cpp "TestKMeans_EndToEnd_SingleFailure"
+    4 "ReStore::ReStore;ReStore::kmeans"
+)
+
+restore_add_mpi_test(
+    mpi_tests_failures/test_kmeans_end_to_end_single_failure_2.cpp "TestKMeans_EndToEnd_SingleFailure_2"
+    4 "ReStore::ReStore;ReStore::kmeans"
+)
+
+restore_add_mpi_test(
+    mpi_tests_failures/test_kmeans_end_to_end_multi_failure.cpp "TestKMeans_EndToEnd_MultiFailure"
     4 "ReStore::ReStore;ReStore::kmeans"
 )
 
