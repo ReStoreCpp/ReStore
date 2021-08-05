@@ -10,8 +10,6 @@
 
 #include "test_with_failures_fixture.hpp"
 
-#include <dbg.h>
-
 using namespace ReStore;
 using namespace testing;
 

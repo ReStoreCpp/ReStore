@@ -5,8 +5,6 @@
 #include "restore/core.hpp"
 #include "restore/mpi_context.hpp"
 
-#include <dbg.h>
-
 namespace ReStore {
 
 template <class data_t>
@@ -91,14 +89,10 @@ class ReStoreVector {
                 numBlocksForMe += range.first.second;
             }
         }
-        dbg(numBlocksForMe);
-        dbg(myOriginalRank);
-        dbg(_mpiContext.getMyCurrentRank());
 
         // Reserve the appropriate amount of space for the current plus the new elements in the data vector.
         auto sizeBeforeExpansion = data.size();
         data.resize(data.size() + numBlocksForMe * _nativeBlockSize);
-        dbg(data.size());
 
         // Append the new blocks to the data vector
         auto nextBlockPtr = reinterpret_cast<std::byte*>(data.data() + sizeBeforeExpansion);
@@ -107,7 +101,7 @@ class ReStoreVector {
             [this, &nextBlockPtr](const std::byte* dataPtr, size_t dataSize, block_id_t blockId) {
                 UNUSED(blockId);
                 assert(_bytesPerBlock() == dataSize);
-                std::copy(dbg(dataPtr), dbg(dataPtr + dataSize), dbg(nextBlockPtr));
+                std::copy(dataPtr, dataPtr + dataSize, nextBlockPtr);
                 nextBlockPtr += dataSize;
             });
     }
