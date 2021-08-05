@@ -148,6 +148,11 @@ restore_add_mpi_test(
     4 "ReStore::ReStore"
 )
 
+restore_add_mpi_test(
+    mpi_tests_failures/test_restore_vector.cpp TestRestore_ReStoreVector
+    4 "ReStore::ReStore"
+)
+
 ## Test suite of the benchmarks
 restore_add_mpi_test(
     benchmarks/test_kmeans_single_rank.cpp "kmeansSingleRank"
