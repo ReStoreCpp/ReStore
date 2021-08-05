@@ -155,12 +155,12 @@ restore_add_mpi_test(
 
 ## Test suite of the benchmarks
 restore_add_mpi_test(
-    benchmarks/test_kmeans_single_rank.cpp "kmeansSingleRank"
+    test_kmeans_single_rank.cpp "kmeansSingleRank"
     1 "ReStore::ReStore;ReStore::kmeans"
 )
 
 restore_add_mpi_test(
-    benchmarks/test_kmeans_multi_rank.cpp "kmeansMultiRank"
+    test_kmeans_multi_rank.cpp "kmeansMultiRank"
     4 "ReStore::ReStore;ReStore::kmeans"
 )
 
