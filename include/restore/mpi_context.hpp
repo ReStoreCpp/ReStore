@@ -2,6 +2,7 @@
 #define MPI_CONTEXT_H
 
 #include <algorithm>
+#include <stdint.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -166,7 +167,7 @@ class RankManager {
 
     std::vector<original_rank_t> getOnlyAlive(const std::vector<original_rank_t>& in) const {
         std::vector<original_rank_t> out(in.size());
-        MPI_Group_translate_ranks(_originalGroup, (int)in.size(), in.data(), _currentGroup, out.data());
+        MPI_Group_translate_ranks(_originalGroup, asserting_cast<int>(in.size()), in.data(), _currentGroup, out.data());
         for (size_t i = 0; i < in.size(); ++i) {
             out[i] = out[i] == MPI_UNDEFINED ? MPI_UNDEFINED : in[i];
         }
@@ -179,7 +180,8 @@ class RankManager {
     std::vector<current_rank_t> getAliveCurrentRanks(const std::vector<original_rank_t>& originalRanks) const {
         std::vector<current_rank_t> currentRanks(originalRanks.size());
         MPI_Group_translate_ranks(
-            _originalGroup, (int)originalRanks.size(), originalRanks.data(), _currentGroup, currentRanks.data());
+            _originalGroup, asserting_cast<int>(originalRanks.size()), originalRanks.data(), _currentGroup,
+            currentRanks.data());
         currentRanks.erase(
             std::remove_if(
                 currentRanks.begin(), currentRanks.end(),
@@ -199,7 +201,7 @@ class RankManager {
         MPI_Group_translate_ranks(
             difference, numRanksDied, groupRankIds.data(), _originalGroup, originalRankIds.data());
         MPI_Group_free(&_lastDiedRanksRequestedGroup);
-        _lastDiedRanksRequestedGroup = _currentGroup;
+        MPI_Group_union(_currentGroup, MPI_GROUP_EMPTY, &_lastDiedRanksRequestedGroup);
         return originalRankIds;
     }
 
@@ -209,7 +211,6 @@ class RankManager {
     MPI_Group _lastDiedRanksRequestedGroup;
 };
 
-// ? Why are these functions not part of the MPIContext class?
 template <class F>
 void successOrThrowMpiCall(const F& mpiCall) {
 #if USE_FTMPI
@@ -262,7 +263,8 @@ std::vector<RecvMessage> SparseAllToAll(const std::vector<SendMessage>& messages
         receiveNewMessage(result, comm, tag);
         // This might be improved by using the status and removing all finished requests
         successOrThrowMpiCall([&]() {
-            return MPI_Testall((int)requests.size(), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
+            return MPI_Testall(
+                asserting_cast<int>(requests.size()), requests.data(), &allSendsFinished, MPI_STATUSES_IGNORE);
         });
     }
 
@@ -280,7 +282,6 @@ std::vector<RecvMessage> SparseAllToAll(const std::vector<SendMessage>& messages
     }
     return result;
 }
-
 
 class MPIContext {
     public:
@@ -545,4 +546,5 @@ class MPIContext {
 }; // namespace ReStoreMPI
 
 } // namespace ReStoreMPI
+
 #endif // MPI_CONTEXT_H

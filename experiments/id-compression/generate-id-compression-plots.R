@@ -12,7 +12,7 @@ setwd("~/projects/ReStore/experiments/id-compression")
 data <- read_csv("results.csv",
     col_types = cols(
       code = col_character(),
-      numberOfRanks = col_integer(),
+      numberOfNodes = col_integer(),
       benchmark = col_character(),
       bytesPerBlock = col_double(),
       replicationLevel = col_integer(),
@@ -23,6 +23,7 @@ data <- read_csv("results.csv",
       time_unit = col_character()
   )) %>%
   mutate(
+    numberOfRanks = numberOfNodes * 40,
     real_time = real_time * 10^6,
     cpu_time = cpu_time * 10^6,
     time_unit = "ns",
@@ -141,16 +142,17 @@ scaling_evaluation_data <- filter(data,
 
 # Runtime depending on the number of bytes per rank
 plot_grid(
-  data = tuning_evaluation_data,
+  data = tuning_evaluation_data %>% filter(replicationLevel == 3),
   benchmarkName = "submitBlocks",
   x = bytesPerRankHR,
   xlab = "bytes per rank",
-  facet_x = replicationLevel,
-  facet_x_description = "replication level",
-  facet_y = bytesPerBlock,
-  facet_y_description = "bytes per block",
+  facet_x = bytesPerBlock,
+  facet_x_description = "bytes per block",
+  facet_y = NA,
+  facet_y_description = NA,
   color = code,
-  color_label = "code"
+  color_label = "code",
+  facet_wrap = "single"
 )
 
 # Runtime depending on the number of bytes per block
@@ -183,7 +185,11 @@ plot_grid(
 
 # More data for the tuned algorithm
 plot_grid(
-  data = eval_tuned_data,
+  data = scaling_evaluation_data %>%
+    filter(
+      bytesPerRankHR == "64 MiB",
+      replicationLevel == 3
+    ),
   benchmarkName = "submitBlocks",
   x = bytesPerBlock,
   xlab = "bytes per block",
@@ -191,24 +197,25 @@ plot_grid(
   facet_x_description = "bytes per rank",
   facet_y = NA,
   facet_y_description = NA,
-  color = as.factor(replicationLevel),
-  color_label = "replication level",
-  facet_wrap = "single"
+  color = sprintf("%4d ranks", numberOfRanks),
+  color_label = "",
+  facet_wrap = "none"
 )
 
 # Scaling with the number of PEs
 plot_grid(
-  data = scaling_evaluation_data,
+  data = scaling_evaluation_data %>%
+    filter(bytesPerBlock == " 64 B  "),
   benchmarkName = "submitBlocks",
-  x = as.factor(numberOfRanks * 40),
+  x = as.factor(numberOfRanks),
   xlab = "number of ranks",
-  facet_x = bytesPerBlock,
-  facet_x_description = "bytes per block",
+  facet_x = NA,
+  facet_x_description = NA,
   facet_y = NA,
   facet_y_description = NA,
   color = bytesPerRankHR,
   color_label = "bytes per rank",
-  facet_wrap = "single"
+  facet_wrap = "none"
 )
 
 

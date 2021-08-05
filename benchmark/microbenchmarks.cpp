@@ -26,9 +26,9 @@ using iter::range;
 
 static void BM_submitBlocks(benchmark::State& state) {
     // Parse arguments
-    size_t   blockSize        = throwing_cast<size_t>(state.range(0));
-    uint16_t replicationLevel = throwing_cast<uint16_t>(state.range(1));
-    size_t   bytesPerRank     = throwing_cast<size_t>(state.range(2));
+    auto blockSize        = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank     = throwing_cast<size_t>(state.range(2));
 
     assert(bytesPerRank % blockSize == 0);
     size_t blocksPerRank = bytesPerRank / blockSize;
@@ -38,9 +38,11 @@ static void BM_submitBlocks(benchmark::State& state) {
 
     // Measurement
     for (auto _: state) {
+        UNUSED(_);
+
         // Setup
-        uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
-        size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / blockSize;
+        auto rankId    = asserting_cast<uint64_t>(myRankId());
+        auto numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / blockSize;
 
         std::vector<BlockType> data;
         for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
@@ -108,12 +110,12 @@ static void BM_pushBlocks(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
 
     // Parse arguments
-    size_t   blockSize        = throwing_cast<size_t>(state.range(0));
-    uint16_t replicationLevel = throwing_cast<uint16_t>(state.range(1));
-    size_t   bytesPerRank     = throwing_cast<size_t>(state.range(2));
+    auto blockSize        = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank     = throwing_cast<size_t>(state.range(2));
 
     assert(bytesPerRank % blockSize == 0);
-    size_t blocksPerRank = bytesPerRank / blockSize;
+    auto blocksPerRank = bytesPerRank / blockSize;
 
     using ElementType = uint8_t;
     using BlockType   = std::vector<ElementType>;
@@ -165,6 +167,8 @@ static void BM_pushBlocks(benchmark::State& state) {
 
     // Measurement
     for (auto _: state) {
+        UNUSED(_);
+
         std::vector<BlockType> recvData(blocksPerRank);
         auto                   start = std::chrono::high_resolution_clock::now();
         store.pushBlocksCurrentRankIds(
@@ -203,20 +207,21 @@ const auto MAX_REPLICATION_LEVEL = 4;
 // We can use it to disable output from all but the root process
 class NullReporter : public ::benchmark::BenchmarkReporter {
     public:
-    NullReporter() {}
-    virtual bool ReportContext(const Context&) override {
+    NullReporter() = default;
+    bool ReportContext(const Context&) override {
         return true;
     }
-    virtual void ReportRuns(const std::vector<Run>&) override {}
-    virtual void Finalize() override {}
+    void ReportRuns(const std::vector<Run>&) override {}
+    void Finalize() override {}
 };
 
 // The main is rewritten to allow for MPI initializing and for selecting a reporter according to the process rank.
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
 
-    int rank;
+    int rank = -1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    assert(rank > 0);
 
     // Do we have enough MPI ranks?
     if (numRanks() < MAX_REPLICATION_LEVEL) {
@@ -245,11 +250,12 @@ int main(int argc, char** argv) {
         std::string tmpFile = std::filesystem::temp_directory_path();
         tmpFile.append("/restore-microbenchmark-sdfuihK789ahajgdfCVgjhkjFDTSATF.tmp");
 
-        std::string benchmark_out_string = std::string{"--benchmark_out="} + tmpFile.c_str();
-        char*       benchmark_out = reinterpret_cast<char*>(malloc(sizeof(char) * benchmark_out_string.length()));
-        strcpy(benchmark_out, benchmark_out_string.c_str());
+        std::string benchmark_out_string = std::string{"--benchmark_out="} + tmpFile;
+        auto        benchmark_out =
+            std::unique_ptr<char>(reinterpret_cast<char*>(malloc(sizeof(char) * benchmark_out_string.length())));
+        strcpy(benchmark_out.get(), benchmark_out_string.c_str());
 
-        expanded_argv.push_back(benchmark_out);
+        expanded_argv.push_back(benchmark_out.get());
         argc++;
 
         // Parse command line parameters

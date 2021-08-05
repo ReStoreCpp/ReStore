@@ -59,7 +59,7 @@ TEST_F(kMeansTestWithFailures, SingleFailure) {
 
     // Perform one iteration after the failure
     kmeansInstance.performIterations(1);
-    //ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 4));
+    // ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 4));
     ASSERT_THAT(kmeansInstance.centers(), ElementsAre(3.5, 18));
 
     // Check the result

@@ -29,7 +29,7 @@ struct NextBlock {
 };
 
 class UnrecoverableDataLossException : public std::exception {
-    virtual const char* what() const throw() override {
+    virtual const char* what() const noexcept override {
         return "Unrecoverable data loss occurred.";
     }
 };

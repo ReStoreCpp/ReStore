@@ -1,6 +1,7 @@
 #ifndef RESTORE_BLOCK_SUBMISSION_H
 #define RESTORE_BLOCK_SUBMISSION_H
 
+#include <limits>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -37,8 +38,10 @@ class BlockSubmissionCommunication {
         struct BlockIDRange {
             explicit BlockIDRange(IDType id) : first(id), last(id) {}
             BlockIDRange(IDType _first, IDType _last) : first(_first), last(_last) {}
+            BlockIDRange() = delete;
+
             IDType first;
-            IDType last;
+            IDType last; // This is always initalized, but gcc doesn't get it.
         };
 
         BlockIDSerialization(BlockIDMode mode, SerializedBlockStoreStream& stream, ReStoreMPI::original_rank_t numRanks)
@@ -135,29 +138,33 @@ class BlockSubmissionCommunication {
         BlockIDDeserialization(BlockIDMode mode, const DataStream& dataStream)
             : _mode(mode),
               _dataStream(dataStream),
-              _currentRange(std::nullopt) {}
+              _currentRange(std::nullopt),
+              _lastId(std::numeric_limits<IDType>::max()) {}
 
-        // Returns the next block if. If the current range still hast ids left, returns the next one from that range. If
-        // there are no more ids in the current range, reads the descriptor of the next range form the given position in
-        // the stream.
-        // Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes read from the data stream and
-        // blockID is the id of the next block.
+        BlockIDDeserialization()                              = delete;
+        BlockIDDeserialization(BlockIDDeserialization&&)      = delete;
+        BlockIDDeserialization(const BlockIDDeserialization&) = delete;
+        BlockIDDeserialization& operator=(BlockIDDeserialization&&) = delete;
+        BlockIDDeserialization& operator=(const BlockIDDeserialization&) = delete;
+
+        // Returns the next block if. If the current range still hast ids left, returns the next one from that
+        // range. If there are no more ids in the current range, reads the descriptor of the next range form the
+        // given position in the stream. Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes
+        // read from the data stream and blockID is the id of the next block.
         std::pair<size_t, IDType> readId(size_t position) {
             if (_currentRange.has_value() && _lastId < _currentRange->last) {
                 return std::make_pair(0, ++_lastId);
             } else {
-                return std::make_pair(DESCRIPTOR_SIZE, deserializeId(position));
+                return std::make_pair(DESCRIPTOR_SIZE, _deserializeId(position));
             }
         }
 
         private:
-        IDType deserializeId(size_t position) {
+        IDType _deserializeId(size_t position) {
             const auto startOfDescriptor = position;
             if (startOfDescriptor + DESCRIPTOR_SIZE >= _dataStream.size()) {
                 throw std::runtime_error("Trying to read the id descriptor past the end of the data stream.");
             }
-
-            UNUSED(position);
 
             auto first = *reinterpret_cast<const IDType*>(&(_dataStream[position]));
             position += sizeof(BlockIDRange::first);
@@ -176,12 +183,12 @@ class BlockSubmissionCommunication {
             return _lastId;
         }
 
-        static constexpr size_t     DESCRIPTOR_SIZE = sizeof(BlockIDRange::first) + sizeof(BlockIDRange::last);
-        BlockIDMode                 _mode;
-        const DataStream&           _dataStream;
+        static constexpr size_t DESCRIPTOR_SIZE = sizeof(BlockIDRange::first) + sizeof(BlockIDRange::last);
+        BlockIDMode             _mode;
+        const DataStream&       _dataStream;
         std::optional<BlockIDRange> _currentRange;
-        IDType                      _lastId;
-    };
+        IDType _lastId;
+    }; // namespace ReStore
 
     BlockSubmissionCommunication(
         const MPIContext& mpiContext, const BlockDistr& blockDistribution, OffsetModeDescriptor offsetModeDescriptor)
@@ -275,8 +282,8 @@ class BlockSubmissionCommunication {
     // messages payload. This functions responsabilities are figuring out where a block starts and ends as well as
     // which id it has.
     //      message: The message to be parsed.
-    //      handleBlockData(block_id_t blockId, const std::byte* data, size_t lengthInBytes): the callback function to
-    //      call for each detected block.
+    //      handleBlockData(block_id_t blockId, const std::byte* data, size_t lengthInBytes): the callback function
+    //      to call for each detected block.
     // If an empty message is passed, nothing will be done.
     // TODO implement LUT mode
     template <class HandleBlockDataFunc>

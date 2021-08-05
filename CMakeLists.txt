@@ -9,7 +9,7 @@ endif()
 # Use ccache if available
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
-    message("Found ccache; using it to speed up compilation.")
+    message(STATUS "Found ccache; using it to speed up compilation.")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif()
 
@@ -24,7 +24,7 @@ if(MPI_CXX_FOUND)
   link_libraries(${MPI_LIBRARIES})
 endif()
 
-# Make additinal cmake modules finadble
+# Make additinal cmake modules findable
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/extern/sanitizers-cmake/cmake")
 
@@ -67,8 +67,8 @@ if(NOT SIMULATE_FAILURES AND NOT USE_FTMPI)
     message(FATAL_ERROR "You have to either use a fault-tolerant MPI implementation or simulated failures (or both).")
 endif()
 
-message(" ## Using simulated failures: ${SIMULATE_FAILURES}")
-message(" ## Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
+message(STATUS "Using simulated failures: ${SIMULATE_FAILURES}")
+message(STATUS "Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
 
 # Populate some of the options to the source code
 add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
@@ -82,30 +82,30 @@ set("NEEDS_GOOGLETEST" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENC
 set("NEEDS_CPPITERTOOLS" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_CXXOPTS" ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_GOOGLEBENCHMARK" ${PROJECT_NAME}_BUILD_BENCHMARKS)
-set("NEEDS_BACKWARDCPP" ${PROJECT_NAME}_BUILD_TESTS)
+set("NEEDS_BACKWARDCPP" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
 
 if(NEEDS_GOOGLETEST)
-    message("Using googletest")
+    message(STATUS "Using googletest library.")
     set("${PROJECT_NAME}_GTEST_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/googletest" CACHE PATH "Path to the googletest source directory")
 endif()
 
 if(NEEDS_GOOGLEBENCHMARK)
-    message("Using googlebenchmark")
+    message(STATUS "Using googlebenchmark library.")
     set("${PROJECT_NAME}_GBENCHMARK_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/googlebenchmark" CACHE PATH "Path to the googlebenchmark source directory")
 endif()
 
 if(NEEDS_CPPITERTOOLS)
-    message("Using cppitertools")
+    message(STATUS "Using cppitertools library.")
     set("${PROJECT_NAME}_CPPITERTOOLS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cppitertools" CACHE PATH "Path to the cppitertools source directory")
 endif()
 
 if(NEEDS_CXXOPTS)
-    message("Using cxxopts")
+    message(STATUS "Using cxxopts library.")
     set("${PROJECT_NAME}_CXXOPTS_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/cxxopts" CACHE PATH "Path to the cxxopts source directory")
 endif()
 
 if(NEEDS_BACKWARDCPP)
-    message("Using backwardcpp")
+    message(STATUS "Using backwardcpp library.")
     set("${PROJECT_NAME}_BACKWARDCPP_DIR" "${CMAKE_CURRENT_LIST_DIR}/extern/backward-cpp" CACHE PATH "Path to the backward-cpp source directory")
     option(${PROJECT_NAME}_BACKWARD_ENABLED "Enable pretty printing of stack traces when a test case fails." ON)
 else()
@@ -200,8 +200,10 @@ if(NEEDS_CPPITERTOOLS)
     if(NOT EXISTS "${${PROJECT_NAME}_CPPITERTOOLS_DIR}/CMakeLists.txt")
         message(FATAL_ERROR "Could not find cppitertools in ${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
     endif()
+    message(STATUS "Configuring cppitertools...")
     set("ENV{cppitertools_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
     add_subdirectory("${${PROJECT_NAME}_CPPITERTOOLS_DIR}")
+    message(STATUS "cppitertools configured.")
 endif()
 
 # Load and include cxxopts       
@@ -209,8 +211,10 @@ if(NEEDS_CXXOPTS)
     if(NOT EXISTS "${${PROJECT_NAME}_CXXOPTS_DIR}/CMakeLists.txt")
         message(FATAL_ERROR "Could not find cxxopts in ${${PROJECT_NAME}_CXXOPTS_DIR}")
     endif()
+    message(STATUS "Configuring cxxopts...")
     set("ENV{cxxopts_INSTALL_CMAKE_DIR}" "share") # default value; supress the warning message
     add_subdirectory("${${PROJECT_NAME}_CXXOPTS_DIR}")
+    message(STATUS "cxxopts configured.")
 endif()
 
 # Load and include googletest
@@ -222,8 +226,10 @@ if(NEEDS_GOOGLETEST)
             message(FATAL_ERROR "Could not find googletest in ${${PROJECT_NAME}_GTEST_DIR}")
         endif()
         
+        message(STATUS "Configuring googletest...")
         add_subdirectory("${${PROJECT_NAME}_GTEST_DIR}" EXCLUDE_FROM_ALL)
         list(APPEND CMAKE_MODULE_PATH "${${PROJECT_NAME}_GTEST_DIR}/contrib")
+        message(STATUS "googletest configured.")
     endif()
 
     include(GoogleTest)
@@ -232,35 +238,44 @@ endif()
 
 # Load and include googlebenchmark
 if(NEEDS_GOOGLEBENCHMARK)
+    message(STATUS "Configuring googlebenchmark...")
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Suppressing benchmark's tests" FORCE)
     add_subdirectory("${${PROJECT_NAME}_GBENCHMARK_DIR}" EXCLUDE_FROM_ALL)
     set_target_properties(benchmark PROPERTIES FOLDER googlebenchmark)
+    message(STATUS "googlebenchmark configured.")
 endif()
 
+# Load and include backward-cpp
+if (NEEDS_BACKWARDCPP)
+    message(STATUS "Configuring backward-cpp...")
+    set(Backward_DIR "${PROJECT_SOURCE_DIR}/extern/backward-cpp")
+    find_package(Backward)
+    message(STATUS "backward-cpp configured.")
+endif()
 
 ### Subdirectories ###
 # Build the unit tests
 if(${PROJECT_NAME}_BUILD_TESTS)
-    message("Building unit tests: YES")
+    message(STATUS "Building unit tests: YES")
     set(TEST_RUNNER_PARAMS "" CACHE STRING "Options added to the test runner")
     enable_testing()
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/tests")
 else()
-    message("Building unit tests: NO")
+    message(STATUS "Building unit tests: NO")
 endif()
 
 # Build the benchmarks
 if(${PROJECT_NAME}_BUILD_BENCHMARKS)
-    message("Building benchmarks: YES")
+    message(STATUS "Building benchmarks: YES")
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/benchmark")
 else()
-    message("Building benchmarks: NO")
+    message(STATUS "Building benchmarks: NO")
 endif()
 
 # Build the examples
 if(${PROJECT_NAME}_BUILD_EXAMPLES)
-    message("Building examples: YES")
+    message(STATUS "Building examples: YES")
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/examples")
 else()
-    message("Building examples: NO")
+    message(STATUS "Building examples: NO")
 endif()
