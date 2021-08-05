@@ -444,7 +444,7 @@ class MPIContext {
                 numDataElementsPerRank.data(),          // receive count
                 displacements.data(),                   // displacements into the receive buffer
                 get_mpi_type<data_t>(),                 // receive type
-                0, MPI_COMM_WORLD                       // root rank and communicator
+                0, _comm                                // root rank and communicator
             );
         });
 
