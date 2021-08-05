@@ -52,11 +52,11 @@ class ReStore {
           _blockDistribution(nullptr), // Depends on the number of blocks which are submitted in submitBlocks.
           _serializedBlocks(nullptr) { // Depends on _blockDistribution
         if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
-            throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
+            throw std::invalid_argument("Explicit offset mode set but the constant offset is not zero.");
         } else if (offsetMode == OffsetMode::constant && constOffset == 0) {
-            throw std::runtime_error("Constant offset mode required a constOffset > 0.");
+            throw std::invalid_argument("Constant offset mode requires a constOffset > 0.");
         } else if (replicationLevel == 0) {
-            throw std::runtime_error("What is a replication level of 0 supposed to mean?");
+            throw std::invalid_argument("What is a replication level of 0 supposed to mean?");
         } else {
             _assertInvariants();
         }
