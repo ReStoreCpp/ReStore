@@ -209,6 +209,7 @@ class RankManager {
     MPI_Group _lastDiedRanksRequestedGroup;
 };
 
+// ? Why are these functions not part of the MPIContext class?
 template <class F>
 void successOrThrowMpiCall(const F& mpiCall) {
 #if USE_FTMPI
@@ -351,6 +352,7 @@ class MPIContext {
     template <class data_t>
     void broadcast(data_t* data, size_t numDataElements = 1, int root = 0) {
         static_assert(std::is_pod_v<data_t>, "broadcast only works for POD data");
+        _possiblySimulateFailure();
         int _numDataElements = asserting_cast<int>(numDataElements);
         return successOrThrowMpiCall(
             [&]() { return MPI_Bcast(data, _numDataElements, get_mpi_type<data_t>(), root, _comm); });
@@ -366,6 +368,7 @@ class MPIContext {
     void allreduce(data_t* data, MPI_Op operation, size_t numDataElements = 1) {
         static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
         int _numDataElements = asserting_cast<int>(numDataElements);
+        _possiblySimulateFailure();
         successOrThrowMpiCall([&]() {
             return MPI_Allreduce(MPI_IN_PLACE, data, _numDataElements, get_mpi_type<data_t>(), operation, _comm);
         });
@@ -387,6 +390,7 @@ class MPIContext {
     template <class data_t>
     std::vector<data_t> allgather(const data_t& value) {
         std::vector<data_t> recvbuffer(asserting_cast<size_t>(getCurrentSize()));
+        _possiblySimulateFailure();
         successOrThrowMpiCall([&]() {
             return MPI_Allgather(
                 &value, 1, get_mpi_type<data_t>(), recvbuffer.data(), 1, get_mpi_type<data_t>(), _comm);
@@ -397,6 +401,7 @@ class MPIContext {
     template <class data_t>
     std::vector<data_t> gatherv(std::vector<data_t>& data, int root = 0) {
         static_assert(std::is_pod_v<data_t>, "gatherv only works for POD data");
+        _possiblySimulateFailure();
 
         // First, gather the number of data elements per rank
         int myNumDataElements = throwing_cast<int>(data.size());
@@ -464,6 +469,7 @@ class MPIContext {
     template <class data_t>
     data_t exclusive_scan(data_t value, MPI_Op operation) {
         static_assert(std::is_pod_v<data_t>, "inclusive_scan only works for POD data");
+        _possiblySimulateFailure();
 
         successOrThrowMpiCall(
             [&]() { return MPI_Exscan(MPI_IN_PLACE, &value, 1, get_mpi_type<data_t>(), operation, _comm); });
@@ -514,9 +520,28 @@ class MPIContext {
 #endif
     }
 
+#ifdef SIMULATE_FAILURES
+    void simulateFailure(MPI_Comm newComm) {
+        updateComm(newComm);
+        _failOnNextCall = true;
+    }
+#endif
+
     private:
+    void _possiblySimulateFailure() {
+#ifdef SIMULATE_FAILURES
+        if (_failOnNextCall) {
+            _failOnNextCall = false;
+            throw FaultException();
+        }
+#endif
+    }
+
     MPI_Comm    _comm;
     RankManager _rankManager;
+#ifdef SIMULATE_FAILURES
+    bool _failOnNextCall = false;
+#endif
 }; // namespace ReStoreMPI
 
 } // namespace ReStoreMPI
