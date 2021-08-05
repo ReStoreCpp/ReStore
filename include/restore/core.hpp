@@ -252,6 +252,16 @@ class ReStore {
         pushBlocksCurrentRankIds(blockRanges, handleSerializedBlock, canBeParallelized);
     }
 
+    template <class HandleSerializedBlockFunction>
+    void pushBlocksOriginalRankIds(
+        const std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>& blockRanges,
+        HandleSerializedBlockFunction                                                       handleSerializedBlock,
+        bool canBeParallelized = false // not supported yet
+    ) {
+        auto blockRangesCopy(blockRanges);
+        pushBlocksOriginalRankIds(blockRangesCopy, handleSerializedBlock, canBeParallelized);
+    }
+
     private:
     const uint16_t                            _replicationLevel;
     const OffsetMode                          _offsetMode;
