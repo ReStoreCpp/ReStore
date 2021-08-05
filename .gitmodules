@@ -18,4 +18,4 @@
 	url = https://github.com/bombela/backward-cpp.git
 [submodule "extern/sanitizers-cmake"]
 	path = extern/sanitizers-cmake
-	url = git@github.com:arsenm/sanitizers-cmake.git
+	url = https://github.com/arsenm/sanitizers-cmake.git
