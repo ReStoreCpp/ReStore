@@ -51,6 +51,7 @@ endmacro()
 
 function(restore_add_test CPPFILE LIBRARIES)
     restore_add_test_executable(${CPPFILE} TESTNAME)
+    add_sanitizers(${TESTNAME})
 
     restore_enable_gtest(${TESTNAME} ON)
     target_link_libraries(${TESTNAME} ${LIBRARIES})
@@ -61,6 +62,7 @@ endfunction()
 
 function(restore_add_mpi_test CPPFILE DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     restore_add_test_executable(${CPPFILE} TESTNAME)
+    add_sanitizers(${TESTNAME})
 
     restore_enable_gtest(${TESTNAME} OFF)
     target_link_libraries(${TESTNAME} ${MPI_LIBRARIES} ${LIBRARIES})

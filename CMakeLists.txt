@@ -24,8 +24,9 @@ if(MPI_CXX_FOUND)
   link_libraries(${MPI_LIBRARIES})
 endif()
 
-# Look in the /cmake dir for CMake modules
+# Make additinal cmake modules finadble
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/extern/sanitizers-cmake/cmake")
 
 # Require out-of-source builds
 include(require_out_of_source_builds)
@@ -35,6 +36,9 @@ include(CMakeDependentOption)
 #include(CMakePackageConfigHelpers)
 include(CTest)
 include(GNUInstallDirs)
+
+# Load (memory, adress, ...) sanitizer support
+find_package(Sanitizers)
 
 # Enable sorting targets (of external libraries) into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -141,6 +145,7 @@ add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 # flags. Only to be used by internal targets that compile the library.
 add_library("${PROJECT_NAME}_warnings" INTERFACE)
 
+# TODO: Use CheckCXXCompilerFlag for this?
 list(
     APPEND WARNING_FLAGS
     "-Wall"
