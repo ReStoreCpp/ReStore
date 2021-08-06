@@ -101,6 +101,7 @@ class ReStoreVector {
             [this, &nextBlockPtr](const std::byte* dataPtr, size_t dataSize, block_id_t blockId) {
                 UNUSED(blockId);
                 assert(_bytesPerBlock() == dataSize);
+                UNUSED(this);
                 std::copy(dataPtr, dataPtr + dataSize, nextBlockPtr);
                 nextBlockPtr += dataSize;
             });
