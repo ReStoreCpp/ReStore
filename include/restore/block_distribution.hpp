@@ -54,28 +54,28 @@ class BlockDistribution {
         // Copying and copy assignment is fine ...
         BlockRange(const BlockRange& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {
             assert(_blockDistribution != nullptr);
-            assert(range_id() <= _blockDistribution->numRanges());
+            assert(_id <= _blockDistribution->numRanges());
         }
 
         BlockRange& operator=(const BlockRange& that) {
             this->_id                = that._id;
             this->_blockDistribution = that._blockDistribution;
             assert(_blockDistribution != nullptr);
-            assert(range_id() <= _blockDistribution->numRanges());
+            assert(_id <= _blockDistribution->numRanges());
             return *this;
         }
 
         // ... as is moving and move assignment
         BlockRange(BlockRange&& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {
             assert(_blockDistribution != nullptr);
-            assert(range_id() <= _blockDistribution->numRanges());
+            assert(_id <= _blockDistribution->numRanges());
         }
 
         BlockRange& operator=(BlockRange&& that) noexcept {
             this->_id                = that._id;
             this->_blockDistribution = that._blockDistribution;
             assert(_blockDistribution != nullptr);
-            assert(range_id() <= _blockDistribution->numRanges());
+            assert(_id <= _blockDistribution->numRanges());
             return *this;
         }
 
