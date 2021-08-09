@@ -448,7 +448,7 @@ class kMeansAlgorithm {
                 // same data.
                 auto newBlocksPerRank = _loadBalancer.getNewBlocksAfterFailure(_mpiContext.getRanksDiedSinceLastCall());
 
-                // ReStore the input data that resided on the failed ranks.
+                // ReStore the inpsdata that resided on the failed ranks.
                 _reStoreWrapper.restoreDataAppend(_data.dataVector(), newBlocksPerRank);
 
                 // Update local data structures to reflect the new data distribution

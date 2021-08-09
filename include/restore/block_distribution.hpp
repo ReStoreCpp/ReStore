@@ -47,7 +47,7 @@ class BlockDistribution {
             if (blockDistribution == nullptr) {
                 throw std::invalid_argument("blockDistribution may not be a nullptr");
             } else if (range_id > _blockDistribution->numRanges()) {
-                throw std::invalid_argument("This range does not exists (id too large).");
+                throw std::invalid_argument("This range does not exist (id too large).");
             }
         }
 
