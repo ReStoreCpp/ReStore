@@ -200,4 +200,25 @@ template <class data_t>
     }
 }
 
+// Simple and fast string hash function taken from http://www.cse.yorku.ca/~oz/hash.html
+uint32_t hash_djb2(const unsigned char* str) {
+    uint32_t hash = 5381;
+    uint32_t c;
+
+    while ((c = *str++) != 0) {
+        //  hash * 33 + c
+        hash = ((hash << 5) + hash) + c;
+    }
+
+    return hash;
+}
+
+uint32_t hash_djb2(const char* str) {
+    return hash_djb2(reinterpret_cast<const unsigned char*>(str));
+}
+
+uint32_t hash_djb2(const std::string& str) {
+    return hash_djb2(str.c_str());
+}
+
 #endif // Include guard
