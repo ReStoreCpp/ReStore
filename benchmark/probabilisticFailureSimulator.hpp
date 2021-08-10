@@ -1,6 +1,8 @@
 #include <random>
 #include <unordered_set>
 
+#include "restore/helpers.hpp"
+
 class ProbabilisticFailureSimulator {
     public:
     ProbabilisticFailureSimulator(const unsigned long seed, const double failureProbability)
@@ -13,14 +15,22 @@ class ProbabilisticFailureSimulator {
         prob = probability;
     }
 
-    void getFailingRanks(const int numRanks, std::unordered_set<int>& outVec) {
-        if (prob <= 0)
-            return;
+    void
+    getFailingRanks(int numRanks, std::unordered_set<int>& outVec, bool skipFirstRank = false, int maxFailures = -1) {
+        if (maxFailures == -1) {
+            maxFailures = numRanks;
+        }
+
         int pos = 0;
-        while (pos < numRanks) {
+        if (skipFirstRank) {
+            pos = 1;
+        }
+
+        while (pos < numRanks && outVec.size() < asserting_cast<size_t>(maxFailures)) {
             pos += dist(gen);
-            if (pos < numRanks)
+            if (pos < numRanks) {
                 outVec.insert(pos);
+            }
             pos++;
         }
     }

@@ -8,6 +8,7 @@
 #include <cxxopts.hpp>
 
 #include "k-means.hpp"
+#include "probabilisticFailureSimulator.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
 #include "restore/timer.hpp"
@@ -27,6 +28,8 @@ class CommandLineOptions {
              cxxopts::value<uint16_t>()) ///
             ("fault-tolerance", "Enable or disable fault-tolerance?",
              cxxopts::value<bool>()->default_value("false")) ///
+            ("failure-probability", "Set the probability 0 < p < 1 of each rank failing during one iteration.",
+             cxxopts::value<double>()) ///
             ("simulation-id",
              "Simulation id. Will be echoed as is; can be used to identify the results of this experiment.",
              cxxopts::value<std::string>())                                                                 ///
@@ -104,6 +107,15 @@ class CommandLineOptions {
         if (options.count("repetitions")) {
             _numRepetitions = options["no-header"].as<bool>();
         }
+
+        if (options.count("failure-probability")) {
+            _failureProbability = options["failure-probability"].as<double>();
+            if (_failureProbability < 0.0 || _failureProbability > 1.0) {
+                _fail("Failure probability must be between 0 and 1.");
+            } else if (!_useFaultTolerance) {
+                _fail("Failure probability can only be specified when fault-tolerance is enabled.");
+            }
+        }
     }
 
     size_t numDataPointsPerRank() const {
@@ -156,16 +168,27 @@ class CommandLineOptions {
         return _numDimensions;
     }
 
+    double failureProbability() const {
+        assert(_failureProbability >= 0 && _failureProbability <= 1);
+        return _failureProbability;
+    }
+
+    bool simulateFailures() const {
+        assert(_failureProbability >= 0 && _failureProbability <= 1);
+        return _failureProbability > 0;
+    }
+
     private:
     size_t        _numDataPointsPerRank;
     size_t        _numCenters;
     size_t        _numIterations;
     size_t        _numDimensions;
     uint16_t      _replicationLevel;
-    unsigned long _seed              = 0;
-    bool          _useFaultTolerance = false;
-    bool          _printCSVHeader    = true;
-    size_t        _numRepetitions    = 1;
+    double        _failureProbability = 0;
+    unsigned long _seed               = 0;
+    bool          _useFaultTolerance  = false;
+    bool          _printCSVHeader     = true;
+    size_t        _numRepetitions     = 1;
     std::string   _simulationId;
     bool          _validConfiguration = true;
 
@@ -174,6 +197,25 @@ class CommandLineOptions {
         _validConfiguration = false;
     }
 };
+
+MPI_Comm
+simulateFailure(int myRankId, MPI_Comm currentComm, const std::unordered_set<ReStoreMPI::current_rank_t>& failedRanks) {
+    bool iFailed = failedRanks.count(myRankId) > 0;
+
+    MPI_Comm newComm;
+    MPI_Comm_split(
+        currentComm,
+        iFailed,  // color 1
+        myRankId, // key
+        &newComm);
+    // MPI_Comm_free(&currentComm);
+
+    if (iFailed) {
+        MPI_Finalize();
+        exit(0);
+    }
+    return newComm;
+}
 
 int main(int argc, char** argv) {
     using namespace kmeans;
@@ -195,8 +237,30 @@ int main(int argc, char** argv) {
     TIME_NEXT_SECTION("pick-centers");
     kmeansInstance.pickCentersRandomly(options.numCenters(), options.seed());
 
+    // Initialize Failure Simulator
+    std::optional<ProbabilisticFailureSimulator> failureSimulator = std::nullopt;
+    if (options.simulateFailures()) {
+        failureSimulator.emplace(options.seed(), options.failureProbability());
+    }
+
     TIME_NEXT_SECTION("perform-iterations");
-    kmeansInstance.performIterations(options.numIterations());
+    long unsigned int numSimulatedRankFailures = 0;
+    for (uint64_t iteration = 0; iteration < options.numIterations(); ++iteration) {
+        kmeansInstance.performIterations(1);
+        if (options.simulateFailures()) {
+            TIME_PAUSE_BLOCK();
+            assert(failureSimulator.has_value());
+            auto                    numAliveRanks = mpiContext.getCurrentSize();
+            std::unordered_set<int> ranksToFail;
+            int maxFailuresToSimulate = asserting_cast<int>(options.replicationLevel() - 1u - numSimulatedRankFailures);
+            failureSimulator->getFailingRanks(numAliveRanks, ranksToFail, true, maxFailuresToSimulate);
+            numSimulatedRankFailures += ranksToFail.size();
+            if (ranksToFail.size() > 0) {
+                MPI_Comm newComm = simulateFailure(mpiContext.getMyCurrentRank(), mpiContext.getComm(), ranksToFail);
+                mpiContext.simulateFailure(newComm);
+            }
+        }
+    }
     TIME_STOP();
 
     // Print the results
@@ -211,6 +275,7 @@ int main(int argc, char** argv) {
         resultPrinter.allResults("replicationLevel", options.replicationLevel());
         resultPrinter.allResults("seed", options.seed());
         resultPrinter.thisResult(TimerRegister::instance().getAllTimers());
+        resultPrinter.thisResult("num-simulated-rank-failures", numSimulatedRankFailures);
         resultPrinter.finalizeAndPrintResult();
     }
 
