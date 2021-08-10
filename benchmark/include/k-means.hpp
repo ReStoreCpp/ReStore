@@ -259,7 +259,7 @@ class kMeansAlgorithm {
 
     // Picks the initial centers. Will override the current centers. This is a global operation, and might therefore
     // report rank failures by throwing a FaultException.
-    void pickCentersRandomly(uint64_t numCenters) {
+    void pickCentersRandomly(uint64_t numCenters, unsigned long seed = 0) {
         if (numCenters == 0) {
             throw std::invalid_argument("I don't know how to handle 0 centers, sorry.");
         } else if (numCenters > numDataPoints()) {
@@ -271,8 +271,7 @@ class kMeansAlgorithm {
 
         assert(_centers->numDataPoints() == 0);
         if (_mpiContext.getMyCurrentRank() == 0) {
-            std::random_device                    randomDevice;
-            std::mt19937                          generator(randomDevice());
+            std::mt19937                          generator(seed);
             std::uniform_int_distribution<size_t> randomDataPointIndex(0, numDataPoints() - 1);
 
             // Push back randomly picked data point into the centers data structure
@@ -525,15 +524,15 @@ class kMeansAlgorithm {
 }; // namespace kmeans
 
 template <class data_t>
-kMeansData<data_t> generateRandomData(size_t numDataPoints, uint64_t numDimensions) {
+kMeansData<data_t> generateRandomData(size_t numDataPoints, uint64_t numDimensions, unsigned long seed = 0) {
     static_assert(std::is_floating_point_v<data_t>, "Only floating point data types are supported.");
 
     kMeansData<data_t> data(numDimensions);
 
-    std::random_device                     randomDevice;
-    std::mt19937                           generator(randomDevice());
-    std::uniform_real_distribution<data_t> dataDistribution(
-        std::numeric_limits<data_t>::min(), std::numeric_limits<data_t>::max());
+    std::mt19937 generator(seed);
+    // std::uniform_real_distribution<data_t> dataDistribution(
+    //    std::numeric_limits<data_t>::min(), std::numeric_limits<data_t>::max());
+    std::uniform_real_distribution<data_t> dataDistribution(-10000, 10000);
 
     for (size_t dataPoint = 0; dataPoint < numDataPoints; dataPoint++) {
         for (size_t dimension = 0; dimension < numDimensions; dimension++) {
