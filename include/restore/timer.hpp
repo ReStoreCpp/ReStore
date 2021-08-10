@@ -224,8 +224,11 @@ class ScopedMultiTimerSwitch {
     public:
     // construct and timer to switch to
     ScopedMultiTimerSwitch(const char* new_timer) : timer_(TimerRegister::instance()), previous_(timer_.running()) {
-        assert(new_timer != nullptr);
-        timer_.start(new_timer);
+        if (new_timer != nullptr) {
+            timer_.start(new_timer);
+        } else {
+            timer_.stop();
+        }
     }
 
     // change back timer to previous timer.
@@ -245,12 +248,14 @@ class ScopedMultiTimerSwitch {
 
 #ifdef ENABLE_TIMERS
     #define TIME_BLOCK(NAME)          ScopedMultiTimerSwitch(NAME)
+    #define TIME_PAUSE_BLOCK()        ScopedMultiTimerSwitch(nullptr)
     #define TIME_NEXT_SECTION(NAME)   TimerRegister::instance().start(NAME)
     #define TIME_PUSH_AND_START(NAME) TimerRegister::instance().push(NAME)
     #define TIME_POP(NAME)            TimerRegister::instance().pop()
     #define TIME_STOP()               TimerRegister::instance().stop()
 #else
     #define TIME_BLOCK(NAME)          ;
+    #define TIME_PAUSE_BLOCK()        ;
     #define TIME_NEXT_SECTION(NAME)   ;
     #define TIME_PUSH_AND_START(NAME) ;
     #define TIME_POP(NAME)            ;
