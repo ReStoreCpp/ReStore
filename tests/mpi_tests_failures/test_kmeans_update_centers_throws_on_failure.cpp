@@ -18,7 +18,7 @@ TEST_F(kMeansTestWithFailures, updateCentersThrowsOnFailure) {
     MPIContext mpiContext(MPI_COMM_WORLD);
 
     // All ranks supply the same data.
-    auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, REPLICATION_LEVEL);
+    auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, true, REPLICATION_LEVEL);
     // One failure
     EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
     auto newComm = _rankFailureManager.failRanks({1});

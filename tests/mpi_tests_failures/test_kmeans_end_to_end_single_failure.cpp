@@ -38,7 +38,7 @@ TEST_F(kMeansTestWithFailures, SingleFailure) {
     }
 
     // Initialize the K-Means algorithm
-    auto kmeansInstance = kMeansAlgorithm(std::move(data), 1, mpiContext, REPLICATION_LEVEL);
+    auto kmeansInstance = kMeansAlgorithm(std::move(data), 1, mpiContext, true, REPLICATION_LEVEL);
     kmeansInstance.setCenters({5, 17});
     ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 17));
 

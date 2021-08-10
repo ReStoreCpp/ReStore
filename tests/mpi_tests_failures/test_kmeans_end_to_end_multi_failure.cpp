@@ -73,7 +73,7 @@ TEST_F(kMeansTestWithFailures, MultiFailure) {
     }
 
     // Initialize k-means algorithm
-    auto kMeansInstance = kMeansAlgorithm(std::move(data), 2, mpiContext, REPLICATION_LEVEL);
+    auto kMeansInstance = kMeansAlgorithm(std::move(data), 2, mpiContext, true, REPLICATION_LEVEL);
     kMeansInstance.setCenters({2.045, 1.987, 1.589, 0.764, -0.12, 0.43});
 
     // Perform 2 iterations before the failure ...
