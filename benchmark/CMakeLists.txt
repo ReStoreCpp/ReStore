@@ -56,6 +56,7 @@ endif()
 # target_include_directories(${KMEANS} PRIVATE ./include/)
 target_link_libraries(${KMEANS} "ReStore::ReStore;Backward::Backward;ReStore::kmeans")
 target_compile_options(${KMEANS} PRIVATE -O3 "${WARNING_FLAGS}")
+target_compile_definitions(${PROJECT_NAME}_kmeans INTERFACE "ENABLE_TIMERS")
 
 # microbenchmarks
 set(MICROBENCHMARKS_TARGET "microbenchmarks")

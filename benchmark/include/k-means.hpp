@@ -11,6 +11,7 @@
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
 #include "restore/restore_vector.hpp"
+#include "restore/timer.hpp"
 #include "restore/two_phase_commit.hpp"
 
 // TODO Pick initial centers not only from the data on the first rank
@@ -221,6 +222,7 @@ class kMeansAlgorithm {
 
         // Submit the data points to the ReStore so we are able to recover them after a failure.
         if (faultTolerant) {
+            TIME_BLOCK("submit-data");
             _reStoreWrapper->submitData(_data.dataVector());
         }
     }
@@ -438,6 +440,7 @@ class kMeansAlgorithm {
                 updateCenters();
 
                 if (_faultTolerant) {
+                    TIME_BLOCK("checkpoint-creation");
                     // Has everyone completed this iteration without detecting a rank failure?
                     _mpiContext.ft_barrier();
 
@@ -453,27 +456,35 @@ class kMeansAlgorithm {
                 // Roll back to the latest checkpoint of the center positions, this is a local operation and therefore
                 // works even with a broken communicator.
                 // Multiple calls to .rollback() will all roll back to the same (most recent) checkpoint.
+                TIME_PUSH_AND_START("center-rollback");
                 _centers.rollback();
 
                 // Fix the communicator
+                TIME_NEXT_SECTION("fix-communicator");
                 _mpiContext.fixComm();
                 _reStoreWrapper->updateComm(_mpiContext.getComm());
 
                 // Until we commit to this new data distribution, calling the follwing function twice will return the
                 // same data.
+                TIME_NEXT_SECTION("rebalance-after-failure");
                 auto newBlocksPerRank = _loadBalancer.getNewBlocksAfterFailure(_mpiContext.getRanksDiedSinceLastCall());
 
                 // ReStore the input data that resided on the failed ranks.
+                TIME_NEXT_SECTION("restore-data");
                 _reStoreWrapper->restoreDataAppend(_data.dataVector(), newBlocksPerRank);
 
                 // Update local data structures to reflect the new data distribution
+                TIME_NEXT_SECTION("update-local-data-structures");
                 _pointToCenterAssignment.emplace(numDataPoints(), numCenters());
 
                 // Has everyone completed the restoration successfully?
+                TIME_NEXT_SECTION("commit-to-restoration");
                 _mpiContext.ft_barrier();
 
                 // Everyone completed the restoration successfully, we can commit to the new data distribution.
                 _loadBalancer.commitToPreviousCall();
+
+                TIME_POP();
             }
         }
     }
