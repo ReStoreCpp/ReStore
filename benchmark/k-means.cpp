@@ -263,9 +263,9 @@ int main(int argc, char** argv) {
     }
     TIME_STOP();
 
-    // Print the results
+    // Print the results of the runtime measurements.
     if (mpiContext.getMyCurrentRank() == 0) {
-        ResultsCSVPrinter resultPrinter(std::cout, options.printCSVHeader());
+        ResultsCSVPrinter resultPrinter(std::cerr, options.printCSVHeader());
         resultPrinter.allResults("simulationId", options.simulationId());
         resultPrinter.allResults("numDataPointsPerRank", options.numDataPointsPerRank());
         resultPrinter.allResults("numCenters", options.numCenters());
@@ -279,6 +279,13 @@ int main(int argc, char** argv) {
         resultPrinter.finalizeAndPrintResult();
     }
 
+    // Print the results of the k-means for comparison with the reference implementation.
+    auto clusterAssignments = kmeansInstance.collectClusterAssignments();
+    for (auto assignment: clusterAssignments) {
+        std::cout << assignment << std::endl;
+    }
+
+    // Finalize MPI and exit
     MPI_Finalize();
     return 0;
 }
