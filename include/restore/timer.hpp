@@ -225,7 +225,7 @@ class ScopedMultiTimerSwitch {
     public:
     // construct and timer to switch to
     ScopedMultiTimerSwitch(const char* new_timer) : timer_(TimerRegister::instance()), previous_(timer_.running()) {
-        if (new_timer != nullptr) {
+        if (new_timer != nullptr) { // This enables us to pause the currently running timer without starting an new one.
             timer_.start(new_timer);
         } else {
             timer_.stop();
@@ -234,8 +234,10 @@ class ScopedMultiTimerSwitch {
 
     // change back timer to previous timer.
     ~ScopedMultiTimerSwitch() {
-        if (previous_ != nullptr) {
+        if (previous_ != nullptr) { // If no timer was previously running we don't need to switch back.
             timer_.start(previous_);
+        } else {
+            timer_.stop();
         }
     }
 
