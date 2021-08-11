@@ -222,8 +222,10 @@ class kMeansAlgorithm {
 
         // Submit the data points to the ReStore so we are able to recover them after a failure.
         if (faultTolerant) {
-            TIME_BLOCK("submit-data");
+            TIME_PUSH_AND_START("submit-data"); // I tried to use TIME_BLOCK() here, but the compiler reordered the
+                                                // instructions and I timed nothing.
             _reStoreWrapper->submitData(_data.dataVector());
+            TIME_POP();
         }
     }
 
