@@ -35,6 +35,7 @@ static std::mutex MultiTimer_add_mutex;
 // added together into a global MultiTimer object. The add() method of the
 // global object is internally thread-safe using a global mutex.
 
+// TODO Write UnitTests
 class TimerRegister {
     public:
     // timer entry
