@@ -441,12 +441,13 @@ class kMeansAlgorithm {
                 updateCenters();
 
                 if (_faultTolerant) {
-                    TIME_BLOCK("checkpoint-creation");
+                    TIME_PUSH_AND_START("checkpoint-creation");
                     // Has everyone completed this iteration without detecting a rank failure?
                     _mpiContext.ft_barrier();
 
                     // Nobody failed, commit to this iteration's changes.
                     _centers.commit();
+                    TIME_POP();
                 }
                 iteration++;
             } catch (typename ReStoreMPI::FaultException& e) {
