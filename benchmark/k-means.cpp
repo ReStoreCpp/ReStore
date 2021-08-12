@@ -105,10 +105,6 @@ class CommandLineOptions {
             _printCSVHeader = true;
         }
 
-        if (options.count("repetitions")) {
-            _numRepetitions = options["no-header"].as<bool>();
-        }
-
         // if (options.count("failure-probability")) {
         //     _failureProbability = options["failure-probability"].as<double>();
         //     if (_failureProbability < 0.0 || _failureProbability > 1.0) {
@@ -122,6 +118,9 @@ class CommandLineOptions {
 
         if (options.count("num-failures")) {
             _numFailures = options["num-failures"].as<uint64_t>();
+            if (!_useFaultTolerance && _numFailures > 0) {
+                _fail("Simulating failures while fault-tolerance is disabled is probably not a good idea.");
+            }
         }
     }
 
@@ -191,17 +190,17 @@ class CommandLineOptions {
     }
 
     private:
-    size_t        _numDataPointsPerRank;
-    size_t        _numCenters;
-    size_t        _numIterations;
-    size_t        _numDimensions;
-    uint16_t      _replicationLevel;
+    size_t   _numDataPointsPerRank;
+    size_t   _numCenters;
+    size_t   _numIterations;
+    size_t   _numDimensions;
+    uint16_t _replicationLevel;
     // double        _failureProbability = 0;
-    uint64_t      _numFailures        = 0;
-    unsigned long _seed               = 0;
-    bool          _useFaultTolerance  = false;
-    bool          _printCSVHeader     = true;
-    size_t        _numRepetitions     = 1;
+    uint64_t      _numFailures       = 0;
+    unsigned long _seed              = 0;
+    bool          _useFaultTolerance = false;
+    bool          _printCSVHeader    = true;
+    size_t        _numRepetitions    = 1;
     std::string   _simulationId;
     bool          _validConfiguration = true;
 
@@ -259,7 +258,7 @@ int main(int argc, char** argv) {
 
     long unsigned int numSimulatedRankFailures = 0;
     unsigned long     failuresToSimulate       = options.numFailures();
-    unsigned long     failEvery                = options.numIterations() / failuresToSimulate;
+    unsigned long     failEvery = failuresToSimulate == 0 ? 0 : options.numIterations() / failuresToSimulate;
 
     // Perform the iterations
     for (uint64_t iteration = 0; iteration < options.numIterations(); ++iteration) {
@@ -267,7 +266,7 @@ int main(int argc, char** argv) {
         TIME_NEXT_SECTION("perform-iterations");
         kmeansInstance.performIterations(1);
         TIME_STOP();
-        
+
         // Shall we simulate a failure?
         if (options.simulateFailures() && (iteration % failEvery == 0)) {
             assert(failureSimulator.has_value());
