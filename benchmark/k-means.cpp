@@ -8,7 +8,7 @@
 #include <cxxopts.hpp>
 
 #include "k-means.hpp"
-#include "probabilisticFailureSimulator.hpp"
+#include "probabilistic_failure_simulator.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
 #include "restore/timer.hpp"
@@ -28,8 +28,9 @@ class CommandLineOptions {
              cxxopts::value<uint16_t>()) ///
             ("fault-tolerance", "Enable or disable fault-tolerance?",
              cxxopts::value<bool>()->default_value("false")) ///
-            ("failure-probability", "Set the probability 0 < p < 1 of each rank failing during one iteration.",
-             cxxopts::value<double>()) ///
+            //("failure-probability", "Set the probability 0 < p < 1 of each rank failing during one iteration.",
+            // cxxopts::value<double>())                                                               ///
+            ("num-failures", "Sets the number of failures to simulate.", cxxopts::value<uint64_t>()) ///)
             ("simulation-id",
              "Simulation id. Will be echoed as is; can be used to identify the results of this experiment.",
              cxxopts::value<std::string>())                                                                 ///
@@ -108,13 +109,19 @@ class CommandLineOptions {
             _numRepetitions = options["no-header"].as<bool>();
         }
 
-        if (options.count("failure-probability")) {
-            _failureProbability = options["failure-probability"].as<double>();
-            if (_failureProbability < 0.0 || _failureProbability > 1.0) {
-                _fail("Failure probability must be between 0 and 1.");
-            } else if (!_useFaultTolerance) {
-                _fail("Failure probability can only be specified when fault-tolerance is enabled.");
-            }
+        // if (options.count("failure-probability")) {
+        //     _failureProbability = options["failure-probability"].as<double>();
+        //     if (_failureProbability < 0.0 || _failureProbability > 1.0) {
+        //         _fail("Failure probability must be between 0 and 1.");
+        //     } else if (!_useFaultTolerance) {
+        //         _fail("Failure probability can only be specified when fault-tolerance is enabled.");
+        //     } else if (options.count("num-failures")) {
+        //         _fail("Failure probability and number of failures cannot be specified at the same time.");
+        //     }
+        // }
+
+        if (options.count("num-failures")) {
+            _numFailures = options["num-failures"].as<uint64_t>();
         }
     }
 
@@ -168,14 +175,19 @@ class CommandLineOptions {
         return _numDimensions;
     }
 
-    double failureProbability() const {
-        assert(_failureProbability >= 0 && _failureProbability <= 1);
-        return _failureProbability;
-    }
+    // double failureProbability() const {
+    //     assert(_failureProbability >= 0 && _failureProbability <= 1);
+    //     return _failureProbability;
+    // }
 
     bool simulateFailures() const {
-        assert(_failureProbability >= 0 && _failureProbability <= 1);
-        return _failureProbability > 0;
+        // assert(_failureProbability >= 0 && _failureProbability <= 1);
+        // return _failureProbability > 0 || _numFailures > 0;
+        return numFailures() > 0;
+    }
+
+    uint64_t numFailures() const {
+        return _numFailures;
     }
 
     private:
@@ -184,7 +196,8 @@ class CommandLineOptions {
     size_t        _numIterations;
     size_t        _numDimensions;
     uint16_t      _replicationLevel;
-    double        _failureProbability = 0;
+    // double        _failureProbability = 0;
+    uint64_t      _numFailures        = 0;
     unsigned long _seed               = 0;
     bool          _useFaultTolerance  = false;
     bool          _printCSVHeader     = true;
@@ -240,20 +253,27 @@ int main(int argc, char** argv) {
     // Initialize Failure Simulator
     std::optional<ProbabilisticFailureSimulator> failureSimulator = std::nullopt;
     if (options.simulateFailures()) {
-        failureSimulator.emplace(options.seed(), options.failureProbability());
+        // failureSimulator.emplace(options.seed(), options.failureProbability());
+        failureSimulator.emplace(options.seed(), 0.5);
     }
 
-    TIME_NEXT_SECTION("perform-iterations");
     long unsigned int numSimulatedRankFailures = 0;
+    unsigned long     failuresToSimulate       = options.numFailures();
+    unsigned long     failEvery                = options.numIterations() / failuresToSimulate;
+
+    // Perform the iterations
     for (uint64_t iteration = 0; iteration < options.numIterations(); ++iteration) {
+        // Perform one iteration
+        TIME_NEXT_SECTION("perform-iterations");
         kmeansInstance.performIterations(1);
-        if (options.simulateFailures()) {
-            TIME_PAUSE_BLOCK();
+        TIME_STOP();
+        
+        // Shall we simulate a failure?
+        if (options.simulateFailures() && (iteration % failEvery == 0)) {
             assert(failureSimulator.has_value());
             auto                    numAliveRanks = mpiContext.getCurrentSize();
             std::unordered_set<int> ranksToFail;
-            int maxFailuresToSimulate = asserting_cast<int>(options.replicationLevel() - 1u - numSimulatedRankFailures);
-            failureSimulator->getFailingRanks(numAliveRanks, ranksToFail, true, maxFailuresToSimulate);
+            failureSimulator->failRanksNow(numAliveRanks, 1, ranksToFail, true);
             numSimulatedRankFailures += ranksToFail.size();
             if (ranksToFail.size() > 0) {
                 MPI_Comm newComm = simulateFailure(mpiContext.getMyCurrentRank(), mpiContext.getComm(), ranksToFail);
@@ -261,7 +281,6 @@ int main(int argc, char** argv) {
             }
         }
     }
-    TIME_STOP();
 
     // Print the results of the runtime measurements.
     if (mpiContext.getMyCurrentRank() == 0) {
