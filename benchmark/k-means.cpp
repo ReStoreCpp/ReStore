@@ -299,9 +299,16 @@ int main(int argc, char** argv) {
     }
 
     // Print the results of the k-means for comparison with the reference implementation.
-    auto clusterAssignments = kmeansInstance.collectClusterAssignments();
-    for (auto assignment: clusterAssignments) {
-        std::cout << assignment << std::endl;
+    auto centers = kmeansInstance.centers();
+    for (uint64_t centerIdx = 0; centerIdx < centers.numDataPoints(); ++centerIdx) {
+        for (uint32_t dimension = 0; dimension < centers.numDimensions(); ++dimension) {
+            std::cout << centers.getElementDimension(centerIdx, dimension);
+            if (dimension == centers.numDimensions() - 1) {
+                std::cout << std::endl;
+            } else {
+                std::cout << " ";
+            }
+        }
     }
 
     // Finalize MPI and exit
