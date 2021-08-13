@@ -190,11 +190,11 @@ class BlockSubmissionCommunication {
             return _lastId;
         }
 
-        static constexpr size_t DESCRIPTOR_SIZE = sizeof(BlockIDRange::first) + sizeof(BlockIDRange::last);
-        BlockIDMode             _mode;
-        const DataStream&       _dataStream;
+        static constexpr size_t     DESCRIPTOR_SIZE = sizeof(BlockIDRange::first) + sizeof(BlockIDRange::last);
+        BlockIDMode                 _mode;
+        const DataStream&           _dataStream;
         std::optional<BlockIDRange> _currentRange;
-        IDType _lastId;
+        IDType                      _lastId;
     }; // namespace ReStore
 
     BlockSubmissionCommunication(
