@@ -152,7 +152,11 @@ class BlockSubmissionCommunication {
         // given position in the stream. Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes
         // read from the data stream and blockID is the id of the next block.
         std::pair<size_t, IDType> readId(size_t position) {
+// GCC throws a false-positive warning here.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
             if (_currentRange.has_value() && _lastId < _currentRange->last) {
+#pragma GCC diagnostic pop
                 return std::make_pair(0, ++_lastId);
             } else {
                 return std::make_pair(DESCRIPTOR_SIZE, _deserializeId(position));
@@ -166,9 +170,12 @@ class BlockSubmissionCommunication {
                 throw std::runtime_error("Trying to read the id descriptor past the end of the data stream.");
             }
 
-            auto first = *reinterpret_cast<const IDType*>(&(_dataStream[position]));
+            assert(position + sizeof(decltype(BlockIDRange::first)) < _dataStream.size());
+            auto first = *reinterpret_cast<const decltype(BlockIDRange::first)*>(&(_dataStream[position]));
             position += sizeof(BlockIDRange::first);
 
+            assert(position + sizeof(decltype(BlockIDRange::first)) < _dataStream.size());
+            assert(&_dataStream[position] + sizeof(decltype(BlockIDRange::last)) <= &_dataStream.back());
             auto last = *reinterpret_cast<const IDType*>(&(_dataStream[position]));
             assert(position + sizeof(BlockIDRange::last) == startOfDescriptor + DESCRIPTOR_SIZE);
 
