@@ -242,8 +242,9 @@ int main(int argc, char** argv) {
 
     // Run the experiment
     TIME_NEXT_SECTION("generate-data");
+    auto thisRanksSeed = options.seed() + asserting_cast<unsigned long>(mpiContext.getMyCurrentRank());
     auto kmeansInstance = kmeans::kMeansAlgorithm<float, ReStoreMPI::MPIContext>(
-        kmeans::generateRandomData<float>(options.numDataPointsPerRank(), options.numDimensions(), options.seed()),
+        kmeans::generateRandomData<float>(options.numDataPointsPerRank(), options.numDimensions(), thisRanksSeed),
         mpiContext, options.useFaultTolerance(), options.replicationLevel());
 
     TIME_NEXT_SECTION("pick-centers");
