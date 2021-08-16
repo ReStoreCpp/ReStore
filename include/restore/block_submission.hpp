@@ -31,7 +31,7 @@ class BlockSubmissionCommunication {
     //
     // This class abstracts away the serialization of the block IDs. This enables us to save bytes when storing
     // consecutive block IDs by not writing them out.
-    template <typename IDType, class = std::enable_if<std::is_unsigned_v<IDType>>>
+    template <typename IDType, class = std::enable_if_t<std::is_unsigned_v<IDType>>>
     class BlockIDSerialization {
         public:
         enum class BlockIDMode : uint8_t { EVERY_ID, RANGES };
@@ -128,7 +128,7 @@ class BlockSubmissionCommunication {
         bool                                     finalized = false;
     };
 
-    template <typename IDType, class = std::enable_if<std::is_unsigned_v<IDType>>>
+    template <typename IDType, class = std::enable_if_t<std::is_unsigned_v<IDType>>>
     class BlockIDDeserialization {
         public:
         using BlockIDMode  = typename BlockIDSerialization<IDType>::BlockIDMode;
