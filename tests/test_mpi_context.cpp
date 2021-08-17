@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cstddef>
 #include <gmock/gmock-matchers.h>
-#include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
+#include <gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
 #include <memory>
 #include <mpi.h>

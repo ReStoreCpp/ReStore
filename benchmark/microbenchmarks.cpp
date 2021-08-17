@@ -59,9 +59,10 @@ static void BM_submitBlocks(benchmark::State& state) {
         ReStore::ReStore<BlockType> store(
             MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize);
 
-        unsigned counter = 0;
-
+        // Start measurement
         auto start = std::chrono::high_resolution_clock::now();
+
+        unsigned counter = 0;
         store.submitBlocks(
             [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
                 stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
@@ -77,6 +78,8 @@ static void BM_submitBlocks(benchmark::State& state) {
             },
             numBlocks);
         assert(counter == data.size() + 1);
+
+        // End and register measurement
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
         MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);

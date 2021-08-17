@@ -1,4 +1,4 @@
-#include "probabilisticFailureSimulator.hpp"
+#include "probabilistic_failure_simulator.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/common.hpp"
 #include "restore/core.hpp"
@@ -304,7 +304,7 @@ std::vector<double> pageRank(
             MPI_Comm_rank(comm, &myRank);
             MPI_Comm_size(comm, &numRanks);
             ranksToKill.clear();
-            failureSimulator.getFailingRanks(numRanks, ranksToKill);
+            failureSimulator.maybeFailRanks(numRanks, ranksToKill);
             // if (myRank == 0) {
             //     std::cout << "Killing ranks ";
             //     for (const auto rankToKill: ranksToKill) {

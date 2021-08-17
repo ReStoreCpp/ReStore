@@ -1,6 +1,7 @@
 #ifndef RESTORE_BLOCK_SUBMISSION_H
 #define RESTORE_BLOCK_SUBMISSION_H
 
+#include <limits>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -30,15 +31,17 @@ class BlockSubmissionCommunication {
     //
     // This class abstracts away the serialization of the block IDs. This enables us to save bytes when storing
     // consecutive block IDs by not writing them out.
-    template <typename IDType, class = std::enable_if<std::is_unsigned_v<IDType>>>
+    template <typename IDType, class = std::enable_if_t<std::is_unsigned_v<IDType>>>
     class BlockIDSerialization {
         public:
         enum class BlockIDMode : uint8_t { EVERY_ID, RANGES };
         struct BlockIDRange {
             explicit BlockIDRange(IDType id) : first(id), last(id) {}
             BlockIDRange(IDType _first, IDType _last) : first(_first), last(_last) {}
+            BlockIDRange() = delete;
+
             IDType first;
-            IDType last;
+            IDType last; // This is always initalized, but gcc doesn't get it.
         };
 
         BlockIDSerialization(BlockIDMode mode, SerializedBlockStoreStream& stream, ReStoreMPI::original_rank_t numRanks)
@@ -125,7 +128,7 @@ class BlockSubmissionCommunication {
         bool                                     finalized = false;
     };
 
-    template <typename IDType, class = std::enable_if<std::is_unsigned_v<IDType>>>
+    template <typename IDType, class = std::enable_if_t<std::is_unsigned_v<IDType>>>
     class BlockIDDeserialization {
         public:
         using BlockIDMode  = typename BlockIDSerialization<IDType>::BlockIDMode;
@@ -135,33 +138,47 @@ class BlockSubmissionCommunication {
         BlockIDDeserialization(BlockIDMode mode, const DataStream& dataStream)
             : _mode(mode),
               _dataStream(dataStream),
-              _currentRange(std::nullopt) {}
+              _currentRange(std::nullopt),
+              _lastId(std::numeric_limits<IDType>::max()) {}
 
-        // Returns the next block if. If the current range still hast ids left, returns the next one from that range. If
-        // there are no more ids in the current range, reads the descriptor of the next range form the given position in
-        // the stream.
-        // Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes read from the data stream and
-        // blockID is the id of the next block.
+        BlockIDDeserialization()                              = delete;
+        BlockIDDeserialization(BlockIDDeserialization&&)      = delete;
+        BlockIDDeserialization(const BlockIDDeserialization&) = delete;
+        BlockIDDeserialization& operator=(BlockIDDeserialization&&) = delete;
+        BlockIDDeserialization& operator=(const BlockIDDeserialization&) = delete;
+
+        // Returns the next block if. If the current range still hast ids left, returns the next one from that
+        // range. If there are no more ids in the current range, reads the descriptor of the next range form the
+        // given position in the stream. Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes
+        // read from the data stream and blockID is the id of the next block.
         std::pair<size_t, IDType> readId(size_t position) {
+// GCC throws a false-positive warning here.
+#pragma GCC diagnostic push
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
             if (_currentRange.has_value() && _lastId < _currentRange->last) {
+
+#pragma GCC diagnostic pop
                 return std::make_pair(0, ++_lastId);
             } else {
-                return std::make_pair(DESCRIPTOR_SIZE, deserializeId(position));
+                return std::make_pair(DESCRIPTOR_SIZE, _deserializeId(position));
             }
         }
 
         private:
-        IDType deserializeId(size_t position) {
+        IDType _deserializeId(size_t position) {
             const auto startOfDescriptor = position;
             if (startOfDescriptor + DESCRIPTOR_SIZE >= _dataStream.size()) {
                 throw std::runtime_error("Trying to read the id descriptor past the end of the data stream.");
             }
 
-            UNUSED(position);
-
-            auto first = *reinterpret_cast<const IDType*>(&(_dataStream[position]));
+            assert(position + sizeof(decltype(BlockIDRange::first)) < _dataStream.size());
+            auto first = *reinterpret_cast<const decltype(BlockIDRange::first)*>(&(_dataStream[position]));
             position += sizeof(BlockIDRange::first);
 
+            assert(position + sizeof(decltype(BlockIDRange::first)) < _dataStream.size());
+            assert(&_dataStream[position] + sizeof(decltype(BlockIDRange::last)) <= &_dataStream.back());
             auto last = *reinterpret_cast<const IDType*>(&(_dataStream[position]));
             assert(position + sizeof(BlockIDRange::last) == startOfDescriptor + DESCRIPTOR_SIZE);
 
@@ -181,7 +198,7 @@ class BlockSubmissionCommunication {
         const DataStream&           _dataStream;
         std::optional<BlockIDRange> _currentRange;
         IDType                      _lastId;
-    };
+    }; // namespace ReStore
 
     BlockSubmissionCommunication(
         const MPIContext& mpiContext, const BlockDistr& blockDistribution, OffsetModeDescriptor offsetModeDescriptor)
@@ -226,8 +243,8 @@ class BlockSubmissionCommunication {
             if (!next.has_value()) {
                 doneSerializingBlocks = true;
             } else {
-                block_id_t       blockId = next.value().blockId;
-                const BlockType& block   = next.value().block;
+                block_id_t       blockId = next->blockId;
+                const BlockType& block   = next->block;
                 if (blockId >= _blockDistribution.numBlocks()) {
                     throw std::runtime_error("The block id is bigger than the number of blocks. Have you passed "
                                              "the number of block *in total* (not only on this rank)?");
@@ -275,8 +292,8 @@ class BlockSubmissionCommunication {
     // messages payload. This functions responsabilities are figuring out where a block starts and ends as well as
     // which id it has.
     //      message: The message to be parsed.
-    //      handleBlockData(block_id_t blockId, const std::byte* data, size_t lengthInBytes): the callback function to
-    //      call for each detected block.
+    //      handleBlockData(block_id_t blockId, const std::byte* data, size_t lengthInBytes): the callback function
+    //      to call for each detected block.
     // If an empty message is passed, nothing will be done.
     // TODO implement LUT mode
     template <class HandleBlockDataFunc>
@@ -323,7 +340,7 @@ class BlockSubmissionCommunication {
     // exchangeData()
     //
     // A wrapper around a SparseAllToAll. Transmits the sendBuffers' content and receives data addressed to us.
-    // Sending no data is fine, you may still retreive data.
+    // Sending no data is fine, you may still retrieve data.
     std::vector<ReStoreMPI::RecvMessage> exchangeData(const SendBuffers& sendBuffers) {
         std::vector<ReStoreMPI::SendMessage> sendMessages;
         for (ReStoreMPI::original_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {

@@ -42,7 +42,6 @@ class RankFailureManager {
     MPI_Comm failRanks(std::vector<ReStoreMPI::original_rank_t> failedRanks) {
         assert(!iFailed());
         _iFailed = std::find(failedRanks.begin(), failedRanks.end(), myRankId(_comm)) != failedRanks.end();
-        std::cout << myRankId() << ": " << _iFailed << std::endl;
 
 #if SIMULATE_FAILURES
         return simulateFailure(_iFailed);
@@ -105,7 +104,7 @@ class RankFailureManager {
     // resetCommunicator()
     //
     // Reset the communicator to the one given as comm. We can use this if there was a failure somewhere else in the
-    // progam.
+    // program.
     void resetCommunicator(MPI_Comm comm) noexcept {
         _comm = comm;
     }

@@ -24,8 +24,9 @@ if(MPI_CXX_FOUND)
   link_libraries(${MPI_LIBRARIES})
 endif()
 
-# Look in the /cmake dir for CMake modules
+# Make additinal cmake modules findable
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/extern/sanitizers-cmake/cmake")
 
 # Require out-of-source builds
 include(require_out_of_source_builds)
@@ -35,6 +36,9 @@ include(CMakeDependentOption)
 #include(CMakePackageConfigHelpers)
 include(CTest)
 include(GNUInstallDirs)
+
+# Load (memory, adress, ...) sanitizer support
+find_package(Sanitizers)
 
 # Enable sorting targets (of external libraries) into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -65,6 +69,10 @@ endif()
 
 message(STATUS "Using simulated failures: ${SIMULATE_FAILURES}")
 message(STATUS "Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
+
+# Populate some of the options to the source code
+add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
+add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
 
 # Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
@@ -107,32 +115,16 @@ endif()
 # Organize targets into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-#configure_file(
-#    "version.hpp.in"
-#    "version.hpp"
-#)
-#configure_file(
-#    "system_config.hpp.in"
-#    "system_config.hpp"
-#)
-
 # The target to be linked against by other targets. This library is an
 # interface target and as such does not generate any artefacts. It rather sets
 # include directories and required compiler flags.
 add_library("${PROJECT_NAME}" INTERFACE)
+target_sources("${PROJECT_NAME}" INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(
     "${PROJECT_NAME}" INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-
-# Include sources generated at build time. When installing the headers/library,
-# these sources will be copied to appropriate locations such that no additional
-# directories have to be included.
-#target_include_directories(
-#    "${PROJECT_NAME}" INTERFACE
-#    $<BUILD_INTERFACE:${PROJECT_CURRENT_BINARY_DIR}>
-#)
 
 ### Compiler and linker settings ###
 # This interface reflects the requirements to the compiler for building targets
@@ -150,9 +142,10 @@ target_link_libraries("${PROJECT_NAME}" INTERFACE "${PROJECT_NAME}_compile_requi
 add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 
 # Not added as link target to avoid propagation of warning
-# flags.    Only to be used by internal targets that compile the library.
+# flags. Only to be used by internal targets that compile the library.
 add_library("${PROJECT_NAME}_warnings" INTERFACE)
 
+# TODO: Use CheckCXXCompilerFlag for this?
 list(
     APPEND WARNING_FLAGS
     "-Wall"
@@ -286,56 +279,3 @@ if(${PROJECT_NAME}_BUILD_EXAMPLES)
 else()
     message(STATUS "Building examples: NO")
 endif()
-
-#if(${PROJECT_NAME}_INSTALL)
-#    include(InstallRequiredSystemLibraries)
-#    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/License.txt")
-#    set(CPACK_RESOURCE_FILE_README ${CMAKE_CURRENT_LIST_DIR}/README.md)
-#    include(CPack)
-#    set(INSTALL_MODULEDIR "${CMAKE_INSTALL_LIBDIR}/cmake")
-#    set(INSTALL_CMAKEDIR "${INSTALL_MODULEDIR}/${PROJECT_NAME}")
-#    configure_package_config_file(
-#        "${CMAKE_CURRENT_LIST_DIR}/cmake/${PROJECT_NAME}Config.cmake.in"
-#        "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
-#        INSTALL_DESTINATION "${INSTALL_CMAKEDIR}"
-#        PATH_VARS INSTALL_MODULEDIR
-#    )
-#    write_basic_package_version_file(
-#        "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-#        VERSION ${PROJECT_VERSION}
-#        COMPATIBILITY
-#        SameMajorVersion
-#        ARCH_INDEPENDENT
-#    )
-#    # On install, copy the header files to the appropriate location.
-#    install(
-#        DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/"
-#        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-#        FILES_MATCHING PATTERN "*.hpp"
-#    )
-#    # Also copy the artefacts generated at build time into the include directory.
-#    install(
-#        FILES "${CMAKE_CURRENT_BINARY_DIR}/version.hpp"
-#        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-#    )
-#    install(TARGETS "${PROJECT_NAME}" "${PROJECT_NAME}_compile_requirements" EXPORT "${PROJECT_NAME}Export")
-#    install(
-#        FILES
-#        "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Config.cmake"
-#        "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-#        DESTINATION
-#        "${INSTALL_CMAKEDIR}"
-#    )
-#    install(
-#        EXPORT "${PROJECT_NAME}Export"
-#        DESTINATION "${INSTALL_MODULEDIR}"
-#        NAMESPACE "${PROJECT_NAME}::"
-#        FILE "${PROJECT_NAME}Targets.cmake"
-#    )
-#    if(${PROJECT_NAME}_INSTALL_DOCS)
-#        install(
-#            DIRECTORY docs/
-#            DESTINATION "${CMAKE_INSTALL_DOCDIR}"
-#        )
-#    endif()
-#endif()

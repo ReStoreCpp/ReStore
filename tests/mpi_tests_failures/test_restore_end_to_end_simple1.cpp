@@ -6,7 +6,7 @@
 
 #include "range.hpp"
 #include <gmock/gmock.h>
-#include <gtest-mpi-listener/include/gtest-mpi-listener.hpp>
+#include <gtest-mpi-listener.hpp>
 #include <gtest/gtest.h>
 #include <mpi.h>
 #include <utility>
@@ -22,7 +22,7 @@ using namespace ::testing;
 using iter::range;
 
 TEST(ReStoreTest, EndToEnd_Simple1) {
-    // The most basic test base. Each rank submits exactly the same data. The replication level is set to one. There is
+    // The most basic test case. Each rank submits exactly the same data. The replication level is set to one. There is
     // no rank failure.
 
     // The logic of this tests assumes that there are four ranks

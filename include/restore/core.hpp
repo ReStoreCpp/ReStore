@@ -52,11 +52,11 @@ class ReStore {
           _blockDistribution(nullptr), // Depends on the number of blocks which are submitted in submitBlocks.
           _serializedBlocks(nullptr) { // Depends on _blockDistribution
         if (offsetMode == OffsetMode::lookUpTable && constOffset != 0) {
-            throw std::runtime_error("Explicit offset mode set but the constant offset is not zero.");
+            throw std::invalid_argument("Explicit offset mode set but the constant offset is not zero.");
         } else if (offsetMode == OffsetMode::constant && constOffset == 0) {
-            throw std::runtime_error("Constant offset mode required a constOffset > 0.");
+            throw std::invalid_argument("Constant offset mode requires a constOffset > 0.");
         } else if (replicationLevel == 0) {
-            throw std::runtime_error("What is a replication level of 0 supposed to mean?");
+            throw std::invalid_argument("What is a replication level of 0 supposed to mean?");
         } else {
             _assertInvariants();
         }
@@ -82,7 +82,6 @@ class ReStore {
         return this->_replicationLevel;
     }
 
-    // TODO this is an artifact. Use only OffsetMode Descriptors throughout the whole ReStore class
     // offsetMode()
     //
     // Get the offset mode that defines how the serialized blocks are aligned in memory.
@@ -129,7 +128,7 @@ class ReStore {
             "serializeFunc must be invocable as _(const BlockType&, SerializedBlockStoreStream&");
         static_assert(
             std::is_invocable_r<std::optional<NextBlock<BlockType>>, NextBlockCallbackFunction>(),
-            "nextBlock must be invocable as ReStore::std::optional<NextBlock<BlockType>>()");
+            "nextBlock must be invocable as std::optional<ReStore::NextBlock<BlockType>>()");
 
         if (totalNumberOfBlocks == 0) {
             throw std::runtime_error("Invalid number of blocks: 0.");
@@ -159,6 +158,11 @@ class ReStore {
 
             // All blocks have been serialized, send & receive replicas
             auto receivedMessages = comm.exchangeData(sendBuffers);
+            
+            // Deallocate sendBuffers, they are no longer needed and take up replicationLevel * bytesPerRank memory.
+            // By deallocating them now, before the received messages are stored into the serialized block storage,
+            // we can reduce the peak memory consumption of this algorithm.
+            sendBuffers = decltype(sendBuffers)();
 
             // Store the received blocks into our local block storage
             comm.parseAllIncomingMessages(
@@ -250,6 +254,16 @@ class ReStore {
                 return std::make_pair(blockRange.first, _mpiContext.getCurrentRank(blockRange.second).value());
             });
         pushBlocksCurrentRankIds(blockRanges, handleSerializedBlock, canBeParallelized);
+    }
+
+    template <class HandleSerializedBlockFunction>
+    void pushBlocksOriginalRankIds(
+        const std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>& blockRanges,
+        HandleSerializedBlockFunction                                                       handleSerializedBlock,
+        bool canBeParallelized = false // not supported yet
+    ) {
+        auto blockRangesCopy(blockRanges);
+        pushBlocksOriginalRankIds(blockRangesCopy, handleSerializedBlock, canBeParallelized);
     }
 
     private:

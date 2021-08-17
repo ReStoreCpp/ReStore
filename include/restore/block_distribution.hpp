@@ -44,30 +44,43 @@ class BlockDistribution {
         BlockRange(size_t range_id, const BlockDistribution* blockDistribution)
             : _id(range_id),
               _blockDistribution(blockDistribution) {
-            if (range_id > _blockDistribution->numRanges()) {
-                throw std::runtime_error("This range does not exists (id too large).");
+            if (blockDistribution == nullptr) {
+                throw std::invalid_argument("blockDistribution may not be a nullptr");
+            } else if (range_id > _blockDistribution->numRanges()) {
+                throw std::invalid_argument("This range does not exist (id too large).");
             }
         }
 
         // Copying and copy assignment is fine ...
-        BlockRange(const BlockRange& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {}
+        BlockRange(const BlockRange& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {
+            assert(_blockDistribution != nullptr);
+            assert(_id <= _blockDistribution->numRanges());
+        }
 
         BlockRange& operator=(const BlockRange& that) {
             this->_id                = that._id;
             this->_blockDistribution = that._blockDistribution;
+            assert(_blockDistribution != nullptr);
+            assert(_id <= _blockDistribution->numRanges());
             return *this;
         }
 
         // ... as is moving and move assignment
-        BlockRange(BlockRange&& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {}
+        BlockRange(BlockRange&& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {
+            assert(_blockDistribution != nullptr);
+            assert(_id <= _blockDistribution->numRanges());
+        }
 
         BlockRange& operator=(BlockRange&& that) noexcept {
             this->_id                = that._id;
             this->_blockDistribution = that._blockDistribution;
+            assert(_blockDistribution != nullptr);
+            assert(_id <= _blockDistribution->numRanges());
             return *this;
         }
 
         block_id_t start() const {
+            assert(_blockDistribution != nullptr);
             size_t blocksPerRange               = _blockDistribution->blocksPerRange();
             size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
 
@@ -89,6 +102,7 @@ class BlockDistribution {
         }
 
         size_t length() const {
+            assert(_blockDistribution != nullptr);
             size_t blocksPerRange               = _blockDistribution->blocksPerRange();
             size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
 
@@ -141,8 +155,8 @@ class BlockDistribution {
         }
 
         private:
-        size_t                   _id;
-        const BlockDistribution* _blockDistribution;
+        size_t                   _id = std::numeric_limits<size_t>::max();
+        const BlockDistribution* _blockDistribution = nullptr;
     };
 
     BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
@@ -249,7 +263,6 @@ class BlockDistribution {
             assert(static_cast<size_t>(nextRank) < _numRanks);
             rankIds.push_back(nextRank);
         }
-        // TODO Check if rank ids are unique
 
         return _mpiContext.getOnlyAlive(rankIds);
     }
@@ -297,7 +310,6 @@ class BlockDistribution {
             assert(nextRange.id() < _numRanges);
             rangeIds.push_back(nextRange);
         }
-        // TODO Assert there are replication many
 
         return rangeIds;
     }

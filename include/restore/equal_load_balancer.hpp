@@ -10,6 +10,7 @@
 
 #include "common.hpp"
 #include "mpi_context.hpp"
+#include "restore/block_retrieval.hpp"
 #include "restore/helpers.hpp"
 
 namespace ReStore {
@@ -61,8 +62,7 @@ class EqualLoadBalancer {
         block_id_t numBlocksPerRank       = numBlocks / _ranks.size();
         int        numRanksWithMoreBlocks = asserting_cast<int>(numBlocks % _ranks.size());
 
-        using block_range_external_t = std::pair<block_id_t, size_t>;
-        using request_t              = std::pair<block_range_external_t, ReStoreMPI::current_rank_t>;
+        using request_t = std::pair<block_range_external_t, ReStoreMPI::current_rank_t>;
         std::vector<request_t>      requests;
         ReStoreMPI::original_rank_t rankCounter                   = 0;
         size_t                      blockRangeIndexIndex          = 0;

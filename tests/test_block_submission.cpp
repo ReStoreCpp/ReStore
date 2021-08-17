@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
-#include <stdint.h>
 #include <unordered_map>
 
 #include <gmock/gmock.h>
@@ -310,6 +310,77 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
     ASSERT_EQ(sendBuffers[0].size(), 22);
     ASSERT_EQ(sendBuffers[3].size(), 22);
     ASSERT_EQ(sendBuffers[6].size(), 22);
+
+    ASSERT_EQ(sendBuffers[0], expectedSendBuffer);
+    ASSERT_EQ(sendBuffers[3], expectedSendBuffer);
+    ASSERT_EQ(sendBuffers[6], expectedSendBuffer);
+}
+
+TEST(BlockSubmissionTest, BlockIsAPointer) {
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using ReStore::block_id_t;
+    using ReStore::NextBlock;
+    using ReStore::OffsetMode;
+    using ReStoreMPI::current_rank_t;
+    using ReStoreMPI::original_rank_t;
+    using ReStoreMPI::RecvMessage;
+
+    using BlockProxy = uint8_t*;
+
+    const uint16_t       NUM_DIMENSIONS = 3;
+    std::vector<uint8_t> data{10, 11, 12, 20, 21, 22, 30, 31, 32, 40, 41, 42};
+
+    NiceMock<MPIContextMock> mpiContext;
+    EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([](std::vector<original_rank_t> ranks) {
+        return getAliveOnlyFake({}, ranks);
+    });
+    EXPECT_CALL(mpiContext, getOriginalSize()).WillRepeatedly(Return(10));
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(10));
+
+    auto blockDistribution = std::make_shared<BlockDistribution>(10, 100, 3, mpiContext);
+
+    ReStore::BlockSubmissionCommunication<BlockProxy, MPIContextMock> comm(
+        mpiContext, *blockDistribution,
+        ReStore::OffsetModeDescriptor{OffsetMode::constant, sizeof(uint8_t) * NUM_DIMENSIONS});
+
+    assert(data.size() % NUM_DIMENSIONS == 0);
+    const size_t numDataPointsLocal = data.size() / NUM_DIMENSIONS;
+
+    // Reserve memory for the Block Proxies (we are only pushing references around during
+    // serializeBlocksForTransmission, the actual data is not copied).
+    BlockProxy currentProxy = nullptr;
+
+    unsigned counter     = 0;
+    auto     sendBuffers = comm.serializeBlocksForTransmission(
+        [](const BlockProxy& blockProxy, ReStore::SerializedBlockStoreStream& stream) {
+            assert(blockProxy != nullptr);
+            stream.writeBytes(reinterpret_cast<const std::byte*>(blockProxy), sizeof(uint8_t) * NUM_DIMENSIONS);
+        },
+        [&counter, data = data.data(), numDataPointsLocal,
+         &currentProxy]() -> std::optional<ReStore::NextBlock<BlockProxy>> {
+            assert(data != nullptr);
+            std::optional<ReStore::NextBlock<BlockProxy>> nextBlock = std::nullopt;
+            if (counter < numDataPointsLocal) {
+                currentProxy = &data[counter * NUM_DIMENSIONS];
+                nextBlock.emplace(counter, currentProxy);
+                counter++; // We cannot put this in the above line, as we can't assume if the first argument of the
+                           // pair is bound before or after the increment.
+            }
+            return nextBlock;
+        },
+        numDataPointsLocal);
+
+    // All these three blocks belong to range 0 and are therefore stored on ranks 0, 3 and 6
+    std::vector<std::byte> expectedSendBuffer = {
+        0_byte,  0_byte,  0_byte,  0_byte,  0_byte,  0_byte,  0_byte,  0_byte, // from block id 0
+        3_byte,  0_byte,  0_byte,  0_byte,  0_byte,  0_byte,  0_byte,  0_byte, // to block id 2
+        10_byte, 11_byte, 12_byte, 20_byte, 21_byte, 22_byte, 30_byte, 31_byte, 32_byte, 40_byte, 41_byte, 42_byte};
+
+    ASSERT_EQ(sendBuffers.size(), 10);
+
+    ASSERT_EQ(sendBuffers[0].size(), 8 + 8 + sizeof(uint8_t) * data.size());
+    ASSERT_EQ(sendBuffers[3].size(), 8 + 8 + sizeof(uint8_t) * data.size());
+    ASSERT_EQ(sendBuffers[6].size(), 8 + 8 + sizeof(uint8_t) * data.size());
 
     ASSERT_EQ(sendBuffers[0], expectedSendBuffer);
     ASSERT_EQ(sendBuffers[3], expectedSendBuffer);
