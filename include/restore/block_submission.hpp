@@ -154,8 +154,11 @@ class BlockSubmissionCommunication {
         std::pair<size_t, IDType> readId(size_t position) {
 // GCC throws a false-positive warning here.
 #pragma GCC diagnostic push
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
             if (_currentRange.has_value() && _lastId < _currentRange->last) {
+
 #pragma GCC diagnostic pop
                 return std::make_pair(0, ++_lastId);
             } else {
