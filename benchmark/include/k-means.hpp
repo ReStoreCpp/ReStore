@@ -1,6 +1,8 @@
 
 #include <array>
 #include <cstdint>
+#include <fstream>
+#include <iostream>
 #include <mpi.h>
 #include <optional>
 #include <random>
@@ -114,6 +116,10 @@ class kMeansData {
     // dimensions set to initialValue.
     void resize(size_t numDataPoints, data_t initialValue = 0) {
         _data.resize(numDataPoints * _numDimensions, initialValue);
+    }
+
+    void reserve(size_t numDataPoints) {
+        _data.reserve(numDataPoints * _numDimensions);
     }
 
     // TODO We need a prettier interface for this
@@ -546,5 +552,61 @@ kMeansData<data_t> generateRandomData(size_t numDataPoints, uint64_t numDimensio
     assert(data.valid());
 
     return data;
+}
+
+template <class data_t>
+kMeansData<data_t> loadDataFromFile(const std::string& inputFile) {
+    std::ifstream file(inputFile);
+    if (!file.is_open()) {
+        throw std::runtime_error("Could not open file " + inputFile + " for reading.");
+    }
+
+    uint64_t numDataPoints = std::numeric_limits<uint64_t>::max();
+    uint16_t numDimensions = std::numeric_limits<uint16_t>::max();
+    file >> numDataPoints;
+    file >> numDimensions;
+
+    assert(numDataPoints < std::numeric_limits<uint64_t>::max());
+    assert(numDimensions < std::numeric_limits<uint16_t>::max());
+    if (numDataPoints == 0 || numDimensions == 0) {
+        throw std::runtime_error("Number of data points and dimensions may not be zero zero.");
+    }
+
+    kMeansData<data_t> data(numDimensions);
+    data.reserve(numDataPoints);
+    for (uint64_t dataPoint = 0; dataPoint < numDataPoints; dataPoint++) {
+        for (uint16_t dimension = 0; dimension < numDimensions; dimension++) {
+            data_t value;
+            file >> value;
+            data << value;
+        }
+        data << typename kMeansData<data_t>::FinalizeDataPoint();
+    }
+
+    return data;
+}
+
+template <class data_t>
+void writeDataToFile(kMeansData<data_t> data, const std::string& outputFile) {
+    // Open the file for writing.
+    std::ofstream file(outputFile);
+    if (!file.is_open()) {
+        throw std::runtime_error("Could not open file " + outputFile + " for writing.");
+    }
+
+    // Write the number of data points and the number of dimensions.
+    file << data.numDataPoints() << " " << data.numDimensions() << std::endl;
+
+    // Write the data points.
+    for (size_t dataPoint = 0; dataPoint < data.numDataPoints(); dataPoint++) {
+        for (size_t dimension = 0; dimension < data.numDimensions(); dimension++) {
+            file << data.getElementDimension(dataPoint, dimension);
+            if (dimension < data.numDimensions() - 1) {
+                file << " ";
+            } else if (dataPoint < data.numDataPoints() - 1) {
+                file << std::endl;
+            }
+        }
+    }
 }
 } // namespace kmeans
