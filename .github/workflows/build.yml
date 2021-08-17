@@ -17,7 +17,7 @@ jobs:
       matrix:
         compiler:
           - { name: Clang-simulated, cc: clang, cxx: clang++, failure-simulation: ON}
-          - { name: GNU-real, cc: gcc, cxx: g++, failure-simulation: OFF}
+          - { name: GNU-real, cc: gcc-10, cxx: g++-10, failure-simulation: OFF}
         build-mode: [Debug, Release]
     timeout-minutes: 60
     steps:
