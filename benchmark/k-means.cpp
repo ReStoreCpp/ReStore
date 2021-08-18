@@ -35,10 +35,12 @@ class CommandLineOptions {
              cxxopts::value<bool>()->default_value("false")) ///
             //("failure-probability", "Set the probability 0 < p < 1 of each rank failing during one iteration.",
             // cxxopts::value<double>())                                                               ///
-            ("num-failures", "Sets the number of failures to simulate.", cxxopts::value<uint64_t>()) ///)
+            ("num-failures", "Sets the number of failures to simulate.", cxxopts::value<uint64_t>()) ///
             ("simulation-id",
              "Simulation id. Will be echoed as is; can be used to identify the results of this experiment.",
-             cxxopts::value<std::string>())                                                                 ///
+             cxxopts::value<std::string>()) ///
+            ("repeat-id", "Repeat id. Will be echoed as is; can be used to identify the results of this experiment.",
+             cxxopts::value<std::string>()->default_value("0"))                                             ///
             ("s,seed", "Random seed.", cxxopts::value<unsigned long>()->default_value("0"))                 ///
             ("n,no-header", "Do not print the csv header.", cxxopts::value<bool>()->default_value("false")) ///
             ("i,input", "Name of the input file.", cxxopts::value<std::string>())                           ///
@@ -146,6 +148,8 @@ class CommandLineOptions {
             } else {
                 _simulationId = options["simulation-id"].as<std::string>();
             }
+
+            _repeatId = options["repeat-id"].as<std::string>();
 
             // if (options.count("failure-probability")) {
             //     _failureProbability = options["failure-probability"].as<double>();
@@ -278,6 +282,10 @@ class CommandLineOptions {
         return _outputFile + ".rank" + std::to_string(myRank) + ".assignments";
     }
 
+    std::string repeatId() const {
+        return _repeatId;
+    }
+
     private:
     size_t      _numDataPointsPerRank;
     size_t      _numCenters;
@@ -287,6 +295,7 @@ class CommandLineOptions {
     Mode        _mode;
     std::string _inputFile;
     std::string _outputFile;
+    std::string _repeatId;
     // double        _failureProbability = 0;
     uint64_t      _numFailures       = 0;
     unsigned long _seed              = 0;
@@ -334,6 +343,7 @@ void writeMeasurementsToFile(
 
     ResultsCSVPrinter resultPrinter(file, options.printCSVHeader());
     resultPrinter.allResults("simulationId", options.simulationId());
+    resultPrinter.allResults("repeatId", options.repeatId());
     resultPrinter.allResults("numRanks", numberOfRanks);
     resultPrinter.allResults("numDataPointsPerRank", options.numDataPointsPerRank());
     resultPrinter.allResults("numCenters", options.numCenters());
