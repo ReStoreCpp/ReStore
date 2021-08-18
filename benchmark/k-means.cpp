@@ -127,16 +127,18 @@ class CommandLineOptions {
                 _numIterations = options["num-iterations"].as<size_t>();
             }
 
-            if (options.count("replication-level") != 1) {
-                _fail("Required option missing or provided more than once: --replication-level");
-            } else {
-                _replicationLevel = options["replication-level"].as<uint16_t>();
-            }
-
             if (options.count("fault-tolerance") != 1) {
                 _fail("Required option missing or provided more than once: --fault-tolerance");
             } else {
                 _useFaultTolerance = options["fault-tolerance"].as<bool>();
+            }
+
+            if (_useFaultTolerance) {
+                if (options.count("replication-level") != 1) {
+                    _fail("Required option missing or provided more than once: --replication-level");
+                } else {
+                    _replicationLevel = options["replication-level"].as<uint16_t>();
+                }
             }
 
             if (options.count("simulation-id") != 1) {
