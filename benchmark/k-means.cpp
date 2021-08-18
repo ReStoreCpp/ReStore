@@ -326,12 +326,13 @@ simulateFailure(int myRankId, MPI_Comm currentComm, const std::unordered_set<ReS
 // Print the results of the runtime measurements.
 void writeMeasurementsToFile(
     const std::string& outputFile, const CommandLineOptions& options,
-    std::vector<std::pair<const char*, double>>& measurements, uint64_t numFailures) {
+    std::vector<std::pair<const char*, double>>& measurements, uint64_t numFailures, int numberOfRanks) {
     std::ofstream file;
     file.open(outputFile.c_str(), std::ios::out | std::ios::trunc);
 
     ResultsCSVPrinter resultPrinter(file, options.printCSVHeader());
     resultPrinter.allResults("simulationId", options.simulationId());
+    resultPrinter.allResults("numRanks", numberOfRanks);
     resultPrinter.allResults("numDataPointsPerRank", options.numDataPointsPerRank());
     resultPrinter.allResults("numCenters", options.numCenters());
     resultPrinter.allResults("numIterations", options.numIterations());
@@ -340,7 +341,7 @@ void writeMeasurementsToFile(
     resultPrinter.allResults("replicationLevel", options.replicationLevel());
     resultPrinter.allResults("seed", options.seed());
     resultPrinter.thisResult(measurements);
-    resultPrinter.thisResult("num-simulated-rank-failures", numFailures);
+    resultPrinter.thisResult("numSimulatedRankFailures", numFailures);
     resultPrinter.finalizeAndPrintResult();
 }
 
@@ -440,7 +441,8 @@ void runKMeansAndReport(ReStoreMPI::MPIContext& mpiContext, CommandLineOptions& 
     // The measurements and cluster centers are written once by the main rank.
     if (mpiContext.getMyCurrentRank() == 0) {
         auto timers = TimerRegister::instance().getAllTimers();
-        writeMeasurementsToFile(options.measurementOutputFile(), options, timers, numSimulatedRankFailures);
+        writeMeasurementsToFile(
+            options.measurementOutputFile(), options, timers, numSimulatedRankFailures, mpiContext.getCurrentSize());
 
         writeClusterCentersToFile(options.clusterCentersOutputFile(), kmeansInstance.centers());
     }
