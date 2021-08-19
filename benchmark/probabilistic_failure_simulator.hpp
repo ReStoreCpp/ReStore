@@ -18,17 +18,12 @@ class ProbabilisticFailureSimulator {
 
     // Fails every rank with the given failureProbability
     void
-    maybeFailRanks(int numRanks, std::unordered_set<int>& outVec, bool skipFirstRank = false, int maxFailures = -1) {
-        if (maxFailures == -1) {
-            maxFailures = numRanks;
-        }
+    maybeFailRanks(int numRanks, std::unordered_set<int>& outVec) {
+        assert(prob >= 0.0);
+        assert(prob <= 1.0);
 
         int pos = 0;
-        if (skipFirstRank) {
-            pos = 1;
-        }
-
-        while (pos < numRanks && outVec.size() < asserting_cast<size_t>(maxFailures)) {
+        while (pos < numRanks && outVec.size()) {
             pos += dist(gen);
             if (pos < numRanks) {
                 outVec.insert(pos);

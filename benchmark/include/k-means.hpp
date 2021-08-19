@@ -202,6 +202,18 @@ class kMeansAlgorithm {
             assert(numPointsAssignedToCenter.size() == numCenters);
         }
 
+        void resize(size_t numDataPoints) {
+            assignedCenter.resize(numDataPoints, 0);
+        }
+
+        size_t numDataPoints() const {
+            return assignedCenter.size();
+        }
+
+        uint64_t numCenters() const {
+            return numPointsAssignedToCenter.size();
+        }
+
         std::vector<size_t>   assignedCenter;
         std::vector<uint64_t> numPointsAssignedToCenter;
     };
@@ -337,7 +349,10 @@ class kMeansAlgorithm {
 
     // Assign each (local) data point to the closest center. This is a local operation and will therefore not report
     // rank failures. Consider using performIterations(...) if you have no special needs.
-    void assignPointsToCenters() {
+    // rank failures. Consider using performIterations(...) if you have no special needs.
+    // We assume that all data points with an index < startIndex are allready assigned to their respective centers. Use
+    // a startIndex > 0 for example after restoring data which resided on a failed rank and is thus new to this rank.
+    void assignPointsToCenters(uint64_t startIndex = 0) {
         assert(_data.valid());
 
         if (numDataPoints() == 0) {
@@ -346,20 +361,34 @@ class kMeansAlgorithm {
             throw std::runtime_error("I don't have any cluster centers.");
         } else if (numDimensions() == 0) {
             throw std::runtime_error("I have zero-dimensional data.");
+        } else if (startIndex >= numDataPoints()) {
+            throw std::out_of_range("You requested to start at a non-existing data point.");
         }
 
         // Engage data structure if it is not already
+        assert(_pointToCenterAssignment || startIndex == 0);
         if (!_pointToCenterAssignment) {
             _pointToCenterAssignment.emplace(numDataPoints(), numCenters());
-        } else { // else, reset the number of points assigned to the centers
+        } else if (startIndex == 0) { // else, reset the number of points assigned to the centers
             assert(_pointToCenterAssignment);
+            assert(_pointToCenterAssignment->numDataPoints() >= numDataPoints());
             std::fill(
                 _pointToCenterAssignment->numPointsAssignedToCenter.begin(),
                 _pointToCenterAssignment->numPointsAssignedToCenter.end(), 0);
             // Resetting the assignments is not necessary as these are overwritten anyway
         }
 
-        for (uint64_t dataIdx = 0; dataIdx < numDataPoints(); dataIdx++) {
+        // If we got new data since the last time we were called, we need to increase the size of the assignedCenter
+        // data structure.
+        if (_pointToCenterAssignment->numDataPoints() < numDataPoints()) {
+            _pointToCenterAssignment->resize(numDataPoints());
+        }
+
+        // Compute the distance between each data point and each center, assign each point to it's closest cluster
+        // center.
+        assert(_pointToCenterAssignment->numDataPoints() == numDataPoints());
+        assert(_pointToCenterAssignment->numCenters() == numCenters());
+        for (uint64_t dataIdx = startIndex; dataIdx < numDataPoints(); dataIdx++) {
             size_t closestCenter           = std::numeric_limits<size_t>::max();
             data_t distanceToClosestCenter = std::numeric_limits<data_t>::max();
             for (size_t centerIdx = 0; centerIdx < numCenters(); centerIdx++) {
@@ -383,7 +412,9 @@ class kMeansAlgorithm {
         }
         assert(_pointToCenterAssignment->assignedCenter.size() == numDataPoints());
 
-        for (auto assignedCenter: _pointToCenterAssignment->assignedCenter) {
+        // Compute how many points are assigned to each center.
+        for (uint64_t dataIdx = startIndex; dataIdx < numDataPoints(); dataIdx++) {
+            auto assignedCenter = _pointToCenterAssignment->assignedCenter[dataIdx];
             _pointToCenterAssignment->numPointsAssignedToCenter[assignedCenter]++;
         }
         assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
@@ -402,7 +433,7 @@ class kMeansAlgorithm {
         // This array accumulates the contributions of the data points assigned to a center to that center.
         kMeansData<data_t> contribToCenterPosition(numCenters(), numDimensions(), 0);
 
-        // Compute contribution of local data points to the positions of the new centers
+        // Compute contribution of local data points to the positions of the new centers.
         for (size_t dataIdx = 0; dataIdx < numDataPoints(); dataIdx++) {
             auto centerIdx = _pointToCenterAssignment->assignedCenter[dataIdx];
             for (uint64_t dimension = 0; dimension < numDimensions(); dimension++) {
@@ -413,6 +444,7 @@ class kMeansAlgorithm {
 
         // Allreduce the local contributions to the center positions
         _mpiContext.allreduce(contribToCenterPosition.data(), MPI_SUM, contribToCenterPosition.dataSize());
+        // TODO Think about what would happen if we detect a rank failure during this call.
         _mpiContext.allreduce(_pointToCenterAssignment->numPointsAssignedToCenter, MPI_SUM);
         assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
         assert(contribToCenterPosition.numDataPoints() == numCenters());
@@ -460,6 +492,7 @@ class kMeansAlgorithm {
                 if (!_faultTolerant) {
                     throw e;
                 }
+                // TODO: Handle failures during recovery. For now, we decided to not simulate that.
 
                 // Roll back to the latest checkpoint of the center positions, this is a local operation and therefore
                 // works even with a broken communicator.
@@ -479,11 +512,18 @@ class kMeansAlgorithm {
 
                 // ReStore the input data that resided on the failed ranks.
                 TIME_NEXT_SECTION("restore-data");
+                auto numElementsBeforeRestore = _data.numDataPoints();
                 _reStoreWrapper->restoreDataAppend(_data.dataVector(), newBlocksPerRank);
 
-                // Update local data structures to reflect the new data distribution
-                TIME_NEXT_SECTION("update-local-data-structures");
-                _pointToCenterAssignment.emplace(numDataPoints(), numCenters());
+                TIME_NEXT_SECTION("recompute-data-from-failed-ranks");
+                // If we got new data points, assign them to the cluster centers.
+                // This function will also update the local data structures it needs to reflect the new data distribution
+                if (numDataPoints() > numElementsBeforeRestore) {
+                    assignPointsToCenters(numElementsBeforeRestore);
+                }
+
+                // Collectively update the center positions.
+                updateCenters();
 
                 // Has everyone completed the restoration successfully?
                 TIME_NEXT_SECTION("commit-to-restoration");
@@ -491,6 +531,7 @@ class kMeansAlgorithm {
 
                 // Everyone completed the restoration successfully, we can commit to the new data distribution.
                 _loadBalancer.commitToPreviousCall();
+                iteration++;
 
                 TIME_POP();
             }

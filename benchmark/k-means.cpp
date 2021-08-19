@@ -1,4 +1,5 @@
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -19,7 +20,11 @@ class CommandLineOptions {
     public:
     enum class Mode : uint8_t { GenerateData, ClusterData };
 
-    CommandLineOptions(int argc, char* argv[]) {
+    CommandLineOptions(int argc, char* argv[], int numRanks) {
+        if (numRanks < 1) {
+            throw std::invalid_argument("Number of ranks must be at least 1");
+        }
+
         cxxopts::Options cliParser(
             "k-means", "Performs a distributed memory k-means clustering. Is capable of handling failed rank.");
 
@@ -33,19 +38,24 @@ class CommandLineOptions {
              cxxopts::value<uint16_t>()) ///
             ("fault-tolerance", "Enable or disable fault-tolerance?",
              cxxopts::value<bool>()->default_value("false")) ///
-            //("failure-probability", "Set the probability 0 < p < 1 of each rank failing during one iteration.",
-            // cxxopts::value<double>())                                                               ///
-            ("num-failures", "Sets the number of failures to simulate.", cxxopts::value<uint64_t>()) ///
+            ("failure-probability", "Set the probability 0 < p < 1 of each rank failing during one iteration.",
+             cxxopts::value<double>()) ///
+            ("expected-failure-rate",
+             "Set the fraction of ranks expected to fail; we'll comput the failure probability for you.",
+             cxxopts::value<double>()) ///
+            //("num-failures", "Sets the number of failures to simulate.", cxxopts::value<uint64_t>()) ///
             ("simulation-id",
              "Simulation id. Will be echoed as is; can be used to identify the results of this experiment.",
              cxxopts::value<std::string>()) ///
             ("repeat-id", "Repeat id. Will be echoed as is; can be used to identify the results of this experiment.",
-             cxxopts::value<std::string>()->default_value("0"))                                             ///
-            ("s,seed", "Random seed.", cxxopts::value<unsigned long>()->default_value("0"))                 ///
-            ("n,no-header", "Do not print the csv header.", cxxopts::value<bool>()->default_value("false")) ///
-            ("i,input", "Name of the input file.", cxxopts::value<std::string>())                           ///
-            ("o,output", "Name of the output file.", cxxopts::value<std::string>())                         ///
-            ("h,help", "Print help message.");                                                              ///
+             cxxopts::value<std::string>()->default_value("0")) ///
+            ("s,seed", "Random seed for the data generation and cluster center selection.",
+             cxxopts::value<unsigned long>()->default_value("0"))                                                 ///
+            ("failure-simulator-seed", "Random seed for the failure simulator.", cxxopts::value<unsigned long>()) ///
+            ("n,no-header", "Do not print the csv header.", cxxopts::value<bool>()->default_value("false"))       ///
+            ("i,input", "Name of the input file.", cxxopts::value<std::string>())                                 ///
+            ("o,output", "Name of the output file.", cxxopts::value<std::string>())                               ///
+            ("h,help", "Print help message.");                                                                    ///
 
         cliParser.parse_positional({"mode"});
         cliParser.positional_help("<mode>");
@@ -111,6 +121,10 @@ class CommandLineOptions {
                 _numDimensions = options["num-dimensions"].as<size_t>();
             }
         } else if (mode() == Mode::ClusterData) {
+            if (options.count("failure-simulator-seed")) {
+                _failureSimulatorSeed.emplace(options["failure-simulator-seed"].as<unsigned long>());
+            }
+
             if (options.count("input") != 1) {
                 _fail("Required option missing or provided more than once: --input");
             } else {
@@ -151,21 +165,29 @@ class CommandLineOptions {
 
             _repeatId = options["repeat-id"].as<std::string>();
 
-            // if (options.count("failure-probability")) {
-            //     _failureProbability = options["failure-probability"].as<double>();
-            //     if (_failureProbability < 0.0 || _failureProbability > 1.0) {
-            //         _fail("Failure probability must be between 0 and 1.");
-            //     } else if (!_useFaultTolerance) {
-            //         _fail("Failure probability can only be specified when fault-tolerance is enabled.");
-            //     } else if (options.count("num-failures")) {
-            //         _fail("Failure probability and number of failures cannot be specified at the same time.");
-            //     }
-            // }
+            if (_useFaultTolerance) {
+                if (options.count("failure-probability") > 0 && options.count("expected-failure-rate") > 0) {
+                    _fail("Cannot specify both --failure-probability and --expected-failures");
+                } else if (options.count("failure-probability")) {
+                    _failureProbability = options["failure-probability"].as<double>();
 
-            if (options.count("num-failures")) {
-                _numFailures = options["num-failures"].as<uint64_t>();
-                if (!_useFaultTolerance && _numFailures > 0) {
-                    _fail("Simulating failures while fault-tolerance is disabled is probably not a good idea.");
+                    if (_failureProbability <= 0.0 || _failureProbability >= 1.0) {
+                        _fail("Failure probability must be between and not equal to 0 and 1.");
+                    }
+                } else if (options.count("expected-failure-rate")) {
+                    auto expectedFailureRate = options["expected-failure-rate"].as<double>();
+
+                    if (expectedFailureRate > 0.0 && expectedFailureRate < 1.0) {
+                        assert(numRanks > 0);
+                        assert(_numIterations > 0);
+                        double numRanks_d            = static_cast<double>(numRanks);
+                        double numExpectedFailures_d = static_cast<double>(expectedFailureRate) * numRanks_d;
+                        double numIterations_d       = static_cast<double>(_numIterations);
+                        _failureProbability =
+                            1.0 - std::pow((numRanks_d - numExpectedFailures_d) / numRanks_d, 1.0 / numIterations_d);
+                    } else {
+                        _fail("The expected failure rate must be greater than 0 and smaller than 1.");
+                    }
                 }
             }
         }
@@ -214,8 +236,20 @@ class CommandLineOptions {
         return _validConfiguration;
     }
 
-    unsigned long seed() const {
+    unsigned long dataGenerationSeed() const {
         return _seed;
+    }
+
+    unsigned long clusterCenterSeed() const {
+        return _seed;
+    }
+
+    unsigned long failureSimulatorSeed() const {
+        if (_failureSimulatorSeed) {
+            return _failureSimulatorSeed.value();
+        } else {
+            return _seed;
+        }
     }
 
     size_t numRepetitions() const {
@@ -239,20 +273,20 @@ class CommandLineOptions {
         return _mode;
     }
 
-    // double failureProbability() const {
-    //     assert(_failureProbability >= 0 && _failureProbability <= 1);
-    //     return _failureProbability;
-    // }
+    double failureProbability() const {
+        assert(_failureProbability >= 0 && _failureProbability <= 1);
+        return _failureProbability;
+    }
 
     bool simulateFailures() const {
-        // assert(_failureProbability >= 0 && _failureProbability <= 1);
-        // return _failureProbability > 0 || _numFailures > 0;
-        return numFailures() > 0;
+        assert(_failureProbability >= 0 && _failureProbability <= 1);
+        return _failureProbability > 0 || _numFailures > 0;
+        // return numFailures() > 0;
     }
 
-    uint64_t numFailures() const {
-        return _numFailures;
-    }
+    // uint64_t numFailures() const {
+    //     return _numFailures;
+    // }
 
     std::string inputFile() const {
         return _inputFile;
@@ -287,23 +321,24 @@ class CommandLineOptions {
     }
 
     private:
-    size_t      _numDataPointsPerRank;
-    size_t      _numCenters;
-    size_t      _numIterations;
-    size_t      _numDimensions;
-    uint16_t    _replicationLevel;
-    Mode        _mode;
-    std::string _inputFile;
-    std::string _outputFile;
-    std::string _repeatId;
-    // double        _failureProbability = 0;
-    uint64_t      _numFailures       = 0;
-    unsigned long _seed              = 0;
-    bool          _useFaultTolerance = false;
-    bool          _printCSVHeader    = true;
-    size_t        _numRepetitions    = 1;
-    std::string   _simulationId;
-    bool          _validConfiguration = true;
+    size_t                       _numDataPointsPerRank;
+    size_t                       _numCenters;
+    size_t                       _numIterations;
+    size_t                       _numDimensions;
+    uint16_t                     _replicationLevel;
+    Mode                         _mode;
+    std::string                  _inputFile;
+    std::string                  _outputFile;
+    std::string                  _repeatId;
+    double                       _failureProbability   = 0;
+    uint64_t                     _numFailures          = 0;
+    unsigned long                _seed                 = 0;
+    std::optional<unsigned long> _failureSimulatorSeed = std::nullopt;
+    bool                         _useFaultTolerance    = false;
+    bool                         _printCSVHeader       = true;
+    size_t                       _numRepetitions       = 1;
+    std::string                  _simulationId;
+    bool                         _validConfiguration = true;
 
     void _fail(const char* msg) {
         std::cerr << msg << std::endl;
@@ -351,9 +386,12 @@ void writeMeasurementsToFile(
     resultPrinter.allResults("numDimensions", options.numDimensions());
     resultPrinter.allResults("useFaultTolerance", options.useFaultTolerance());
     resultPrinter.allResults("replicationLevel", options.replicationLevel());
-    resultPrinter.allResults("seed", options.seed());
-    resultPrinter.thisResult(measurements);
+    resultPrinter.allResults("failureSimulatorSeed", options.failureSimulatorSeed());
+    resultPrinter.allResults("clusterCenterSeed", options.clusterCenterSeed());
+
+    resultPrinter.thisResult("failureProbability", options.failureProbability());
     resultPrinter.thisResult("numSimulatedRankFailures", numFailures);
+    resultPrinter.thisResult(measurements);
     resultPrinter.finalizeAndPrintResult();
 }
 
@@ -397,7 +435,7 @@ void writeDataAssignmentToFile(
 
 void generateData(ReStoreMPI::MPIContext& mpiContext, const CommandLineOptions& options) {
     TIME_NEXT_SECTION("generate-data");
-    auto thisRanksSeed = options.seed() + asserting_cast<unsigned long>(mpiContext.getMyCurrentRank());
+    auto thisRanksSeed = options.dataGenerationSeed() + asserting_cast<unsigned long>(mpiContext.getMyCurrentRank());
     auto data =
         kmeans::generateRandomData<float>(options.numDataPointsPerRank(), options.numDimensions(), thisRanksSeed);
     kmeans::writeDataToFile(data, options.generatedDataOutputFile(mpiContext.getMyCurrentRank()));
@@ -415,21 +453,19 @@ void runKMeansAndReport(ReStoreMPI::MPIContext& mpiContext, CommandLineOptions& 
     options.numDataPointsPerRank(kmeansInstance.numDataPoints());
 
     TIME_NEXT_SECTION("pick-centers");
-    kmeansInstance.pickCentersRandomly(options.numCenters(), options.seed());
+    kmeansInstance.pickCentersRandomly(options.numCenters(), options.clusterCenterSeed());
     TIME_STOP();
 
     // Initialize Failure Simulator
     std::optional<ProbabilisticFailureSimulator> failureSimulator = std::nullopt;
     if (options.simulateFailures()) {
-        // failureSimulator.emplace(options.seed(), options.failureProbability());
-        failureSimulator.emplace(options.seed(), 0.5);
+        failureSimulator.emplace(options.failureSimulatorSeed(), options.failureProbability());
     }
 
     long unsigned int numSimulatedRankFailures = 0;
-    unsigned long     failuresToSimulate       = options.numFailures();
-    unsigned long     failEvery = failuresToSimulate == 0 ? 0 : options.numIterations() / failuresToSimulate;
 
     // Perform the iterations
+    std::unordered_set<int> ranksToFail;
     for (uint64_t iteration = 0; iteration < options.numIterations(); ++iteration) {
         // Perform one iteration
         TIME_NEXT_SECTION("perform-iterations");
@@ -437,11 +473,11 @@ void runKMeansAndReport(ReStoreMPI::MPIContext& mpiContext, CommandLineOptions& 
         TIME_STOP();
 
         // Shall we simulate a failure?
-        if (options.simulateFailures() && (iteration % failEvery == 0)) {
+        if (options.simulateFailures()) {
             assert(failureSimulator.has_value());
-            auto                    numAliveRanks = mpiContext.getCurrentSize();
-            std::unordered_set<int> ranksToFail;
-            failureSimulator->failRanksNow(numAliveRanks, 1, ranksToFail, true);
+            auto numAliveRanks = mpiContext.getCurrentSize();
+            ranksToFail.clear();
+            failureSimulator->maybeFailRanks(numAliveRanks, ranksToFail);
             numSimulatedRankFailures += ranksToFail.size();
             if (ranksToFail.size() > 0) {
                 MPI_Comm newComm = simulateFailure(mpiContext.getMyCurrentRank(), mpiContext.getComm(), ranksToFail);
@@ -469,13 +505,13 @@ int main(int argc, char** argv) {
     using namespace kmeans;
 
     // Parse command line arguments and initialize MPI
-    CommandLineOptions options(argc, argv);
-    if (!options.validConfiguration()) {
-        exit(1);
-    }
     MPI_Init(&argc, &argv);
     ReStoreMPI::MPIContext mpiContext(MPI_COMM_WORLD);
 
+    CommandLineOptions options(argc, argv, mpiContext.getCurrentSize());
+    if (!options.validConfiguration()) {
+        exit(1);
+    }
     // Perform the requested operation
     if (options.mode() == CommandLineOptions::Mode::GenerateData) {
         generateData(mpiContext, options);
