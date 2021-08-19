@@ -62,6 +62,10 @@ class TimerRegister {
 
     // start new timer phase, stop the currently running one.
     void start(const char* timer) {
+        if (strcmp(timer, "total") == 0) {
+            throw std::invalid_argument("total is a reserved timer name and will be computed automatically.");
+        }
+
         assert(timer != nullptr);
         uint32_t hash = hash_djb2(timer);
         if (running_ && hash == running_hash_ && strcmp(running_, timer) == 0) {
@@ -177,8 +181,11 @@ class TimerRegister {
     std::vector<std::pair<const char*, double>> getAllTimers() {
         std::vector<std::pair<const char*, double>> result;
         std::transform(timers_.begin(), timers_.end(), std::back_inserter(result), [](const Entry& entry) {
+            assert(entry.name != nullptr);
+            assert(strcmp(entry.name, "total") != 0);
             return std::make_pair(entry.name, entry.duration.count());
         });
+        result.push_back(std::make_pair("total", total()));
         return result;
     }
 
