@@ -398,8 +398,8 @@ class kMeansAlgorithm {
                                  - _centers->getElementDimension(centerIdx, dimension);
                     distanceToCenter += delta * delta;
                 }
-                // TODO We probably don't need this
-                distanceToCenter = std::sqrt(distanceToCenter);
+                // We don't need to comput the square root, as we are only comparing the distance and sqrt is strictly monotonic.
+                //distanceToCenter = std::sqrt(distanceToCenter);
                 if (distanceToCenter < distanceToClosestCenter) {
                     closestCenter           = centerIdx;
                     distanceToClosestCenter = distanceToCenter;
