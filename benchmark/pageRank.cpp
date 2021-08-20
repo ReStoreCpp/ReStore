@@ -52,7 +52,7 @@ readGraph(std::string graph) {
     int numRanks = -1;
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
-    assert(myRank > 0);
+    assert(myRank >= 0);
     assert(numRanks > 0);
 
     std::ifstream infile(graph);
