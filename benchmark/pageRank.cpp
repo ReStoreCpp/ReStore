@@ -5,6 +5,7 @@
 #include "restore/equal_load_balancer.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
+#include "restore/timer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -25,6 +26,7 @@
 #if USE_FTMPI
     #include <mpi-ext.h>
 #endif
+
 
 static_assert(
     USE_FTMPI || SIMULATE_FAILURES,
@@ -287,7 +289,11 @@ std::vector<double> pageRank(
         bool   updatedEdges = false;
         bool   anotherPass  = false;
         do {
-            anotherPass = false;
+            bool isRecomputation = anotherPass;
+            anotherPass          = false;
+            if (isRecomputation) {
+                TIME_PUSH_AND_START("Recomputation");
+            }
             for (; i < edges.size(); ++i) {
                 const size_t from             = static_cast<size_t>(edges[i].from);
                 const size_t to               = static_cast<size_t>(edges[i].to);
@@ -319,9 +325,14 @@ std::vector<double> pageRank(
                 if (amIDead) {
                     return currPageRanks;
                 }
+                TIME_PUSH_AND_START("Recovery");
                 recoverFromFailure(numEdges, edges, reStore, loadBalancer, myRank, numRanks);
+                TIME_POP("Recovery");
                 updatedEdges = true;
                 anotherPass  = true;
+            }
+            if (isRecomputation) {
+                TIME_POP("Recomputation");
             }
         } while (anotherPass);
         std::swap(currPageRanks, tempPageRanks);
@@ -442,9 +453,11 @@ int main(int argc, char** argv) {
     auto failureSimulator = ProbabilisticFailureSimulator(seed, failureProbability);
 
     auto start = MPI_Wtime();
+    // TIME_NEXT_SECTION("Read graph");
     auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees, blockDistribution] =
         readGraph(options["graph"].as<std::string>());
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
+    // TIME_STOP();
     auto end  = MPI_Wtime();
     auto time = end - start;
     if (myRank == 0) {
@@ -454,6 +467,7 @@ int main(int argc, char** argv) {
     ReStore::EqualLoadBalancer loadBalancer(blockDistribution, numRanks);
 
     start = MPI_Wtime();
+    TIME_NEXT_SECTION("Init ReStore and submit");
     ReStore::ReStore<edge_t> reStore(
         comm, asserting_cast<uint16_t>(numReplications), ReStore::OffsetMode::constant, sizeof(edge_t));
 
@@ -464,9 +478,8 @@ int main(int argc, char** argv) {
             return std::nullopt;
         } else {
             ++currentEdgeId;
-            return ReStore::NextBlock<edge_t>{
-                asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
-                edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
+            return ReStore::NextBlock<edge_t>{asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
+                                              edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
         }
     };
 
@@ -475,30 +488,40 @@ int main(int argc, char** argv) {
     };
 
     reStore.submitBlocks(serializeBlock, getNextBlock, asserting_cast<ReStore::block_id_t>(numEdges));
+    TIME_STOP();
     end  = MPI_Wtime();
     time = end - start;
-    if (myRank == 0) {
-        std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
-        std::cout << "Starting with " << numRanks << " ranks" << std::endl;
-    }
+    // if (myRank == 0) {
+    //     std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
+    //     std::cout << "Starting with " << numRanks << " ranks" << std::endl;
+    // }
 
     MPI_Barrier(comm);
     std::vector<double> result;
     start = MPI_Wtime();
+    TIME_NEXT_SECTION("Pagerank");
     for (size_t i = 0; i < numRepetitions; ++i) {
         result = pageRank(
             numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore, loadBalancer, failureSimulator);
     }
-    end             = MPI_Wtime();
-    time            = end - start;
-    auto timePerRun = time / static_cast<double>(numRepetitions);
+    TIME_STOP();
+    end  = MPI_Wtime();
+    time = end - start;
+    // auto timePerRun = time / static_cast<double>(numRepetitions);
 
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
 
+    // if (myRank == 0 && !amIDead) {
+    //     std::cout << "Finished with " << numRanks << " ranks" << std::endl;
+    //     std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+    // }
+
     if (myRank == 0 && !amIDead) {
-        std::cout << "Finished with " << numRanks << " ranks" << std::endl;
-        std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+        ResultsCSVPrinter resultPrinter(std::cout, true);
+        auto              timers = TimerRegister::instance().getAllTimers();
+        resultPrinter.thisResult(timers);
+        resultPrinter.finalizeAndPrintResult();
     }
 
     if (doOutput && myRank == 0 && !amIDead) {
