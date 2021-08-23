@@ -17,17 +17,22 @@ class ProbabilisticFailureSimulator {
     }
 
     // Fails every rank with the given failureProbability
-    void
-    maybeFailRanks(int numRanks, std::unordered_set<int>& outVec) {
+    void maybeFailRanks(int numRanks, std::unordered_set<int>& outVec) {
         assert(prob >= 0.0);
         assert(prob <= 1.0);
 
         int pos = 0;
-        while (pos < numRanks && outVec.size()) {
+        while (pos < numRanks) {
+            // Each rank follows a Bernoulli distribution where success indicated that this rank failed. Insted of
+            // drawing from a Bernoulli distribution for each rank individually, we can use a geometric distribution
+            // which gives us the number of unsuccessful attempts before a successful one. This requires fewer
+            // computations.
             pos += dist(gen);
             if (pos < numRanks) {
                 outVec.insert(pos);
             }
+            // The C++ geometric distribution returns the number of unsuccessful attempts before a successful one. To
+            // not draw the same rank twice, we have to increment here.
             pos++;
         }
     }
