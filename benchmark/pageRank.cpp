@@ -270,8 +270,9 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
 
 std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
-    const std::vector<node_t>& nodeDegrees, const double dampening, const double tol, ReStore::ReStore<edge_t>& reStore,
-    ReStore::EqualLoadBalancer& loadBalancer, ProbabilisticFailureSimulator& failureSimulator) {
+    const std::vector<node_t>& nodeDegrees, const double dampening, const int numIterations,
+    ReStore::ReStore<edge_t>& reStore, ReStore::EqualLoadBalancer& loadBalancer,
+    ProbabilisticFailureSimulator& failureSimulator) {
     UNUSED(numEdges);
     int myRank;
     int numRanks;
@@ -282,7 +283,7 @@ std::vector<double> pageRank(
     std::vector<double> tempPageRanks(static_cast<size_t>(numVertices), 0);
     const int           n        = static_cast<int>(nodeDegrees.size());
     const double        teleport = (1.0 - dampening) / n;
-    while (calcDiffL2Norm(prevPageRanks, currPageRanks) > tol) {
+    for (int currentIt = 0; currentIt < numIterations; ++currentIt) {
         std::swap(prevPageRanks, currPageRanks);
         std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
         size_t i            = 0;
@@ -391,11 +392,8 @@ int main(int argc, char** argv) {
         ("s,sort", "sort the output", cxxopts::value<bool>()->default_value("false"))                          ///
         ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
         ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85"))                  ///
-        ("t,tolerance",
-         "Tolerance for stopping PageRank iterations. Stops when the l2 norm of the difference between two "
-         "iterations "
-         "drops below the tolerance.",
-         cxxopts::value<double>()->default_value("0.000000001"))                                         ///
+        ("n,numIterations", "Number of PageRank iterations to run",
+         cxxopts::value<int>()->default_value("100"))                                                    ///
         ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("10")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3"))                                                     ///
@@ -443,7 +441,7 @@ int main(int argc, char** argv) {
 
     const auto   numRepetitions = options["repetitions"].as<size_t>();
     const double dampening      = options["dampening"].as<double>();
-    const double tolerance      = options["tolerance"].as<double>();
+    const int    numIterations  = options["numIterations"].as<int>();
 
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
 
@@ -502,7 +500,8 @@ int main(int argc, char** argv) {
     TIME_NEXT_SECTION("Pagerank");
     for (size_t i = 0; i < numRepetitions; ++i) {
         result = pageRank(
-            numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore, loadBalancer, failureSimulator);
+            numVertices, numEdges, edges, nodeDegrees, dampening, numIterations, reStore, loadBalancer,
+            failureSimulator);
     }
     TIME_STOP();
     end  = MPI_Wtime();
