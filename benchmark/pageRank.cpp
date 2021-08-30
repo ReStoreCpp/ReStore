@@ -289,6 +289,10 @@ std::vector<double> pageRank(
         size_t i            = 0;
         bool   updatedEdges = false;
         bool   anotherPass  = false;
+
+        ranksToKill.clear();
+        failureSimulator.maybeFailRanks(numRanks, ranksToKill);
+
         do {
             bool isRecomputation = anotherPass;
             anotherPass          = false;
@@ -310,8 +314,6 @@ std::vector<double> pageRank(
             // Failure simulation
             MPI_Comm_rank(comm, &myRank);
             MPI_Comm_size(comm, &numRanks);
-            ranksToKill.clear();
-            failureSimulator.maybeFailRanks(numRanks, ranksToKill);
             // if (myRank == 0) {
             //     std::cout << "Killing ranks ";
             //     for (const auto rankToKill: ranksToKill) {
@@ -489,10 +491,10 @@ int main(int argc, char** argv) {
     TIME_STOP();
     end  = MPI_Wtime();
     time = end - start;
-    // if (myRank == 0) {
-    //     std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
-    //     std::cout << "Starting with " << numRanks << " ranks" << std::endl;
-    // }
+    if (myRank == 0) {
+        //     std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
+        std::cout << "Starting with " << numRanks << " ranks" << std::endl;
+    }
 
     MPI_Barrier(comm);
     std::vector<double> result;
@@ -511,10 +513,10 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
 
-    // if (myRank == 0 && !amIDead) {
-    //     std::cout << "Finished with " << numRanks << " ranks" << std::endl;
-    //     std::cout << "Time per run: " << timePerRun << " s" << std::endl;
-    // }
+    if (myRank == 0 && !amIDead) {
+        std::cout << "Finished with " << numRanks << " ranks" << std::endl;
+        //     std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+    }
 
     if (myRank == 0 && !amIDead) {
         ResultsCSVPrinter resultPrinter(std::cout, true);
