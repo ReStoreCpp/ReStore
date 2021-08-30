@@ -22,7 +22,18 @@ sortOutput = args.sort
 printOutput=args.print
 repetitions = args.repetitions
 
-G = nk.readGraph(inputPath, nk.Format.EdgeList, separator=" ", firstNode=1, directed=True)
+
+G = nk.graph.Graph(weighted=False, directed=True)
+with open(inputPath, "r") as graphFile:
+    for line in graphFile:
+        words = line.split(" ")
+        if line.startswith("p"):
+            G.addNodes(int(words[1]))
+        if line.startswith("e"):
+            u = int(words[1]) - 1
+            v = int(words[2]) - 1
+            G.addEdge(u,v)
+
 start = time.time()
 for i in range(repetitions):
     pr = nk.centrality.PageRank(G, damp=0.85, tol=0.000000001)
