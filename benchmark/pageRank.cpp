@@ -5,6 +5,7 @@
 #include "restore/equal_load_balancer.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
+#include "restore/timer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -25,6 +26,7 @@
 #if USE_FTMPI
     #include <mpi-ext.h>
 #endif
+
 
 static_assert(
     USE_FTMPI || SIMULATE_FAILURES,
@@ -52,7 +54,7 @@ readGraph(std::string graph) {
     int numRanks = -1;
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
-    assert(myRank > 0);
+    assert(myRank >= 0);
     assert(numRanks > 0);
 
     std::ifstream infile(graph);
@@ -268,8 +270,9 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
 
 std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
-    const std::vector<node_t>& nodeDegrees, const double dampening, const double tol, ReStore::ReStore<edge_t>& reStore,
-    ReStore::EqualLoadBalancer& loadBalancer, ProbabilisticFailureSimulator& failureSimulator) {
+    const std::vector<node_t>& nodeDegrees, const double dampening, const int numIterations,
+    ReStore::ReStore<edge_t>& reStore, ReStore::EqualLoadBalancer& loadBalancer,
+    ProbabilisticFailureSimulator& failureSimulator) {
     UNUSED(numEdges);
     int myRank;
     int numRanks;
@@ -280,14 +283,22 @@ std::vector<double> pageRank(
     std::vector<double> tempPageRanks(static_cast<size_t>(numVertices), 0);
     const int           n        = static_cast<int>(nodeDegrees.size());
     const double        teleport = (1.0 - dampening) / n;
-    while (calcDiffL2Norm(prevPageRanks, currPageRanks) > tol) {
+    for (int currentIt = 0; currentIt < numIterations; ++currentIt) {
         std::swap(prevPageRanks, currPageRanks);
         std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
         size_t i            = 0;
         bool   updatedEdges = false;
         bool   anotherPass  = false;
+
+        ranksToKill.clear();
+        failureSimulator.maybeFailRanks(numRanks, ranksToKill);
+
         do {
-            anotherPass = false;
+            bool isRecomputation = anotherPass;
+            anotherPass          = false;
+            if (isRecomputation) {
+                TIME_PUSH_AND_START("Recomputation");
+            }
             for (; i < edges.size(); ++i) {
                 const size_t from             = static_cast<size_t>(edges[i].from);
                 const size_t to               = static_cast<size_t>(edges[i].to);
@@ -303,8 +314,6 @@ std::vector<double> pageRank(
             // Failure simulation
             MPI_Comm_rank(comm, &myRank);
             MPI_Comm_size(comm, &numRanks);
-            ranksToKill.clear();
-            failureSimulator.maybeFailRanks(numRanks, ranksToKill);
             // if (myRank == 0) {
             //     std::cout << "Killing ranks ";
             //     for (const auto rankToKill: ranksToKill) {
@@ -319,9 +328,14 @@ std::vector<double> pageRank(
                 if (amIDead) {
                     return currPageRanks;
                 }
+                TIME_PUSH_AND_START("Recovery");
                 recoverFromFailure(numEdges, edges, reStore, loadBalancer, myRank, numRanks);
+                TIME_POP("Recovery");
                 updatedEdges = true;
                 anotherPass  = true;
+            }
+            if (isRecomputation) {
+                TIME_POP("Recomputation");
             }
         } while (anotherPass);
         std::swap(currPageRanks, tempPageRanks);
@@ -363,6 +377,12 @@ void writePageRanks(const std::vector<double>& pageRanks, const std::string& pat
     outfile.close();
 }
 
+double getFailureProbabilityForExpectedNumberOfFailures(
+    const int numIterations, const int numPEs, const double percentFailures) {
+    // Discrete exponential decay
+    return 1 - pow(((1.0 * (numPEs - (percentFailures * numPEs))) / numPEs), (1.0 / numIterations));
+}
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
@@ -380,16 +400,13 @@ int main(int argc, char** argv) {
         ("s,sort", "sort the output", cxxopts::value<bool>()->default_value("false"))                          ///
         ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
         ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85"))                  ///
-        ("t,tolerance",
-         "Tolerance for stopping PageRank iterations. Stops when the l2 norm of the difference between two "
-         "iterations "
-         "drops below the tolerance.",
-         cxxopts::value<double>()->default_value("0.000000001"))                                         ///
-        ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("10")) ///
+        ("n,numIterations", "Number of PageRank iterations to run",
+         cxxopts::value<int>()->default_value("100"))                                                   ///
+        ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("1")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3"))                                                     ///
         ("seed", "The seed for failure simulation.", cxxopts::value<unsigned long>()->default_value("42")) ///
-        ("prob", "Probability for a rank to fail on every communication round.",
+        ("percentFailures", "Expected ratio of PEs to fail during the calculation.",
          cxxopts::value<double>()->default_value("0.1")) ///
         ("h,help", "Print help message.");
 
@@ -432,19 +449,27 @@ int main(int argc, char** argv) {
 
     const auto   numRepetitions = options["repetitions"].as<size_t>();
     const double dampening      = options["dampening"].as<double>();
-    const double tolerance      = options["tolerance"].as<double>();
+    const int    numIterations  = options["numIterations"].as<int>();
 
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
 
-    const auto seed               = options["seed"].as<unsigned long>();
-    const auto failureProbability = options["prob"].as<double>();
+    const auto seed            = options["seed"].as<unsigned long>();
+    const auto percentFailures = options["percentFailures"].as<double>();
+
+    double failureProbability =
+        getFailureProbabilityForExpectedNumberOfFailures(numIterations, numRanks, percentFailures);
+    if (myRank == 0) {
+        std::cout << "Using failure probability " << failureProbability * 100 << "%" << std::endl;
+    }
 
     auto failureSimulator = ProbabilisticFailureSimulator(seed, failureProbability);
 
     auto start = MPI_Wtime();
+    // TIME_NEXT_SECTION("Read graph");
     auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees, blockDistribution] =
         readGraph(options["graph"].as<std::string>());
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
+    // TIME_STOP();
     auto end  = MPI_Wtime();
     auto time = end - start;
     if (myRank == 0) {
@@ -454,6 +479,7 @@ int main(int argc, char** argv) {
     ReStore::EqualLoadBalancer loadBalancer(blockDistribution, numRanks);
 
     start = MPI_Wtime();
+    TIME_NEXT_SECTION("Init ReStore and submit");
     ReStore::ReStore<edge_t> reStore(
         comm, asserting_cast<uint16_t>(numReplications), ReStore::OffsetMode::constant, sizeof(edge_t));
 
@@ -464,9 +490,8 @@ int main(int argc, char** argv) {
             return std::nullopt;
         } else {
             ++currentEdgeId;
-            return ReStore::NextBlock<edge_t>{
-                asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
-                edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
+            return ReStore::NextBlock<edge_t>{asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
+                                              edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
         }
     };
 
@@ -475,30 +500,41 @@ int main(int argc, char** argv) {
     };
 
     reStore.submitBlocks(serializeBlock, getNextBlock, asserting_cast<ReStore::block_id_t>(numEdges));
+    TIME_STOP();
     end  = MPI_Wtime();
     time = end - start;
     if (myRank == 0) {
-        std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
+        //     std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
         std::cout << "Starting with " << numRanks << " ranks" << std::endl;
     }
 
     MPI_Barrier(comm);
     std::vector<double> result;
     start = MPI_Wtime();
+    TIME_NEXT_SECTION("Pagerank");
     for (size_t i = 0; i < numRepetitions; ++i) {
         result = pageRank(
-            numVertices, numEdges, edges, nodeDegrees, dampening, tolerance, reStore, loadBalancer, failureSimulator);
+            numVertices, numEdges, edges, nodeDegrees, dampening, numIterations, reStore, loadBalancer,
+            failureSimulator);
     }
-    end             = MPI_Wtime();
-    time            = end - start;
-    auto timePerRun = time / static_cast<double>(numRepetitions);
+    TIME_STOP();
+    end  = MPI_Wtime();
+    time = end - start;
+    // auto timePerRun = time / static_cast<double>(numRepetitions);
 
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
 
     if (myRank == 0 && !amIDead) {
         std::cout << "Finished with " << numRanks << " ranks" << std::endl;
-        std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+        //     std::cout << "Time per run: " << timePerRun << " s" << std::endl;
+    }
+
+    if (myRank == 0 && !amIDead) {
+        ResultsCSVPrinter resultPrinter(std::cout, true);
+        auto              timers = TimerRegister::instance().getAllTimers();
+        resultPrinter.thisResult(timers);
+        resultPrinter.finalizeAndPrintResult();
     }
 
     if (doOutput && myRank == 0 && !amIDead) {

@@ -27,6 +27,7 @@ target_include_directories(${PAGERANK} SYSTEM PRIVATE ../extern/)
 target_include_directories(${PAGERANK} PRIVATE ../include/)
 target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxxopts")
 target_compile_options(${PAGERANK} PRIVATE -O3 "${WARNING_FLAGS}")
+target_compile_definitions(${PAGERANK} PRIVATE "ENABLE_TIMERS")
 
 # TODO Shall we put this in the root CMakeLists.txt?
 # Load the backward-cpp library

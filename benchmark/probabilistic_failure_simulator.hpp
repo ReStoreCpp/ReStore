@@ -21,6 +21,8 @@ class ProbabilisticFailureSimulator {
         assert(prob >= 0.0);
         assert(prob <= 1.0);
 
+        if (prob == 0)
+            return;
         int pos = 0;
         while (pos < numRanks) {
             // Each rank follows a Bernoulli distribution where success indicated that this rank failed. Insted of
