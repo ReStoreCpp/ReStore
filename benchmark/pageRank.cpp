@@ -459,7 +459,7 @@ int main(int argc, char** argv) {
     double failureProbability =
         getFailureProbabilityForExpectedNumberOfFailures(numIterations, numRanks, percentFailures);
     if (myRank == 0) {
-        std::cout << "Using failure probablity " << failureProbability * 100 << "%" << std::endl;
+        std::cout << "Using failure probability " << failureProbability * 100 << "%" << std::endl;
     }
 
     auto failureSimulator = ProbabilisticFailureSimulator(seed, failureProbability);
