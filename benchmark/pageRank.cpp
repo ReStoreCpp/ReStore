@@ -377,6 +377,12 @@ void writePageRanks(const std::vector<double>& pageRanks, const std::string& pat
     outfile.close();
 }
 
+double getFailureProbabilityForExpectedNumberOfFailures(
+    const int numIterations, const int numPEs, const double percentFailures) {
+    // Discrete exponential decay
+    return 1 - pow(((1.0 * (numPEs - (percentFailures * numPEs))) / numPEs), (1.0 / numIterations));
+}
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
@@ -395,12 +401,12 @@ int main(int argc, char** argv) {
         ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
         ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85"))                  ///
         ("n,numIterations", "Number of PageRank iterations to run",
-         cxxopts::value<int>()->default_value("100"))                                                    ///
-        ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("10")) ///
+         cxxopts::value<int>()->default_value("100"))                                                   ///
+        ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("1")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3"))                                                     ///
         ("seed", "The seed for failure simulation.", cxxopts::value<unsigned long>()->default_value("42")) ///
-        ("prob", "Probability for a rank to fail on every communication round.",
+        ("percentFailures", "Expected ratio of PEs to fail during the calculation.",
          cxxopts::value<double>()->default_value("0.1")) ///
         ("h,help", "Print help message.");
 
@@ -447,8 +453,14 @@ int main(int argc, char** argv) {
 
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
 
-    const auto seed               = options["seed"].as<unsigned long>();
-    const auto failureProbability = options["prob"].as<double>();
+    const auto seed            = options["seed"].as<unsigned long>();
+    const auto percentFailures = options["percentFailures"].as<double>();
+
+    double failureProbability =
+        getFailureProbabilityForExpectedNumberOfFailures(numIterations, numRanks, percentFailures);
+    if (myRank == 0) {
+        std::cout << "Using failure probablity " << failureProbability * 100 << "%" << std::endl;
+    }
 
     auto failureSimulator = ProbabilisticFailureSimulator(seed, failureProbability);
 
