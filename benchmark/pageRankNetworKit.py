@@ -20,6 +20,7 @@ parser.add_argument("-p", "--print", help="print the first 20 scores of the outp
 parser.add_argument("-t", "--test", help="test the mpi implementation against networkit results",
                     action="store_true")
 parser.add_argument("-e", "--executable", help="path to the mpi executable")
+parser.add_argument("-m", "--mpirun", help="path to the mpirun")
 
 args = parser.parse_args()
 
@@ -30,6 +31,10 @@ printOutput=args.print
 repetitions = args.repetitions
 doTest = args.test
 executable = args.executable
+mpirun = args.mpirun
+
+if mpirun == "":
+    mpirun = "mpirun"
 
 
 G = nk.graph.Graph(weighted=False, directed=True)
@@ -64,7 +69,7 @@ if printOutput:
         print(str(nodesWithScores[i]))
 
 if doTest:
-    mpiOutput = subprocess.check_output(["mpirun", "-np", "4", executable, inputPath, "-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"])
+    mpiOutput = subprocess.check_output([mpirun, "-np", "4", executable, inputPath, "-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"])
     mpiOutput = mpiOutput.decode('UTF-8')
 
     resultsStarted = False
