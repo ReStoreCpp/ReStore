@@ -210,7 +210,7 @@ configure_file(${CMAKE_SOURCE_DIR}/benchmark/pageRankNetworKit.py ${CMAKE_CURREN
 
 add_test( # Register the custom test
   NAME TestPageRank_Full
-  COMMAND python3 pageRankNetworKit.py PageRankTestGraph.dimacs --test -e ./pageRankForTest
+  COMMAND python3 pageRankNetworKit.py PageRankTestGraph.dimacs --test -e ./pageRankForTest -m ${MPIEXEC_EXECUTABLE}
   )
 
 # Make ctest play nicely with Demian's spacemacs
