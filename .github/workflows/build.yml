@@ -28,7 +28,7 @@ jobs:
       id: ulfm-cache
       with:
         path: ~/ulfm
-        key: ${{ runner.os }}
+        key: ${{ runner.os }}-ulfm
     - name: ulfm
       if: steps.ulfm-cache.outputs.cache-hit != 'true'
       run: git clone --recursive https://bitbucket.org/icldistcomp/ulfm2.git && cd ulfm2 && ./autogen.pl && ./configure --prefix="$HOME/ulfm" --enable-mpi-fortran=no --with-pmi2 --with-ucx=no && make -j && make install
@@ -45,13 +45,8 @@ jobs:
     - name: Cache pip
       uses: actions/cache@v2
       with:
-        # This path is specific to Ubuntu
         path: ~/.cache/pip
-        # Look to see if there is a cache hit for the corresponding requirements file
         key: ${{ runner.os }}-pip-networkit
-        restore-keys: |
-          ${{ runner.os }}-pip-
-          ${{ runner.os }}-
     - name: Install networkit dependencies
       run: pip install cython numpy scipy wheel pandas
     - name: Install networkit
