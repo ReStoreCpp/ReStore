@@ -363,6 +363,7 @@ void outputPageRanks(
         });
     }
 
+    stream << "----------------------- RESULTS" << std::endl;
     for (size_t i = 0; i < numVerticesToOutput; ++i) {
         auto node = indices[i];
         stream << node << " " << pageRanks[node] << std::endl;
