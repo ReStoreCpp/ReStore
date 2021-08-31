@@ -53,7 +53,7 @@ jobs:
           ${{ runner.os }}-pip-
           ${{ runner.os }}-
     - name: Install networkit dependencies
-      run: pip install cython numpy scipy cython wheel
+      run: pip install cython numpy scipy wheel
     - name: Install networkit
       run: pip install networkit
     - name: make check
