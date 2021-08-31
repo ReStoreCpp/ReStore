@@ -42,11 +42,16 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: '3.x'
-    - name: Cache pip
+    - name: Cache pip cache
       uses: actions/cache@v2
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-networkit
+        key: ${{ runner.os }}-pip-cache
+    - name: Cache installed libs
+      uses: actions/cache@v2
+      with:
+        path: ~/.local/lib/python*
+        key: ${{ runner.os }}-pip-libs
     - name: Install networkit dependencies
       run: pip install cython numpy scipy wheel pandas
     - name: Install networkit
