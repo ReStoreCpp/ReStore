@@ -69,7 +69,7 @@ if printOutput:
         print(str(nodesWithScores[i]))
 
 if doTest:
-    mpiOutput = subprocess.check_output([mpirun, "-np", "4", executable, inputPath, "-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"])
+    mpiOutput = subprocess.check_output([mpirun, "-np", "4", "--oversubscribe", executable, inputPath, "-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"])
     mpiOutput = mpiOutput.decode('UTF-8')
 
     resultsStarted = False
