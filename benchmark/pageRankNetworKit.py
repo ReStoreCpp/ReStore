@@ -4,6 +4,10 @@ import networkit as nk
 import sys
 import argparse
 import time
+import subprocess
+
+import math
+
 
 parser = argparse.ArgumentParser(description="Calculate PageRank scores using NetworKit")
 parser.add_argument("inputPath")
@@ -13,6 +17,9 @@ parser.add_argument("-o", "--outputPath", help="path to write the output")
 parser.add_argument("-r", "--repetitions", help="number of repetitions to run", type=int, default=1)
 parser.add_argument("-p", "--print", help="print the first 20 scores of the output",
                     action="store_true")
+parser.add_argument("-t", "--test", help="test the mpi implementation against networkit results",
+                    action="store_true")
+parser.add_argument("-e", "--executable", help="path to the mpi executable")
 
 args = parser.parse_args()
 
@@ -21,6 +28,8 @@ outputPath = args.outputPath
 sortOutput = args.sort
 printOutput=args.print
 repetitions = args.repetitions
+doTest = args.test
+executable = args.executable
 
 
 G = nk.graph.Graph(weighted=False, directed=True)
@@ -39,7 +48,8 @@ for i in range(repetitions):
     pr = nk.centrality.PageRank(G, damp=0.85, tol=0.000000001)
     pr.run()
 end=time.time()
-print("time: " +str((end - start)/repetitions))
+if not doTest:
+    print("time: " +str((end - start)/repetitions))
 scores = pr.scores()
 
 assert(len(scores) == G.numberOfNodes())
@@ -52,3 +62,31 @@ if sortOutput:
 if printOutput:
     for i in range(20):
         print(str(nodesWithScores[i]))
+
+if doTest:
+    mpiOutput = subprocess.check_output(["mpirun", "-np", "4", executable, inputPath, "-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"])
+    mpiOutput = mpiOutput.decode('UTF-8')
+
+    resultsStarted = False
+    mpiResult = []
+    for line in mpiOutput.splitlines():
+        if "RESULTS" in line:
+            resultsStarted = True
+        elif resultsStarted:
+            words = line.split(" ")
+            nodeId = int(words[0])
+            nodeScore = float(words[1])
+            mpiResult.append((nodeId, nodeScore))
+
+    networkitScores = nodesWithScores
+    networkitScores.sort(key=lambda nodeScore: nodeScore[1], reverse=True)
+    networkitScores = networkitScores[:20]
+
+    for networkitResult, mpiResult in zip(networkitScores, mpiResult):
+        networkitNode = networkitResult[0]
+        mpiNode = mpiResult[0]
+        assert(networkitNode == mpiNode)
+        networkitScore = networkitResult[1]
+        mpiScore = mpiResult[1]
+        assert(math.isclose(networkitScore, mpiScore, rel_tol=1e-5))
+    print("SUCCESS")

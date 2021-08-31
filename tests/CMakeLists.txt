@@ -184,5 +184,34 @@ restore_add_mpi_test(
     4 "ReStore::ReStore;ReStore::kmeans"
 )
 
+# PageRank Tests
+set(PAGERANK "pageRankForTest")
+add_executable(${PAGERANK} ../benchmark/pageRank.cpp)
+target_include_directories(${PAGERANK} SYSTEM PRIVATE ../extern/)
+target_include_directories(${PAGERANK} PRIVATE ../include/)
+target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxxopts")
+target_compile_options(${PAGERANK} PRIVATE "${WARNING_FLAGS}")
+
+configure_file( ${CMAKE_SOURCE_DIR}/tests/PageRankTestGraph.dimacs ${CMAKE_CURRENT_BINARY_DIR}/PageRankTestGraph.dimacs COPYONLY)
+# add_custom_command( # copy over the test data
+#   TARGET ${PAGERANK} POST_BUILD
+#   COMMAND ${CMAKE_COMMAND} -E copy
+#   ${CMAKE_SOURCE_DIR}/tests/PageRankTestGraph.dimacs
+#   ${CMAKE_CURRENT_BINARY_DIR}/PageRankTestGraph.dimacs
+#   )
+
+configure_file(${CMAKE_SOURCE_DIR}/benchmark/pageRankNetworKit.py ${CMAKE_CURRENT_BINARY_DIR}/pageRankNetworKit.py COPYONLY)
+# add_custom_command( # copy over the test data
+#   TARGET ${PAGERANK} POST_BUILD
+#   COMMAND ${CMAKE_COMMAND} -E copy
+#   ${CMAKE_SOURCE_DIR}/benchmark/pageRankNetworKit.py
+#   ${CMAKE_CURRENT_BINARY_DIR}/pageRankNetworKit.py
+#   )
+
+add_test( # Register the custom test
+  NAME TestPageRank_Full
+  COMMAND pageRankNetworKit.py PageRankTestGraph.dimacs --test -e ./pageRankForTest
+  )
+
 # Make ctest play nicely with Demian's spacemacs
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --force-new-ctest-process --output-on-failure)
