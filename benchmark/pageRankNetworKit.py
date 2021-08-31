@@ -75,10 +75,14 @@ if doTest:
     resultsStarted = False
     mpiResult = []
     for line in mpiOutput.splitlines():
+        words = line.split(" ")
+        if "Starting with" in line:
+            assert(words[2] == "4")
+        if "Finished with with" in line:
+            assert(words[2] == "3")
         if "RESULTS" in line:
             resultsStarted = True
         elif resultsStarted:
-            words = line.split(" ")
             nodeId = int(words[0])
             nodeScore = float(words[1])
             mpiResult.append((nodeId, nodeScore))
