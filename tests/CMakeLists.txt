@@ -190,7 +190,8 @@ add_executable(${PAGERANK} ../benchmark/pageRank.cpp)
 target_include_directories(${PAGERANK} SYSTEM PRIVATE ../extern/)
 target_include_directories(${PAGERANK} PRIVATE ../include/)
 target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxxopts")
-target_compile_options(${PAGERANK} PRIVATE "${WARNING_FLAGS}")
+
+target_compile_options(${PAGERANK} PRIVATE -g -O0 ${WARNING_FLAGS})
 
 configure_file( ${CMAKE_SOURCE_DIR}/tests/PageRankTestGraph.dimacs ${CMAKE_CURRENT_BINARY_DIR}/PageRankTestGraph.dimacs COPYONLY)
 # add_custom_command( # copy over the test data
