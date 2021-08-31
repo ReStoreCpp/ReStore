@@ -52,8 +52,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
           ${{ runner.os }}-
+    - name: Install networkit dependencies
+      run: pip install cython numpy scipy cython
     - name: Install networkit
-      run: pip install cython networkit
+      run: pip install networkit
     - name: make check
       if: (matrix.compiler.name == 'Clang-simulated' && matrix.build-mode == 'Release') || (matrix.compiler.name == 'GNU-real' && matrix.build-mode == 'Debug')
       run: cd build && make check
