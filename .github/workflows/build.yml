@@ -38,6 +38,22 @@ jobs:
       run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-mode }} -DSIMULATE_FAILURES=${{ matrix.compiler.failure-simulation }} -DWARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }}
     - name: make
       run: cd build && make -j all
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+    - name: Cache pip
+      uses: actions/cache@v2
+      with:
+        # This path is specific to Ubuntu
+        path: ~/.cache/pip
+        # Look to see if there is a cache hit for the corresponding requirements file
+        key: ${{ runner.os }}-pip-networkit
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          ${{ runner.os }}-
+    - name: Install networkit
+      run: pip install networkit
     - name: make check
       if: (matrix.compiler.name == 'Clang-simulated' && matrix.build-mode == 'Release') || (matrix.compiler.name == 'GNU-real' && matrix.build-mode == 'Debug')
       run: cd build && make check
