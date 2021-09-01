@@ -194,20 +194,8 @@ target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxx
 target_compile_options(${PAGERANK} PRIVATE -g -O0 ${WARNING_FLAGS})
 
 configure_file( ${CMAKE_SOURCE_DIR}/tests/PageRankTestGraph.dimacs ${CMAKE_CURRENT_BINARY_DIR}/PageRankTestGraph.dimacs COPYONLY)
-# add_custom_command( # copy over the test data
-#   TARGET ${PAGERANK} POST_BUILD
-#   COMMAND ${CMAKE_COMMAND} -E copy
-#   ${CMAKE_SOURCE_DIR}/tests/PageRankTestGraph.dimacs
-#   ${CMAKE_CURRENT_BINARY_DIR}/PageRankTestGraph.dimacs
-#   )
 
 configure_file(${CMAKE_SOURCE_DIR}/benchmark/pageRankNetworKit.py ${CMAKE_CURRENT_BINARY_DIR}/pageRankNetworKit.py COPYONLY)
-# add_custom_command( # copy over the test data
-#   TARGET ${PAGERANK} POST_BUILD
-#   COMMAND ${CMAKE_COMMAND} -E copy
-#   ${CMAKE_SOURCE_DIR}/benchmark/pageRankNetworKit.py
-#   ${CMAKE_CURRENT_BINARY_DIR}/pageRankNetworKit.py
-#   )
 
 add_test( # Register the custom test
   NAME TestPageRank_Full
