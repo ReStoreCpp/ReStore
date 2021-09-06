@@ -402,8 +402,8 @@ int main(int argc, char** argv) {
         ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
         ("d,dampening", "dampening factor.", cxxopts::value<double>()->default_value("0.85"))                  ///
         ("n,numIterations", "Number of PageRank iterations to run",
-         cxxopts::value<int>()->default_value("100"))                                                   ///
-        ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("1")) ///
+         cxxopts::value<int>()->default_value("100")) ///
+        // ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("1")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3"))                                                     ///
         ("seed", "The seed for failure simulation.", cxxopts::value<unsigned long>()->default_value("42")) ///
@@ -448,7 +448,8 @@ int main(int argc, char** argv) {
     const bool sortOutput  = options["sort"].as<bool>();
     const bool printOutput = options["print"].as<bool>();
 
-    const auto   numRepetitions = options["repetitions"].as<size_t>();
+    // const auto   numRepetitions = options["repetitions"].as<size_t>();
+    const auto   numRepetitions = 1;
     const double dampening      = options["dampening"].as<double>();
     const int    numIterations  = options["numIterations"].as<int>();
 
@@ -459,9 +460,6 @@ int main(int argc, char** argv) {
 
     double failureProbability =
         getFailureProbabilityForExpectedNumberOfFailures(numIterations, numRanks, percentFailures);
-    if (myRank == 0) {
-        std::cout << "Using failure probability " << failureProbability * 100 << "%" << std::endl;
-    }
 
     auto failureSimulator = ProbabilisticFailureSimulator(seed, failureProbability);
 
@@ -471,16 +469,12 @@ int main(int argc, char** argv) {
         readGraph(options["graph"].as<std::string>());
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
     // TIME_STOP();
-    auto end  = MPI_Wtime();
-    auto time = end - start;
-    if (myRank == 0) {
-        std::cout << "Reading graph took " << time << " s" << std::endl;
-    }
+    auto end              = MPI_Wtime();
+    auto graphReadingTime = end - start;
 
     ReStore::EqualLoadBalancer loadBalancer(blockDistribution, numRanks);
 
-    start = MPI_Wtime();
-    TIME_NEXT_SECTION("Init ReStore and submit");
+    TIME_NEXT_SECTION("Init");
     ReStore::ReStore<edge_t> reStore(
         comm, asserting_cast<uint16_t>(numReplications), ReStore::OffsetMode::constant, sizeof(edge_t));
 
@@ -502,16 +496,11 @@ int main(int argc, char** argv) {
 
     reStore.submitBlocks(serializeBlock, getNextBlock, asserting_cast<ReStore::block_id_t>(numEdges));
     TIME_STOP();
-    end  = MPI_Wtime();
-    time = end - start;
-    if (myRank == 0) {
-        //     std::cout << "Initializing ReStore and submitting took " << time << " s" << std::endl;
-        std::cout << "Starting with " << numRanks << " ranks" << std::endl;
-    }
+
+    int numRanksStarting = numRanks;
 
     MPI_Barrier(comm);
     std::vector<double> result;
-    start = MPI_Wtime();
     TIME_NEXT_SECTION("Pagerank");
     for (size_t i = 0; i < numRepetitions; ++i) {
         result = pageRank(
@@ -519,21 +508,24 @@ int main(int argc, char** argv) {
             failureSimulator);
     }
     TIME_STOP();
-    end  = MPI_Wtime();
-    time = end - start;
-    // auto timePerRun = time / static_cast<double>(numRepetitions);
 
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
 
-    if (myRank == 0 && !amIDead) {
-        std::cout << "Finished with " << numRanks << " ranks" << std::endl;
-        //     std::cout << "Time per run: " << timePerRun << " s" << std::endl;
-    }
+    int numRanksFailed = numRanksStarting - numRanks;
 
     if (myRank == 0 && !amIDead) {
         ResultsCSVPrinter resultPrinter(std::cout, true);
         auto              timers = TimerRegister::instance().getAllTimers();
+        resultPrinter.allResults("numRanks", numRanksStarting);
+        resultPrinter.thisResult("numRanksFailed", numRanksFailed);
+        resultPrinter.thisResult("failureProbability", failureProbability);
+        resultPrinter.thisResult("graphReadingTime", graphReadingTime);
+        resultPrinter.allResults("numReplications", numReplications);
+        resultPrinter.allResults("numIterations", numIterations);
+        resultPrinter.thisResult("seed", seed);
+        resultPrinter.allResults("numVertices", numVertices);
+        resultPrinter.allResults("numEdges", numEdges);
         resultPrinter.thisResult(timers);
         resultPrinter.finalizeAndPrintResult();
     }
