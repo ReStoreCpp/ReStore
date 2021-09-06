@@ -73,19 +73,23 @@ if doTest:
     mpiOutput = mpiOutput.decode('UTF-8')
 
     resultsStarted = False
+    checkedCSV = False
     mpiResult = []
     for line in mpiOutput.splitlines():
-        words = line.split(" ")
-        if "Starting with" in line:
-            assert(words[2] == "4")
-        if "Finished with with" in line:
-            assert(words[2] == "3")
+        if "RESULTS" not in line and not resultsStarted and not "numRanks" in line:
+            words = line.split(",")
+            assert(int(words[0]) == 4)
+            assert(int(words[5]) >= 1)
+            checkedCSV = True
         if "RESULTS" in line:
             resultsStarted = True
         elif resultsStarted:
+            words = line.split(" ")
             nodeId = int(words[0])
             nodeScore = float(words[1])
             mpiResult.append((nodeId, nodeScore))
+
+    assert(checkedCSV)
 
     networkitScores = nodesWithScores
     networkitScores.sort(key=lambda nodeScore: nodeScore[1], reverse=True)
