@@ -193,13 +193,16 @@ target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxx
 
 target_compile_options(${PAGERANK} PRIVATE -g -O0 ${WARNING_FLAGS})
 
-configure_file( ${CMAKE_SOURCE_DIR}/tests/PageRankTestGraph.dimacs ${CMAKE_CURRENT_BINARY_DIR}/PageRankTestGraph.dimacs COPYONLY)
+configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_0 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_0 COPYONLY)
+configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_1 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_1 COPYONLY)
+configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_2 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_2 COPYONLY)
+configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_3 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_3 COPYONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/benchmark/pageRankNetworKit.py ${CMAKE_CURRENT_BINARY_DIR}/pageRankNetworKit.py COPYONLY)
 
 add_test( # Register the custom test
   NAME TestPageRank_Full
-  COMMAND python3 pageRankNetworKit.py PageRankTestGraph.dimacs --test -e ./pageRankForTest -m ${MPIEXEC_EXECUTABLE}
+  COMMAND python3 pageRankNetworKit.py pageRankTestGraph/pageRankTestGraph_0 pageRankTestGraph/pageRankTestGraph_1 pageRankTestGraph/pageRankTestGraph_2 pageRankTestGraph/pageRankTestGraph_3 --test -e ./pageRankForTest -m ${MPIEXEC_EXECUTABLE}
   )
 
 # Make ctest play nicely with Demian's spacemacs
