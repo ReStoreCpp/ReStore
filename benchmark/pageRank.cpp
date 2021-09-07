@@ -7,6 +7,8 @@
 #include "restore/mpi_context.hpp"
 #include "restore/timer.hpp"
 
+#include "memoryMappedFileReader.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -69,24 +71,15 @@ readGraph(std::vector<std::string> graphs) {
     block_distribution_t blockDistribution;
 
     for (const auto graph: graphs) {
-        std::ifstream infile(graph);
-
-        std::string line;
-
-        while (std::getline(infile, line)) {
-            if (line.empty()) {
-                continue;
+        MemoryMappedFileReader fileReader(graph);
+        while (!fileReader.finishedFile()) {
+            if (!fileReader.isLetter()) {
+                fileReader.skipLine();
             }
-            if (line[0] == '#') {
-                continue;
-            }
-            std::istringstream iss(line);
-            char               letter = ' ';
-            iss >> letter;
+            char letter = fileReader.getLetter();
             if (letter == 'p') {
-                node_t    firstNum  = -1;
-                edge_id_t secondNum = 0;
-                iss >> firstNum >> secondNum;
+                node_t    firstNum  = fileReader.getInt();
+                edge_id_t secondNum = fileReader.getuint64_t();
                 if (numVertices != 0 || numEdges != 0) {
                     if (numVertices != firstNum || numEdges != secondNum) {
                         if (myRank == 0)
@@ -122,9 +115,8 @@ readGraph(std::vector<std::string> graphs) {
                 }
 
             } else if (letter == 'e') {
-                node_t firstNum  = -1;
-                node_t secondNum = -1;
-                iss >> firstNum >> secondNum;
+                node_t firstNum  = fileReader.getInt();
+                node_t secondNum = fileReader.getInt();
                 assert(firstNum > 0);
                 assert(secondNum > 0);
                 --firstNum;
@@ -158,6 +150,7 @@ readGraph(std::vector<std::string> graphs) {
                 }
                 exit(1);
             }
+            fileReader.skipLine();
         }
     }
     if (numEdges != numEdgesRead) {
