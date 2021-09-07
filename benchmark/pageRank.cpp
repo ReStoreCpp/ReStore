@@ -49,17 +49,13 @@ bool amIDead = false;
 using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>>;
 
 std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>, block_distribution_t>
-readGraph(std::string graph) {
+readGraph(std::vector<std::string> graphs) {
     int myRank   = -1;
     int numRanks = -1;
     MPI_Comm_rank(comm, &myRank);
     MPI_Comm_size(comm, &numRanks);
     assert(myRank >= 0);
     assert(numRanks > 0);
-
-    std::ifstream infile(graph);
-
-    std::string line;
 
     node_t               numVertices           = 0;
     edge_id_t            numEdges              = 0;
@@ -71,80 +67,97 @@ readGraph(std::string graph) {
     edge_id_t            lowerBound = 0;
     edge_id_t            upperBound = 0;
     block_distribution_t blockDistribution;
-    while (std::getline(infile, line)) {
-        if (line.empty()) {
-            continue;
-        }
-        if (line[0] == '#') {
-            continue;
-        }
-        std::istringstream iss(line);
-        char               letter = ' ';
-        iss >> letter;
-        if (letter == 'p') {
-            if (numVertices != 0 || numEdges != 0) {
-                if (myRank == 0)
-                    std::cout << "Multiple lines starting with p. This is not supported!" << std::endl;
-                exit(1);
-            }
-            assert(numEdgesRead == 0);
-            node_t    firstNum  = -1;
-            edge_id_t secondNum = 0;
-            iss >> firstNum >> secondNum;
-            numVertices = firstNum;
-            numEdges    = secondNum;
-            assert(firstNum > 0);
-            outDegrees.resize(static_cast<size_t>(numVertices));
-            numEdgesPerRank       = numEdges / asserting_cast<edge_id_t>(numRanks);
-            numRanksWithMoreEdges = asserting_cast<int>(numEdges % asserting_cast<edge_id_t>(numRanks));
-            lowerBound            = numEdgesPerRank * asserting_cast<edge_id_t>(myRank)
-                         + asserting_cast<edge_id_t>(std::min(myRank, numRanksWithMoreEdges));
-            upperBound =
-                numEdgesPerRank * asserting_cast<edge_id_t>((myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges));
 
-            for (int rank = 0; rank < numRanks; ++rank) {
-                ReStore::block_id_t rankLowerBound = numEdgesPerRank * asserting_cast<edge_id_t>(rank)
-                                                     + asserting_cast<edge_id_t>(std::min(rank, numRanksWithMoreEdges));
-                size_t rankUpperBound =
-                    numEdgesPerRank * asserting_cast<edge_id_t>((rank + 1) + std::min(rank + 1, numRanksWithMoreEdges));
-                blockDistribution.emplace_back(std::make_pair(rankLowerBound, rankUpperBound - rankLowerBound), rank);
+    for (const auto graph: graphs) {
+        std::ifstream infile(graph);
+
+        std::string line;
+
+        while (std::getline(infile, line)) {
+            if (line.empty()) {
+                continue;
             }
-        } else if (letter == 'e') {
-            node_t firstNum  = -1;
-            node_t secondNum = -1;
-            iss >> firstNum >> secondNum;
-            assert(firstNum > 0);
-            assert(secondNum > 0);
-            --firstNum;
-            --secondNum;
-            if (numVertices == 0 || numEdges == 0) {
-                if (myRank == 0)
-                    std::cout << "First edge before specifying number of vertices and edges. This is not supported!"
-                              << std::endl;
-                exit(1);
+            if (line[0] == '#') {
+                continue;
             }
-            if (firstNum > numVertices) {
+            std::istringstream iss(line);
+            char               letter = ' ';
+            iss >> letter;
+            if (letter == 'p') {
+                node_t    firstNum  = -1;
+                edge_id_t secondNum = 0;
+                iss >> firstNum >> secondNum;
+                if (numVertices != 0 || numEdges != 0) {
+                    if (numVertices != firstNum || numEdges != secondNum) {
+                        if (myRank == 0)
+                            std::cout << "Found another line starting with 'p' that claims different vertex or edge "
+                                         "counts than the first one!"
+                                      << std::endl;
+                        exit(1);
+                    }
+                } else {
+                    assert(numEdgesRead == 0);
+                    numVertices = firstNum;
+                    numEdges    = secondNum;
+                    assert(firstNum > 0);
+                    outDegrees.resize(static_cast<size_t>(numVertices));
+                    numEdgesPerRank       = numEdges / asserting_cast<edge_id_t>(numRanks);
+                    numRanksWithMoreEdges = asserting_cast<int>(numEdges % asserting_cast<edge_id_t>(numRanks));
+                    lowerBound            = numEdgesPerRank * asserting_cast<edge_id_t>(myRank)
+                                 + asserting_cast<edge_id_t>(std::min(myRank, numRanksWithMoreEdges));
+                    upperBound =
+                        numEdgesPerRank
+                        * asserting_cast<edge_id_t>((myRank + 1) + std::min(myRank + 1, numRanksWithMoreEdges));
+
+                    for (int rank = 0; rank < numRanks; ++rank) {
+                        ReStore::block_id_t rankLowerBound =
+                            numEdgesPerRank * asserting_cast<edge_id_t>(rank)
+                            + asserting_cast<edge_id_t>(std::min(rank, numRanksWithMoreEdges));
+                        size_t rankUpperBound =
+                            numEdgesPerRank
+                            * asserting_cast<edge_id_t>((rank + 1) + std::min(rank + 1, numRanksWithMoreEdges));
+                        blockDistribution.emplace_back(
+                            std::make_pair(rankLowerBound, rankUpperBound - rankLowerBound), rank);
+                    }
+                }
+
+            } else if (letter == 'e') {
+                node_t firstNum  = -1;
+                node_t secondNum = -1;
+                iss >> firstNum >> secondNum;
+                assert(firstNum > 0);
+                assert(secondNum > 0);
+                --firstNum;
+                --secondNum;
+                if (numVertices == 0 || numEdges == 0) {
+                    if (myRank == 0)
+                        std::cout << "First edge before specifying number of vertices and edges. This is not supported!"
+                                  << std::endl;
+                    exit(1);
+                }
+                if (firstNum > numVertices) {
+                    if (myRank == 0) {
+                        std::cout << "Invalid vertex id " << firstNum << std::endl;
+                    }
+                    exit(1);
+                }
+                if (secondNum > numVertices) {
+                    if (myRank == 0) {
+                        std::cout << "Invalid vertex id " << secondNum << std::endl;
+                    }
+                    exit(1);
+                }
+                ++outDegrees[static_cast<size_t>(firstNum)];
+                if (numEdgesRead >= lowerBound && numEdgesRead < upperBound) {
+                    edges.emplace_back(firstNum, secondNum);
+                }
+                ++numEdgesRead;
+            } else {
                 if (myRank == 0) {
-                    std::cout << "Invalid vertex id " << firstNum << std::endl;
+                    std::cout << "Unsupported type: " << letter << std::endl;
                 }
                 exit(1);
             }
-            if (secondNum > numVertices) {
-                if (myRank == 0) {
-                    std::cout << "Invalid vertex id " << secondNum << std::endl;
-                }
-                exit(1);
-            }
-            ++outDegrees[static_cast<size_t>(firstNum)];
-            if (numEdgesRead >= lowerBound && numEdgesRead < upperBound) {
-                edges.emplace_back(firstNum, secondNum);
-            }
-            ++numEdgesRead;
-        } else {
-            if (myRank == 0) {
-                std::cout << "Unsupported type: " << letter << std::endl;
-            }
-            exit(1);
         }
     }
     if (numEdges != numEdgesRead) {
@@ -153,6 +166,7 @@ readGraph(std::string graph) {
         }
         exit(1);
     }
+
     assert(static_cast<edge_id_t>(edges.size()) == numEdgesPerRank + (myRank < numRanksWithMoreEdges));
     return std::make_tuple(numVertices, numEdges, lowerBound, edges, outDegrees, blockDistribution);
 }
@@ -396,7 +410,7 @@ int main(int argc, char** argv) {
     cxxopts::Options cliParser("pageRank", "Benchmarks a fault tolerant page rank algorithm.");
 
     cliParser.add_options()                                                                                    ///
-        ("graph", "path to an input graph file", cxxopts::value<std::string>())                                ///
+        ("graphs", "paths to the input graph files", cxxopts::value<std::vector<std::string>>())               ///
         ("o,output", "path to the output file", cxxopts::value<std::string>())                                 ///
         ("s,sort", "sort the output", cxxopts::value<bool>()->default_value("false"))                          ///
         ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
@@ -411,8 +425,8 @@ int main(int argc, char** argv) {
          cxxopts::value<double>()->default_value("0.1")) ///
         ("h,help", "Print help message.");
 
-    cliParser.parse_positional({"graph"});
-    cliParser.positional_help("<graph>");
+    cliParser.parse_positional({"graphs"});
+    cliParser.positional_help("<graphs>");
 
     cxxopts::ParseResult options;
     try {
@@ -431,7 +445,7 @@ int main(int argc, char** argv) {
         exit(0);
     }
 
-    if (!options.count("graph")) {
+    if (!options.count("graphs")) {
         if (myRank == 0) {
             std::cout << "Please provide a graph." << std::endl;
             std::cout << cliParser.help() << std::endl;
@@ -466,7 +480,7 @@ int main(int argc, char** argv) {
     auto start = MPI_Wtime();
     // TIME_NEXT_SECTION("Read graph");
     auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees, blockDistribution] =
-        readGraph(options["graph"].as<std::string>());
+        readGraph(options["graphs"].as<std::vector<std::string>>());
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
     // TIME_STOP();
     auto end              = MPI_Wtime();

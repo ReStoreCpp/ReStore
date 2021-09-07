@@ -10,7 +10,7 @@ import math
 
 
 parser = argparse.ArgumentParser(description="Calculate PageRank scores using NetworKit")
-parser.add_argument("inputPath")
+parser.add_argument('inputPaths', nargs='+')
 parser.add_argument("-s", "--sort", help="sort output by PageRank value",
                     action="store_true")
 parser.add_argument("-o", "--outputPath", help="path to write the output")
@@ -24,7 +24,7 @@ parser.add_argument("-m", "--mpirun", help="path to the mpirun")
 
 args = parser.parse_args()
 
-inputPath = args.inputPath
+inputPaths = args.inputPaths
 outputPath = args.outputPath
 sortOutput = args.sort
 printOutput=args.print
@@ -38,15 +38,16 @@ if mpirun == "":
 
 
 G = nk.graph.Graph(weighted=False, directed=True)
-with open(inputPath, "r") as graphFile:
-    for line in graphFile:
-        words = line.split(" ")
-        if line.startswith("p"):
-            G.addNodes(int(words[1]))
-        if line.startswith("e"):
-            u = int(words[1]) - 1
-            v = int(words[2]) - 1
-            G.addEdge(u,v)
+for inputPath in inputPaths:
+    with open(inputPath, "r") as graphFile:
+        for line in graphFile:
+            words = line.split(" ")
+            if line.startswith("p") and G.numberOfNodes() == 0:
+                G.addNodes(int(words[1]))
+            if line.startswith("e"):
+                u = int(words[1]) - 1
+                v = int(words[2]) - 1
+                G.addEdge(u,v)
 
 start = time.time()
 for i in range(repetitions):
@@ -69,7 +70,11 @@ if printOutput:
         print(str(nodesWithScores[i]))
 
 if doTest:
-    mpiOutput = subprocess.check_output([mpirun, "-np", "4", "--oversubscribe", executable, inputPath, "-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"])
+    execCommand = [mpirun, "-np", "4", "--oversubscribe", executable]
+    args = ["-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"]
+    fullCommand = execCommand + inputPaths + args
+    print(" ".join(fullCommand))
+    mpiOutput = subprocess.check_output(fullCommand)
     mpiOutput = mpiOutput.decode('UTF-8')
 
     resultsStarted = False
