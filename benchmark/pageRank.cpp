@@ -51,7 +51,7 @@ bool amIDead = false;
 using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>>;
 
 std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>, block_distribution_t>
-readGraph(std::vector<std::string> graphs) {
+readGraph(const std::vector<std::string>& graphs) {
     int myRank   = -1;
     int numRanks = -1;
     MPI_Comm_rank(comm, &myRank);
@@ -70,7 +70,7 @@ readGraph(std::vector<std::string> graphs) {
     edge_id_t            upperBound = 0;
     block_distribution_t blockDistribution;
 
-    for (const auto graph: graphs) {
+    for (const auto& graph: graphs) {
         MemoryMappedFileReader fileReader(graph);
         while (!fileReader.finishedFile()) {
             if (!fileReader.isLetter()) {
