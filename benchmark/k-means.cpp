@@ -155,6 +155,8 @@ class CommandLineOptions {
                 } else {
                     _replicationLevel = options["replication-level"].as<uint16_t>();
                 }
+            } else {
+                _replicationLevel = 0;
             }
 
             if (options.count("simulation-id") != 1) {
@@ -217,6 +219,7 @@ class CommandLineOptions {
 
     uint16_t replicationLevel() const {
         assert(!_useFaultTolerance || _replicationLevel > 0);
+        assert(_useFaultTolerance || _replicationLevel == 0);
         return _replicationLevel;
     }
 
