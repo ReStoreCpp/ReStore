@@ -176,6 +176,11 @@ class kMeansData {
         return _data.size();
     }
 
+    // Fills all dimensions of all elements with the specified value.
+    void fill(data_t value) {
+        std::fill(_data.begin(), _data.end(), value);
+    }
+
     private:
     std::vector<data_t> _data;
     uint64_t            _numDimensions;
@@ -398,8 +403,9 @@ class kMeansAlgorithm {
                                  - _centers->getElementDimension(centerIdx, dimension);
                     distanceToCenter += delta * delta;
                 }
-                // We don't need to comput the square root, as we are only comparing the distance and sqrt is strictly monotonic.
-                //distanceToCenter = std::sqrt(distanceToCenter);
+                // We don't need to comput the square root, as we are only comparing the distance and sqrt is strictly
+                // monotonic.
+                // distanceToCenter = std::sqrt(distanceToCenter);
                 if (distanceToCenter < distanceToClosestCenter) {
                     closestCenter           = centerIdx;
                     distanceToClosestCenter = distanceToCenter;
@@ -422,7 +428,7 @@ class kMeansAlgorithm {
 
     // Do one update round of the center positions with the current data. This is a global operation and might throw
     // FaultExceptions. Consider using performIterations(...) if you have no special needs.
-    void updateCenters() {
+    void updateCenters(bool onlyNewData = false) {
         assert(_data.valid());
         if (numDataPoints() == 0) {
             throw std::runtime_error("I don't have any data points.");
@@ -430,24 +436,45 @@ class kMeansAlgorithm {
             throw std::runtime_error("I don't have any cluster centers.");
         }
 
-        // This array accumulates the contributions of the data points assigned to a center to that center.
-        kMeansData<data_t> contribToCenterPosition(numCenters(), numDimensions(), 0);
-
-        // Compute contribution of local data points to the positions of the new centers.
-        for (size_t dataIdx = 0; dataIdx < numDataPoints(); dataIdx++) {
-            auto centerIdx = _pointToCenterAssignment->assignedCenter[dataIdx];
-            for (uint64_t dimension = 0; dimension < numDimensions(); dimension++) {
-                contribToCenterPosition.getElementDimension(centerIdx, dimension) +=
-                    _data.getElementDimension(dataIdx, dimension);
+        uint64_t startIndex;
+        if (!_contribToCenterPosition) {
+            if (onlyNewData) {
+                throw std::runtime_error("onlyNewData = true is now allowed when first calling updateCenters.");
+            }
+            _contribToCenterPosition.emplace(numCenters(), numDimensions(), 0);
+            startIndex = 0;
+        } else {
+            if (!onlyNewData) {
+                _contribToCenterPosition->fill(0);
+                startIndex = 0;
+            } else {
+                // Do not reset the contributions.
+                if (numDataPoints() - 1 == _contribLastIndex) {
+                    // No new data for us but we still have to participate in the collectives and contribute our data.
+                    startIndex = numDataPoints();
+                } else {
+                    startIndex = _contribLastIndex + 1;
+                    assert(startIndex < numDataPoints());
+                }
             }
         }
 
+        // Compute contribution of local data points to the positions of the new centers.
+        for (size_t dataIdx = startIndex; dataIdx < numDataPoints(); dataIdx++) {
+            auto centerIdx = _pointToCenterAssignment->assignedCenter[dataIdx];
+            for (uint64_t dimension = 0; dimension < numDimensions(); dimension++) {
+                _contribToCenterPosition->getElementDimension(centerIdx, dimension) +=
+                    _data.getElementDimension(dataIdx, dimension);
+            }
+        }
+        _contribLastIndex = numDataPoints() - 1;
+
         // Allreduce the local contributions to the center positions
-        _mpiContext.allreduce(contribToCenterPosition.data(), MPI_SUM, contribToCenterPosition.dataSize());
+        _mpiContext.allreduce(_contribToCenterPosition->data(), MPI_SUM, _contribToCenterPosition->dataSize());
         // TODO Think about what would happen if we detect a rank failure during this call.
         _mpiContext.allreduce(_pointToCenterAssignment->numPointsAssignedToCenter, MPI_SUM);
         assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
-        assert(contribToCenterPosition.numDataPoints() == numCenters());
+        assert(_contribToCenterPosition->numDataPoints() == numCenters());
 
         // Calculate new center positions
         for (size_t centerIdx = 0; centerIdx < numCenters(); centerIdx++) {
@@ -456,7 +483,7 @@ class kMeansAlgorithm {
             if (numPointsAssignedToThisCenter > 0) {
                 for (size_t dimension = 0; dimension < numDimensions(); dimension++) {
                     _centers->getElementDimension(centerIdx, dimension) =
-                        contribToCenterPosition.getElementDimension(centerIdx, dimension)
+                        _contribToCenterPosition->getElementDimension(centerIdx, dimension)
                         / numPointsAssignedToThisCenter;
                 }
             } // If no point is assigned to this center, we leave the center where it is.
@@ -515,15 +542,17 @@ class kMeansAlgorithm {
                 auto numElementsBeforeRestore = _data.numDataPoints();
                 _reStoreWrapper->restoreDataAppend(_data.dataVector(), newBlocksPerRank);
 
-                TIME_NEXT_SECTION("recompute-data-from-failed-ranks");
+                TIME_NEXT_SECTION("reassign-points-after-failure");
                 // If we got new data points, assign them to the cluster centers.
-                // This function will also update the local data structures it needs to reflect the new data distribution
+                // This function will also update the local data structures it needs to reflect the new data
+                // distribution
                 if (numDataPoints() > numElementsBeforeRestore) {
                     assignPointsToCenters(numElementsBeforeRestore);
                 }
 
                 // Collectively update the center positions.
-                updateCenters();
+                TIME_NEXT_SECTION("update-centers-after-failure");
+                updateCenters(true);
 
                 // Has everyone completed the restoration successfully?
                 TIME_NEXT_SECTION("commit-to-restoration");
@@ -565,8 +594,11 @@ class kMeansAlgorithm {
 
     kMeansData<data_t> _data;
     // Will be empty after construction, before the initial centers are picked.
-    TwoPhaseCommit<kMeansData<data_t>>            _centers;
-    std::optional<PointToCenterAssignment>        _pointToCenterAssignment;
+    TwoPhaseCommit<kMeansData<data_t>>     _centers;
+    std::optional<PointToCenterAssignment> _pointToCenterAssignment;
+    // This array accumulates the contributions of the data points assigned to a center to that center.
+    std::optional<kMeansData<data_t>>             _contribToCenterPosition;
+    uint64_t                                      _contribLastIndex = 0;
     MPI_Context&                                  _mpiContext;
     bool                                          _faultTolerant;
     std::optional<ReStore::ReStoreVector<data_t>> _reStoreWrapper;
