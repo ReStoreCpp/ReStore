@@ -100,8 +100,8 @@ constexpr To throwing_cast(From value) {
 
 template <size_t N>
 MPI_Datatype mpi_custom_continuous_type() {
-    static MPI_Datatype type = nullptr;
-    if (type == nullptr) {
+    static MPI_Datatype type = MPI_DATATYPE_NULL;
+    if (type == MPI_DATATYPE_NULL) {
         MPI_Type_contiguous(N, MPI_CHAR, &type);
         MPI_Type_commit(&type);
     }
