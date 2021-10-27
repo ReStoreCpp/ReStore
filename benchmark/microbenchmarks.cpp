@@ -169,14 +169,15 @@ static void BM_pushBlocks(benchmark::State& state) {
     for (auto _: state) {
         UNUSED(_);
 
-        std::vector<BlockType> recvData(blocksPerRank);
+        std::vector<BlockType> recvData(blocksPerRank, BlockType(blockSize));
         auto                   start = std::chrono::high_resolution_clock::now();
         store.pushBlocksCurrentRankIds(
             blockRanges, [&recvData, myStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
                 assert(blockId >= myStartBlock);
                 auto index = blockId - myStartBlock;
                 assert(index < recvData.size());
-                assert(recvData[index].size() == 0);
+                // assert(recvData[index].size() == 0);
+                recvData[index].clear();
                 recvData[index].insert(
                     recvData[index].end(), reinterpret_cast<const ElementType*>(buffer),
                     reinterpret_cast<const ElementType*>(buffer + size));
@@ -221,7 +222,7 @@ int main(int argc, char** argv) {
 
     int rank = -1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    assert(rank > 0);
+    assert(rank >= 0);
 
     // Do we have enough MPI ranks?
     if (numRanks() < MAX_REPLICATION_LEVEL) {

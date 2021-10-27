@@ -35,6 +35,7 @@ inline std::vector<block_range_request_t> getServingRanks(
     std::vector<block_range_request_t> result;
     size_t                             currentBlock = blockRangeExternal.first;
     size_t numSendingRanks                          = std::min(ranksWithBlockRange.size(), blockRangeExternal.second);
+    result.reserve(numSendingRanks);
     for (size_t i = 0; i < numSendingRanks; ++i) {
         assert(currentBlock < blockRangeExternal.first + blockRangeExternal.second);
         assert(
