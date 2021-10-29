@@ -67,3 +67,11 @@ target_include_directories(${MICROBENCHMARKS_TARGET} SYSTEM PRIVATE ../extern/)
 target_include_directories(${MICROBENCHMARKS_TARGET} PRIVATE ../include/)
 target_link_libraries(${MICROBENCHMARKS_TARGET} "ReStore::ReStore;benchmark::benchmark")
 target_compile_options(${MICROBENCHMARKS_TARGET} PRIVATE -O3 "${WARNING_FLAGS}")
+
+#receive size benchmarks
+set(RECV_SIZE_TARGET "recvSizes")
+add_executable(${RECV_SIZE_TARGET} recvSizes.cpp)
+target_include_directories(${RECV_SIZE_TARGET} SYSTEM PRIVATE ../extern/)
+target_include_directories(${RECV_SIZE_TARGET} PRIVATE ../include/)
+target_link_libraries(${RECV_SIZE_TARGET} "ReStore::ReStore;benchmark::benchmark")
+target_compile_options(${RECV_SIZE_TARGET} PRIVATE -O3 "${WARNING_FLAGS}")
