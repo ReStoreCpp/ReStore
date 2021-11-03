@@ -150,8 +150,8 @@ class FeistelPseudoRandomPermutation {
         _bits_right_half = asserting_cast<uint8_t>(num_significant_bits - _bits_left_half);
 
         // Precompute the bitmasks and shift constants for the _left_half() and _right_half() calls.
-        _extra_bits            = num_bits<uint64_t>() - _bits_left_half - _bits_right_half;
-        _left_half_shift_width = num_bits<uint64_t>() - _bits_right_half;
+        _extra_bits            = asserting_cast<uint8_t>(num_bits<uint64_t>() - _bits_left_half - _bits_right_half);
+        _left_half_shift_width = asserting_cast<uint8_t>(num_bits<uint64_t>() - _bits_right_half);
         _right_half_mask       = -1ull;
         _right_half_mask >>= num_bits<uint64_t>() - _bits_right_half;
     }
