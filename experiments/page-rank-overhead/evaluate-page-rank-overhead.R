@@ -71,7 +71,11 @@ data <- data %>% replace_na( list( `Recovery` = 0, `Recomputation` = 0 ))
 data <- data %>%
   rename(
     numSimulatedRankFailures = numRanksFailed,
-    replicationLevel = numReplications
+    replicationLevel = numReplications,
+    `submit-data` = Init,
+    `pagerank-iterations` = Pagerank,
+    `restore-data` = Recovery,
+    `recompute-lost-data` = Recomputation
   )
 
 # Sanity checks and ensuring that we're not comparing apples and oranges.
@@ -101,7 +105,8 @@ stopifnot(data$useFaultTolerance == "off" | data$useFaultTolerance == "on")
 # Pivot longer
 data <- data %>%
   pivot_longer(
-    c(`Init`, `Pagerank`, `Recovery`, `Recomputation`, `total`),
+    c(`submit-data`, `pagerank-iterations`, `restore-data`,
+      `recompute-lost-data`, `total`),
     names_to = "timer",
     values_to = "time_s"
   )
@@ -151,7 +156,8 @@ aggregated_data %>%
   ) +
   facet_wrap(~factor(
     timer,
-    levels = c("Init", "Pagerank", "Recovery", "Recomputation", "total")
+    levels = c("submit-data", "pagerank-iterations", "restore-data",
+               "recompute-lost-data", "total")
   )) +
   theme_bw() +
   theme(

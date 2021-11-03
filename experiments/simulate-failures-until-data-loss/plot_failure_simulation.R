@@ -34,6 +34,17 @@ plotFailuresUntilDataLossOverNumRanks <- function(simulationMode) {
       theme(legend.position = c(0.02, 0.1))
 }
 
+data %>%
+  filter(simulationId == "indep-ranks-rankwise") %>%
+  group_by(
+    numRanks, numBlocks, replicationLevel 
+  ) %>%
+  summarise(
+    mean = mean(failuresUntilDataLoss),
+    sd = sd(failuresUntilDataLoss)
+  ) %>%
+  arrange(replicationLevel)
+
 plotFailuresUntilDataLossOverNumRanks("indep-ranks-rankwise")
 plotFailuresUntilDataLossOverNumRanks("indep-ranks-nodewise")
 plotFailuresUntilDataLossOverNumRanks("indep-ranks-rackwise-40rpr")
