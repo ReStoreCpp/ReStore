@@ -40,4 +40,7 @@ TEST(HelpersTest, in_range) {
     sizeT = std::numeric_limits<size_t>::max() - 1000;
     ASSERT_FALSE(in_range<int>(sizeT));
     ASSERT_TRUE(in_range<uintmax_t>(sizeT));
+
+    unsigned long a = 16;
+    ASSERT_TRUE(in_range<unsigned char>(a));
 }

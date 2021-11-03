@@ -204,6 +204,48 @@ template <class data_t>
     }
 }
 
+// Some bit twiddling helper functions.
+template <typename Data>
+constexpr uint8_t num_bits() {
+    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    return sizeof(Data) * 8;
+}
+
+template <typename Data>
+inline int64_t bits_left_half(Data bytes) {
+    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    return bytes >> num_bits<Data>() / 2;
+}
+
+template <typename Data>
+inline int64_t bits_right_half(Data bytes) {
+    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    return bytes & static_cast<Data>(-1) >> num_bits<Data>() / 2;
+}
+
+template <typename Data>
+inline int64_t bits_combine_halves(Data left, Data right) {
+    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    return (left << num_bits<Data> / 2) | right;
+}
+
+// Searches the source operand for the most significant set bit (1 bit). If a most significant 1 bit is found, its bit
+// index is stored in the destination operand. The source operand can be a register or a memory location; the
+// destination operand is a register. The bit index is an unsigned offset from bit 0 of the source operand. If the
+// content source operand is 0, the content of the destination operand is undefined.
+template <typename Data>
+inline uint8_t most_significant_bit_set(Data bytes) {
+    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+
+    if (bytes == 0) {
+        return 0;
+    }
+
+    Data msb;
+    asm("bsr %1,%0" : "=r"(msb) : "r"(bytes));
+    return asserting_cast<uint8_t>(msb);
+}
+
 // Simple and fast string hash function taken from http://www.cse.yorku.ca/~oz/hash.html
 uint32_t hash_djb2(const unsigned char* str) {
     uint32_t hash = 5381;

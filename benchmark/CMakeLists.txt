@@ -67,3 +67,11 @@ target_include_directories(${MICROBENCHMARKS_TARGET} SYSTEM PRIVATE ../extern/)
 target_include_directories(${MICROBENCHMARKS_TARGET} PRIVATE ../include/)
 target_link_libraries(${MICROBENCHMARKS_TARGET} "ReStore::ReStore;benchmark::benchmark")
 target_compile_options(${MICROBENCHMARKS_TARGET} PRIVATE -O3 "${WARNING_FLAGS}")
+
+# pseudo random permutation
+set(PSEUDO_RANDOM_PERMUTATION_TARGET "pseudo-random-permutation")
+add_executable(${PSEUDO_RANDOM_PERMUTATION_TARGET} pseudo_random_permutation.cpp)
+target_include_directories(${PSEUDO_RANDOM_PERMUTATION_TARGET} SYSTEM PRIVATE ../extern/)
+target_include_directories(${PSEUDO_RANDOM_PERMUTATION_TARGET} PRIVATE ../include/)
+target_link_libraries(${PSEUDO_RANDOM_PERMUTATION_TARGET} "ReStore::ReStore;benchmark::benchmark")
+target_compile_options(${PSEUDO_RANDOM_PERMUTATION_TARGET} PRIVATE -O3 "${WARNING_FLAGS}")

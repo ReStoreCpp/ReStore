@@ -83,6 +83,7 @@ set("NEEDS_CPPITERTOOLS" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BE
 set("NEEDS_CXXOPTS" ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_GOOGLEBENCHMARK" ${PROJECT_NAME}_BUILD_BENCHMARKS)
 set("NEEDS_BACKWARDCPP" ${PROJECT_NAME}_BUILD_TESTS OR ${PROJECT_NAME}_BUILD_BENCHMARKS)
+set("NEEDS_XXHASH" ON)
 
 if(NEEDS_GOOGLETEST)
     message(STATUS "Using googletest library.")
@@ -252,6 +253,17 @@ if (NEEDS_BACKWARDCPP)
     find_package(Backward)
     message(STATUS "backward-cpp configured.")
 endif()
+
+# Load and include xxHash
+message(STATUS "Configuring xxHash...")
+set(${PROJECT_NAME}_XXHASH_DIR "${CMAKE_CURRENT_LIST_DIR}/extern/xxHash" CACHE PATH "Path to the xxHash source directory")
+option(BUILD_SHARED_LIBS OFF)
+option(XXHASH_BUILD_ENABLE_INLINE_API ON)
+option(XXHASH_BUILD_XXHSUM OFF)
+add_subdirectory("${${PROJECT_NAME}_XXHASH_DIR}/cmake_unofficial" "${${PROJECT_NAME}_XXHASH_DIR/build}" EXCLUDE_FROM_ALL)
+
+# Link xxHash with ReStore
+target_link_libraries("${PROJECT_NAME}" INTERFACE xxhash)
 
 ### Subdirectories ###
 # Build the unit tests
