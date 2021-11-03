@@ -360,12 +360,6 @@ class MPIContext {
     }
 
     template <class data_t>
-    std::vector<data_t> broadcast(std::vector<data_t>& data, int root = 0) {
-        static_assert(std::is_pod_v<data_t>, "broadcast only works for POD data");
-        return broadcast(data.data(), data.size(), root, _comm);
-    }
-
-    template <class data_t>
     void allreduce(data_t* data, MPI_Op operation, size_t numDataElements = 1) {
         static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
         int _numDataElements = asserting_cast<int>(numDataElements);
