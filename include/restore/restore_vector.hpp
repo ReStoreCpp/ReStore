@@ -3,7 +3,9 @@
 #include <vector>
 
 #include "restore/core.hpp"
+#include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
+
 
 namespace ReStore {
 
@@ -13,10 +15,12 @@ class ReStoreVector {
     using BlockRangeToRestore     = std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>;
     using BlockRangeToRestoreList = std::vector<BlockRangeToRestore>;
 
-    ReStoreVector(size_t blockSize, MPI_Comm comm, uint16_t replicationLevel)
+    ReStoreVector(size_t blockSize, MPI_Comm comm, uint16_t replicationLevel, data_t paddingValue = data_t())
         : _nativeBlockSize(blockSize),
           _reStore(comm, replicationLevel, OffsetMode::constant, _bytesPerBlock()),
-          _mpiContext(comm) {
+          _mpiContext(comm),
+          _paddingValue(paddingValue),
+          _isPadded(false) {
         if (blockSize == 0) {
             throw std::invalid_argument("The block size must not be 0.");
         } else if (comm == MPI_COMM_NULL) {
@@ -27,15 +31,14 @@ class ReStoreVector {
     }
 
     // Submits the data to the ReStore. If a rank failure occurs, this will throw a ReStoreMPI::FaultException.
-    void submitData(const std::vector<data_t>& data) {
+    size_t submitData(const std::vector<data_t>& data) {
         if (data.empty()) {
             throw std::invalid_argument("The data vector does not contain any elements.");
-        } else if (data.size() % _nativeBlockSize != 0) {
-            throw std::invalid_argument("The data vector size is not a multiple of the block size.");
         }
         // TODO Maybe serialize multiple data points at once?
-
-        auto numBlocksLocal = data.size() / _nativeBlockSize;
+        _isPadded = data.size() % _nativeBlockSize != 0;
+        // Round up to the next multiple of _nativeBlockSize
+        auto numBlocksLocal = (data.size() + _nativeBlockSize - 1) / _nativeBlockSize;
         // Will throw on rank failure.
         auto idOfMyFirstBlock = _mpiContext.exclusive_scan(numBlocksLocal, MPI_SUM);
         auto numBlocksGlobal  = _mpiContext.allreduce(numBlocksLocal, MPI_SUM);
@@ -44,14 +47,32 @@ class ReStoreVector {
         block_id_t currentBlockId = idOfMyFirstBlock;
         auto       blockIt        = data.begin();
 
-        assert(data.size() * sizeof(data_t) == numBlocksLocal * _bytesPerBlock());
+        assert(data.size() * sizeof(data_t) == numBlocksLocal * _bytesPerBlock() || _isPadded);
         // Will throw on Rank failure.
         _reStore.submitBlocks(
-            [this](const BlockProxy& blockProxy, SerializedBlockStoreStream& stream) {
+            [this, &data](const BlockProxy& blockProxy, SerializedBlockStoreStream& stream) {
                 assert(blockProxy != nullptr);
-                stream.writeBytes(reinterpret_cast<const std::byte*>(blockProxy), _bytesPerBlock());
+                if (blockProxy + _nativeBlockSize > data.data() + data.size()) {
+                    // Only write as many bytes as there are left in data
+                    size_t bytesToWrite = asserting_cast<size_t>(
+                        reinterpret_cast<const std::byte*>(data.data() + data.size())
+                        - reinterpret_cast<const std::byte*>(blockProxy));
+                    stream.writeBytes(reinterpret_cast<const std::byte*>(blockProxy), bytesToWrite);
+                    // Pad to the next multiple of _bytesPerBlock();
+                    // This could probably be done without allocating a new vector but it only happens once, so it
+                    // shouldn't really matter.
+                    const size_t numPaddingBytes  = asserting_cast<size_t>(_bytesPerBlock() - bytesToWrite);
+                    const size_t numPaddingValues = numPaddingBytes / sizeof(data_t);
+                    assert(numPaddingBytes % sizeof(data_t) == 0);
+                    std::vector<data_t> padding(numPaddingValues, _paddingValue);
+                    stream.writeBytes(reinterpret_cast<std::byte*>(padding.data()), numPaddingBytes);
+                } else {
+                    // Enough data left. Just write it.
+                    stream.writeBytes(reinterpret_cast<const std::byte*>(blockProxy), _bytesPerBlock());
+                }
             },
-            [&blockIt, &data, &currentProxy, &currentBlockId, idOfMyFirstBlock, numBlocksLocal, numBlocksGlobal, this]() {
+            [&blockIt, &data, &currentProxy, &currentBlockId, idOfMyFirstBlock, numBlocksLocal, numBlocksGlobal,
+             this]() {
                 std::optional<NextBlock<BlockProxy>> nextBlock = std::nullopt;
                 if (blockIt != data.end()) {
                     assert(currentBlockId >= idOfMyFirstBlock);
@@ -63,12 +84,13 @@ class ReStoreVector {
                     currentProxy = BlockProxy{&(*blockIt)};
                     assert(currentProxy != nullptr);
                     nextBlock.emplace(currentBlockId, currentProxy);
-                    blockIt += asserting_cast<long>(_nativeBlockSize);
+                    blockIt += std::min(asserting_cast<long>(_nativeBlockSize), data.end() - blockIt);
                     currentBlockId++;
                 }
                 return nextBlock;
             },
             numBlocksGlobal);
+        return numBlocksLocal;
     }
 
     // Update the communicator.
@@ -104,7 +126,15 @@ class ReStoreVector {
                 UNUSED(this);
                 std::copy(dataPtr, dataPtr + dataSize, nextBlockPtr);
                 nextBlockPtr += dataSize;
+                if (_isPadded) {
+                    // Remove all padded values
+                    while (*reinterpret_cast<data_t*>(nextBlockPtr - sizeof(data_t)) == _paddingValue) {
+                        nextBlockPtr -= sizeof(data_t);
+                    }
+                }
             });
+        // After removing padded values, we have to adjust the size
+        data.resize(asserting_cast<size_t>(reinterpret_cast<data_t*>(nextBlockPtr) - data.data()));
     }
 
     private:
@@ -118,6 +148,8 @@ class ReStoreVector {
     // size_t serializationBlockSize; // The block size for serialization, must be a multiple of nativeBlockSize.
     ReStore<BlockProxy>    _reStore;
     ReStoreMPI::MPIContext _mpiContext;
+    data_t                 _paddingValue;
+    bool                   _isPadded;
 };
 
 } // namespace ReStore
