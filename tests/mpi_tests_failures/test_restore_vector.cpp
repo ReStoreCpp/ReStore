@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 #include <mpi.h>
 
+#include "mpi_helpers.hpp"
 #include "restore/restore_vector.hpp"
 
 #include "test_with_failures_fixture.hpp"
@@ -41,22 +42,38 @@ TEST_F(ReStoreVectorTest, ArgumentChecking) {
 }
 
 TEST_F(ReStoreVectorTest, EndToEnd) {
-    const size_t   blockSize          = 2;
-    const MPI_Comm mpiComm            = MPI_COMM_WORLD;
-    const uint16_t replicationLevel   = 3;
-    const int      numBlocksPerRank   = 5;
-    const int      numElementsPerRank = blockSize * numBlocksPerRank;
+    auto           myRank                = myRankId();
+    const size_t   blockSize             = 2;
+    const MPI_Comm mpiComm               = MPI_COMM_WORLD;
+    const uint16_t replicationLevel      = 3;
+    const int      numBlocksPerRank      = 5;
+    const int      numElementsOnThisRank = blockSize * numBlocksPerRank - (myRankId() >= 2);
+    int            startingElement       = -1;
+    switch (myRank) {
+        case 0:
+            startingElement = 0;
+            break;
+        case 1:
+            startingElement = 10;
+            break;
+        case 2:
+            startingElement = 20;
+            break;
+        case 3:
+            startingElement = 29;
+            break;
+    }
 
     // Build input data
-    auto             myRank = myRankId();
     std::vector<int> vec;
-    for (int value = myRank * numElementsPerRank; value < (myRank + 1) * numElementsPerRank; value++) {
-        vec.push_back(value);
+    for (int elementCount = 0; elementCount < numElementsOnThisRank; elementCount++) {
+        vec.push_back(elementCount + startingElement);
     }
 
     // Submit the data into the ReStore
-    auto store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel);
-    store.submitData(vec);
+    auto store             = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, -1);
+    auto numBlocksInternal = store.submitData(vec);
+    ASSERT_EQ(numBlocksInternal, numBlocksPerRank);
 
     // Simulate failures
     EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
@@ -80,11 +97,12 @@ TEST_F(ReStoreVectorTest, EndToEnd) {
     store.restoreDataAppend(vec, newBlocksPerRank);
 
     // Check if we have the right data
-    ASSERT_EQ(vec.size(), 20);
     if (myRank == 0) {
+        ASSERT_EQ(vec.size(), 20);
         ASSERT_THAT(vec, ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19));
     } else if (myRank == 1) {
-        ASSERT_THAT(vec, ElementsAre(20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39));
+        ASSERT_EQ(vec.size(), 18);
+        ASSERT_THAT(vec, ElementsAre(20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37));
     } else {
         throw std::runtime_error("This test was designed with 4 ranks in mind.");
     }

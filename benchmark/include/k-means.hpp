@@ -247,7 +247,9 @@ class kMeansAlgorithm {
         if (faultTolerant) {
             TIME_PUSH_AND_START("submit-data"); // I tried to use TIME_BLOCK() here, but the compiler reordered the
                                                 // instructions and I timed nothing.
-            _reStoreWrapper->submitData(_data.dataVector());
+            auto numBlocksLocal = _reStoreWrapper->submitData(_data.dataVector());
+            assert(numBlocksLocal == _data.numDataPoints());
+            UNUSED(numBlocksLocal);
             TIME_POP();
         }
     }
