@@ -37,7 +37,8 @@ void testGetServingRanks(
     auto blockDistribution  = std::make_shared<BlockDistribution>(10, 100, 3, mpiContext);
     auto blockRange         = blockDistribution->rangeOfBlock(rangeStart);
     auto blockRangeExternal = std::pair<ReStore::block_id_t, size_t>(rangeStart, rangeSize);
-    auto servingRanks       = ReStore::getServingRanks(blockRange, blockRangeExternal, blockDistribution.get());
+    std::vector<ReStore::block_range_request_t> servingRanks;
+    ReStore::getServingRanks(blockRange, blockRangeExternal, blockDistribution.get(), servingRanks);
     EXPECT_EQ(expectedLivingReplications, servingRanks.size());
 
     size_t avgSize = blockRangeExternal.second / servingRanks.size();
@@ -95,8 +96,9 @@ TEST(BlockRetrievalTest, getServingRanksDataLoss) {
     auto blockDistribution  = std::make_shared<BlockDistribution>(10, 100, 3, mpiContext);
     auto blockRange         = blockDistribution->rangeOfBlock(rangeStart);
     auto blockRangeExternal = std::pair<ReStore::block_id_t, size_t>(rangeStart, rangeSize);
+    std::vector<ReStore::block_range_request_t> servingRanks;
     EXPECT_THROW(
-        ReStore::getServingRanks(blockRange, blockRangeExternal, blockDistribution.get()),
+        ReStore::getServingRanks(blockRange, blockRangeExternal, blockDistribution.get(), servingRanks),
         ReStore::UnrecoverableDataLossException);
 }
 
