@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include <dbg.h>
+
 #include "mocks.hpp"
 #include "restore/block_retrieval.hpp"
 #include "restore/common.hpp"
@@ -144,7 +146,7 @@ void testSendRecvBlockRanges(int numDeadRanks) {
     for (const auto& sendBlockRange: sendBlockRanges) {
         EXPECT_EQ(
             blockDistribution->rangeOfBlock(sendBlockRange.first.first),
-            blockDistribution->rangeOfBlock(sendBlockRange.first.first + sendBlockRange.first.second));
+            blockDistribution->rangeOfBlock(sendBlockRange.first.first + sendBlockRange.first.second - 1));
         auto ranksWithBlock = blockDistribution->ranksBlockIsStoredOn(sendBlockRange.first.first);
         EXPECT_TRUE(
             std::find(ranksWithBlock.begin(), ranksWithBlock.end(), mySimulatedOriginalRank) != ranksWithBlock.end());
