@@ -6,6 +6,9 @@
 #include <mpi.h>
 #include <vector>
 
+
+#include "xxhash.h"
+
 #include "restore/block_distribution.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/common.hpp"
@@ -49,6 +52,30 @@ inline void getServingRanks(
         // This might be possible without this additional variable but I didn't bother to figure it out.
         currentBlock += numBlocksPerRank + (i < numRanksWithOneBlockMore);
     }
+    assert(currentBlock == blockRangeExternal.first + blockRangeExternal.second);
+}
+
+// Returns originalRank
+template <class MPIContext>
+inline ReStoreMPI::original_rank_t getServingRank(
+    const typename BlockDistribution<MPIContext>::BlockRange& blockRange,
+    const block_range_external_t blockRangeExternal, const BlockDistribution<MPIContext>* _blockDistribution,
+    ReStoreMPI::original_rank_t receivingRank) {
+    assert(blockRange.contains(blockRangeExternal.first));
+    assert(blockRange.contains(blockRangeExternal.first + blockRangeExternal.second - 1));
+    // Special case treatment for blocks that we have locally
+    if (_blockDistribution->isStoredOn(blockRange, receivingRank)) {
+        return receivingRank;
+    }
+    auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
+    std::sort(ranksWithBlockRange.begin(), ranksWithBlockRange.end());
+    if (ranksWithBlockRange.empty()) {
+        throw UnrecoverableDataLossException();
+    }
+
+    // TODO Think about seed
+    auto servingIndex = XXH64(&blockRangeExternal, sizeof(blockRangeExternal), 42) % ranksWithBlockRange.size();
+    return ranksWithBlockRange[servingIndex];
 }
 
 // Takes block range requests with current ranks
@@ -59,7 +86,6 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
     const MPIContext& _mpiContext) {
     std::vector<block_range_request_t> sendBlockRanges;
     std::vector<block_range_request_t> recvBlockRanges;
-    std::vector<block_range_request_t> servingRanks;
     for (const auto& blockRange: blockRanges) {
         for (block_id_t blockId = blockRange.first.first; blockId < blockRange.first.first + blockRange.first.second;
              blockId            = _blockDistribution->rangeOfBlock(blockId).start()
@@ -69,17 +95,18 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
             block_id_t end = std::min(
                 blockRangeInternal.start() + blockRangeInternal.length(),
                 blockRange.first.first + blockRange.first.second);
-            size_t size = end - blockId;
-            getServingRanks(
-                blockRangeInternal, block_range_external_t(blockId, size), _blockDistribution, servingRanks);
-            for (const block_range_request_t& request: servingRanks) {
-                ReStoreMPI::original_rank_t servingRank = request.second;
-                if (servingRank == _mpiContext.getMyOriginalRank()) {
-                    sendBlockRanges.emplace_back(request.first, blockRange.second);
-                }
-                if (blockRange.second == _mpiContext.getMyCurrentRank()) {
-                    recvBlockRanges.emplace_back(request.first, _mpiContext.getCurrentRank(servingRank).value());
-                }
+            size_t size        = end - blockId;
+            auto   servingRank = getServingRank(
+                blockRangeInternal, block_range_external_t(blockId, size), _blockDistribution,
+                _mpiContext.getOriginalRank(blockRange.second));
+
+            if (servingRank == _mpiContext.getMyOriginalRank()) {
+                sendBlockRanges.emplace_back(block_range_external_t(blockId, size), blockRange.second);
+            }
+
+            if (blockRange.second == _mpiContext.getMyCurrentRank()) {
+                recvBlockRanges.emplace_back(
+                    block_range_external_t(blockId, size), _mpiContext.getCurrentRank(servingRank).value());
             }
         }
     }
