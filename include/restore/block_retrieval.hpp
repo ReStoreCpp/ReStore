@@ -60,10 +60,7 @@ inline void getServingRanks(
 template <class MPIContext>
 inline ReStoreMPI::original_rank_t getServingRank(
     const typename BlockDistribution<MPIContext>::BlockRange& blockRange,
-    const block_range_external_t blockRangeExternal, const BlockDistribution<MPIContext>* _blockDistribution,
-    ReStoreMPI::original_rank_t receivingRank) {
-    assert(blockRange.contains(blockRangeExternal.first));
-    assert(blockRange.contains(blockRangeExternal.first + blockRangeExternal.second - 1));
+    const BlockDistribution<MPIContext>* _blockDistribution, ReStoreMPI::original_rank_t receivingRank) {
     // Special case treatment for blocks that we have locally
     if (_blockDistribution->isStoredOn(blockRange, receivingRank)) {
         return receivingRank;
@@ -98,10 +95,11 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
             block_id_t end = std::min(
                 blockRangeInternal.start() + blockRangeInternal.length(),
                 blockRange.first.first + blockRange.first.second);
-            size_t size        = end - blockId;
-            auto   servingRank = getServingRank(
-                blockRangeInternal, block_range_external_t(blockId, size), _blockDistribution,
-                _mpiContext.getOriginalRank(blockRange.second));
+            size_t size = end - blockId;
+            assert(blockRangeInternal.contains(blockId));
+            assert(blockRangeInternal.contains(blockId + size - 1));
+            auto servingRank =
+                getServingRank(blockRangeInternal, _blockDistribution, _mpiContext.getOriginalRank(blockRange.second));
 
             if (servingRank == _mpiContext.getMyOriginalRank()) {
                 sendBlockRanges.emplace_back(block_range_external_t(blockId, size), blockRange.second);
