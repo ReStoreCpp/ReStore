@@ -10,8 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include <dbg.h>
-
 #include "mocks.hpp"
 #include "restore/block_retrieval.hpp"
 #include "restore/common.hpp"
