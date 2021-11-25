@@ -75,7 +75,7 @@ inline ReStoreMPI::original_rank_t getServingRank(
     }
 
     // Use same PE for all requests of a PE for a given BlockRange
-    auto blockRangeReceiverPair = std::make_pair(blockRange.id(), receivingRank);
+    auto blockRangeReceiverPair = std::make_pair(blockRange.id(), asserting_cast<size_t>(receivingRank));
     // TODO Think about seed
     auto servingIndex = XXH64(&blockRangeReceiverPair, sizeof(blockRangeReceiverPair), 42) % ranksWithBlockRange.size();
     return ranksWithBlockRange[servingIndex];
