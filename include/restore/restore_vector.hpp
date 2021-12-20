@@ -137,6 +137,10 @@ class ReStoreVector {
         data.resize(asserting_cast<size_t>(reinterpret_cast<data_t*>(nextBlockPtr) - data.data()));
     }
 
+    std::vector<ReStoreMPI::original_rank_t> getRanksDiedSinceLastCall() {
+        return _reStore.getRanksDiedSinceLastCall();
+    }
+
     private:
     using BlockProxy = const data_t*;
 
@@ -144,7 +148,7 @@ class ReStoreVector {
         return _nativeBlockSize * sizeof(data_t);
     }
 
-    size_t _nativeBlockSize; // The block size as specified by the user. E.g. the number of dimensions per data point.
+    size_t _nativeBlockSize; // The block size as specified by the user.
     // size_t serializationBlockSize; // The block size for serialization, must be a multiple of nativeBlockSize.
     ReStore<BlockProxy>    _reStore;
     ReStoreMPI::MPIContext _mpiContext;
