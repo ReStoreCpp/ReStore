@@ -57,8 +57,9 @@ struct edge_t {
 };
 const edge_t invalid_edge = edge_t(invalid_node, invalid_node);
 
-auto comm_   = MPI_COMM_WORLD;
-bool amIDead = false;
+auto comm_    = MPI_COMM_WORLD;
+bool amIDead  = false;
+bool enableFT = true;
 
 using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>>;
 
@@ -201,6 +202,10 @@ std::unordered_set<int> ranksToKill;
 template <class F>
 bool fault_tolerant_mpi_call(const F& mpi_call) {
     assert(comm_ != MPI_COMM_NULL);
+    if (!enableFT) {
+        mpi_call();
+        return true;
+    }
 
     if (SIMULATE_FAILURES) {
         if (ranksToKill.size() > 0) {
@@ -270,6 +275,9 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
 // Performs a fault-tolerant global MPI barrier. If SIMULATE_FAILURES is defined, this will degrade into a
 // MPI_Barrier.
 bool ft_barrier() {
+    if (!enableFT) {
+        return true;
+    }
     return fault_tolerant_mpi_call([&]() {
 #ifndef SIMULATE_FAILURES
         int flag = 42;
@@ -305,7 +313,7 @@ void recoverFromFailure(
 std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
     const std::vector<node_t>& nodeDegrees, const double dampening, const int numIterations,
-    ReStore::ReStoreVector<edge_t>& reStoreVectorHelper, ReStore::EqualLoadBalancer& loadBalancer,
+    std::optional<ReStore::ReStoreVector<edge_t>>& reStoreVectorHelper, ReStore::EqualLoadBalancer& loadBalancer,
     ProbabilisticFailureSimulator& failureSimulator) {
     UNUSED(numEdges);
     int myRank;
@@ -331,6 +339,7 @@ std::vector<double> pageRank(
             bool isRecomputation = anotherPass;
             anotherPass          = false;
             if (isRecomputation) {
+                assert(enableFT);
                 TIME_PUSH_AND_START("Recomputation");
             }
             for (; i < edges.size(); ++i) {
@@ -360,11 +369,13 @@ std::vector<double> pageRank(
                     return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm_);
                 })
                 || !ft_barrier()) {
+                assert(enableFT);
                 if (amIDead) {
                     return currPageRanks;
                 }
                 TIME_PUSH_AND_START("Recovery");
-                recoverFromFailure(numEdges, edges, reStoreVectorHelper, loadBalancer, myRank, numRanks);
+                assert(reStoreVectorHelper.has_value());
+                recoverFromFailure(numEdges, edges, reStoreVectorHelper.value(), loadBalancer, myRank, numRanks);
                 TIME_POP("Recovery");
                 updatedEdges = true;
                 anotherPass  = true;
@@ -378,6 +389,7 @@ std::vector<double> pageRank(
             value = getActualPageRank(value, teleport, dampening);
         });
         if (updatedEdges) {
+            assert(enableFT);
             std::sort(
                 edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
         }
@@ -439,6 +451,7 @@ int main(int argc, char** argv) {
         ("n,numIterations", "Number of PageRank iterations to run",
          cxxopts::value<int>()->default_value("100")) ///
         // ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("1")) ///
+        ("e,enable-ft", "Enable fault tolerance", cxxopts::value<bool>()->default_value("true")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3")) ///
         ("b,blockSize", "Number of edges to combine into one block for ReStore",
@@ -490,6 +503,7 @@ int main(int argc, char** argv) {
     const double dampening      = options["dampening"].as<double>();
     const int    numIterations  = options["numIterations"].as<int>();
 
+    enableFT                   = options["enable-ft"].as<bool>();
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
 
     const auto blockSize = options["blockSize"].as<size_t>();
@@ -513,15 +527,19 @@ int main(int argc, char** argv) {
 
 
     TIME_NEXT_SECTION("Init");
-    auto restoreVectorHelper =
-        ReStore::ReStoreVector<edge_t>(blockSize, comm_, asserting_cast<uint16_t>(numReplications), invalid_edge);
-    auto numBlocksLocal = restoreVectorHelper.submitData(edges);
+    auto restoreVectorHelper = enableFT ? std::make_optional<ReStore::ReStoreVector<edge_t>>(
+                                   blockSize, comm_, asserting_cast<uint16_t>(numReplications), invalid_edge)
+                                        : std::nullopt;
+    if (enableFT) {
+        assert(restoreVectorHelper.has_value());
+        auto numBlocksLocal = restoreVectorHelper.value().submitData(edges);
 
-    auto mpiContext                = ReStoreMPI::MPIContext(comm_);
-    auto firstBlockIdLocal         = mpiContext.exclusive_scan(numBlocksLocal, MPI_SUM);
-    auto blockRangeLocal           = std::make_pair(std::make_pair(firstBlockIdLocal, numBlocksLocal), myRank);
-    auto blockDistributionCombined = mpiContext.allgather(blockRangeLocal);
-    ReStore::EqualLoadBalancer loadBalancer(blockDistributionCombined, numRanks);
+        auto mpiContext        = ReStoreMPI::MPIContext(comm_);
+        auto firstBlockIdLocal = mpiContext.exclusive_scan(numBlocksLocal, MPI_SUM);
+        auto blockRangeLocal   = std::make_pair(std::make_pair(firstBlockIdLocal, numBlocksLocal), myRank);
+        blockDistribution      = mpiContext.allgather(blockRangeLocal);
+    }
+    ReStore::EqualLoadBalancer loadBalancer(blockDistribution, numRanks);
     TIME_STOP();
 
     int numRanksStarting = numRanks;
@@ -548,6 +566,7 @@ int main(int argc, char** argv) {
         resultPrinter.thisResult("numRanksFailed", numRanksFailed);
         resultPrinter.thisResult("failureProbability", failureProbability);
         resultPrinter.thisResult("graphReadingTime", graphReadingTime);
+        resultPrinter.allResults("enableFT", enableFT);
         resultPrinter.allResults("numReplications", numReplications);
         resultPrinter.allResults("blockSize", blockSize);
         resultPrinter.allResults("numIterations", numIterations);
