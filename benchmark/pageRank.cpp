@@ -196,23 +196,6 @@ double calcDiffL2Norm(const std::vector<double>& lhs, const std::vector<double>&
     return sqrt(qsum);
 }
 
-void recoverFromFailure(
-    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStoreVector<edge_t>& reStoreVectorHelper,
-    ReStore::EqualLoadBalancer& loadBalancer, int& myRank, int& numRanks) {
-    MPI_Comm_rank(comm_, &myRank);
-    MPI_Comm_size(comm_, &numRanks);
-    reStoreVectorHelper.updateComm(comm_);
-    UNUSED(numEdges);
-
-    auto diedRanks = reStoreVectorHelper.getRanksDiedSinceLastCall();
-    auto requests  = loadBalancer.getNewBlocksAfterFailure(diedRanks);
-    reStoreVectorHelper.restoreDataAppend(edges, requests);
-    loadBalancer.commitToPreviousCall();
-    assert(
-        std::all_of(edges.begin(), edges.end(), [](const edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
-    assert(std::all_of(edges.begin(), edges.end(), [](const edge_t edge) { return edge != invalid_edge; }));
-}
-
 std::unordered_set<int> ranksToKill;
 
 template <class F>
@@ -283,6 +266,42 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
     }
 }
 
+
+// Performs a fault-tolerant global MPI barrier. If SIMULATE_FAILURES is defined, this will degrade into a
+// MPI_Barrier.
+bool ft_barrier() {
+    return fault_tolerant_mpi_call([&]() {
+#ifndef SIMULATE_FAILURES
+        int flag = 42;
+        return MPIX_Comm_agree(comm_, &flag);
+#endif
+        return MPI_Barrier(comm_);
+    });
+}
+
+void recoverFromFailure(
+    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStoreVector<edge_t>& reStoreVectorHelper,
+    ReStore::EqualLoadBalancer& loadBalancer, int& myRank, int& numRanks) {
+    MPI_Comm_rank(comm_, &myRank);
+    MPI_Comm_size(comm_, &numRanks);
+    reStoreVectorHelper.updateComm(comm_);
+    UNUSED(numEdges);
+
+    auto diedRanks = reStoreVectorHelper.getRanksDiedSinceLastCall();
+    auto requests  = loadBalancer.getNewBlocksAfterFailure(diedRanks);
+    reStoreVectorHelper.restoreDataAppend(edges, requests);
+    // Barrier to check that everyone successfully recovered. In a final production implementation we would have to
+    // recover from this as well
+    if (!ft_barrier()) {
+        std::cerr << "Failure during recovery. Aborting" << std::endl;
+        exit(1);
+    }
+    loadBalancer.commitToPreviousCall();
+    assert(
+        std::all_of(edges.begin(), edges.end(), [](const edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
+    assert(std::all_of(edges.begin(), edges.end(), [](const edge_t edge) { return edge != invalid_edge; }));
+}
+
 std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
     const std::vector<node_t>& nodeDegrees, const double dampening, const int numIterations,
@@ -339,7 +358,8 @@ std::vector<double> pageRank(
 
             if (!fault_tolerant_mpi_call([&]() {
                     return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm_);
-                })) {
+                })
+                || !ft_barrier()) {
                 if (amIDead) {
                     return currPageRanks;
                 }
