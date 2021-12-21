@@ -2,13 +2,15 @@ cmake_minimum_required(VERSION 3.16)
 
 if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
     set(IS_SUBPROJECT OFF)
+    message(STATUS "Building ReStore as a stand-alone project.")
 else()
     set(IS_SUBPROJECT ON)
+    message(STATUS "Building ReStore as a subbroject.")
 endif()
 
 # Use ccache if available
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if((NOT ${IS_SUBPROBJECT}) AND ${CCACHE_PROGRAM})
     message(STATUS "Found ccache; using it to speed up compilation.")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif()
@@ -46,6 +48,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # Are we building in DEBUG mode?
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   message("!!!!! Building in DEBUG mode !!!!!")
+  # Enable extra checks in the STL
   add_definitions(-D_GLIBCXX_DEBUG)
   add_definitions(-D_GLIBCXX_DEBUG_PEDANTIC)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -58,21 +61,17 @@ option(${PROJECT_NAME}_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(${PROJECT_NAME}_BUILD_EXAMPLES "Build examples" OFF)
 
 # Other build options
-option("SIMULATE_FAILURES" "Simulate node failues (for example when running unit test)." OFF)
-option("USE_FTMPI" "Use a fault-tolerant MPI implementation" ON)
-option("WARNINGS_ARE_ERRORS" "Treat warnings as errors." OFF)
+option(${PROJECT_NAME}_SIMULATE_FAILURES "Simulate node failues (for example when running unit test)." OFF)
+option(${PROJECT_NAME}_USE_FTMPI "Use a fault-tolerant MPI implementation" ON)
+option(${PROJECT_NAME}_WARNINGS_ARE_ERRORS "Treat warnings as errors." OFF)
 
 # Output config
-if(NOT SIMULATE_FAILURES AND NOT USE_FTMPI)
+if(NOT ${PROJECT_NAME}_SIMULATE_FAILURES AND NOT ${PROJECT_NAME}_USE_FTMPI)
     message(FATAL_ERROR "You have to either use a fault-tolerant MPI implementation or simulated failures (or both).")
 endif()
 
 message(STATUS "Using simulated failures: ${SIMULATE_FAILURES}")
 message(STATUS "Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
-
-# Populate some of the options to the source code
-add_compile_definitions(SIMULATE_FAILURES=$<BOOL:${SIMULATE_FAILURES}>)
-add_compile_definitions(USE_FTMPI=$<BOOL:${USE_FTMPI}>)
 
 # Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
@@ -121,11 +120,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # include directories and required compiler flags.
 add_library("${PROJECT_NAME}" INTERFACE)
 target_sources("${PROJECT_NAME}" INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(
-    "${PROJECT_NAME}" INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-)
+target_include_directories("${PROJECT_NAME}" INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 ### Compiler and linker settings ###
 # This interface reflects the requirements to the compiler for building targets
@@ -183,7 +178,7 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     )
 endif()
 
-if(WARNINGS_ARE_ERRORS)
+if(${PROJECT_NAME}_WARNINGS_ARE_ERRORS)
   list(
     APPEND WARNING_FLAGS
     "-Werror"
@@ -194,6 +189,14 @@ target_compile_options(
     "${PROJECT_NAME}_warnings" INTERFACE
     $<BUILD_INTERFACE:${WARNING_FLAGS}>
 )
+
+# Populate some of the options to the source code
+if (${PROJECT_NAME}_SIMULATE_FAILURES) 
+    target_compile_definitions(${PROJECT_NAME}_compile_requirements INTERFACE SIMULATE_FAILURES)
+endif()
+if (${PROJECT_NAME}_USE_FTMPI)
+    target_compile_definitions(${PROJECT_NAME}_compile_requirements INTERFACE USE_FTMPI)
+endif()
 
 ### Libraries ###
 # Load and include cppitertools       
@@ -257,9 +260,9 @@ endif()
 # Load and include xxHash
 message(STATUS "Configuring xxHash...")
 set(${PROJECT_NAME}_XXHASH_DIR "${CMAKE_CURRENT_LIST_DIR}/extern/xxHash" CACHE PATH "Path to the xxHash source directory")
-option(BUILD_SHARED_LIBS OFF)
-option(XXHASH_BUILD_ENABLE_INLINE_API ON)
-option(XXHASH_BUILD_XXHSUM OFF)
+set(BUILD_SHARED_LIBS OFF)
+set(XXHASH_BUILD_ENABLE_INLINE_API ON)
+set(XXHASH_BUILD_XXHSUM OFF)
 add_subdirectory("${${PROJECT_NAME}_XXHASH_DIR}/cmake_unofficial" "${${PROJECT_NAME}_XXHASH_DIR/build}" EXCLUDE_FROM_ALL)
 
 # Link xxHash with ReStore

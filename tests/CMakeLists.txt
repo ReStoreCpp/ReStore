@@ -75,7 +75,7 @@ function(restore_add_mpi_test CPPFILE DISPLAY_NAME NO_MPI_PROC LIBRARIES)
     add_custom_command( # copy over the wrapper
         TARGET ${TESTNAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
-                ${CMAKE_SOURCE_DIR}/tests/mpi_test_wrapper.sh
+                ${PROJECT_SOURCE_DIR}/tests/mpi_test_wrapper.sh
                 ${CMAKE_CURRENT_BINARY_DIR}/mpi_test_wrapper.sh
     )
     add_test( # Register the custom test
@@ -194,12 +194,12 @@ target_link_libraries(${PAGERANK} gtest gmock "ReStore::ReStore;cppitertools;cxx
 
 target_compile_options(${PAGERANK} PRIVATE -g -O0 ${WARNING_FLAGS})
 
-configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_0 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_0 COPYONLY)
-configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_1 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_1 COPYONLY)
-configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_2 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_2 COPYONLY)
-configure_file( ${CMAKE_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_3 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_3 COPYONLY)
+configure_file( ${PROJECT_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_0 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_0 COPYONLY)
+configure_file( ${PROJECT_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_1 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_1 COPYONLY)
+configure_file( ${PROJECT_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_2 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_2 COPYONLY)
+configure_file( ${PROJECT_SOURCE_DIR}/tests/pageRankTestGraph/pageRankTestGraph_3 ${CMAKE_CURRENT_BINARY_DIR}/pageRankTestGraph/pageRankTestGraph_3 COPYONLY)
 
-configure_file(${CMAKE_SOURCE_DIR}/benchmark/pageRankNetworKit.py ${CMAKE_CURRENT_BINARY_DIR}/pageRankNetworKit.py COPYONLY)
+configure_file(${PROJECT_SOURCE_DIR}/benchmark/pageRankNetworKit.py ${CMAKE_CURRENT_BINARY_DIR}/pageRankNetworKit.py COPYONLY)
 
 add_test( # Register the custom test
   NAME TestPageRank_Full
