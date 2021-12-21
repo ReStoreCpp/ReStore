@@ -70,8 +70,8 @@ if(NOT ${PROJECT_NAME}_SIMULATE_FAILURES AND NOT ${PROJECT_NAME}_USE_FTMPI)
     message(FATAL_ERROR "You have to either use a fault-tolerant MPI implementation or simulated failures (or both).")
 endif()
 
-message(STATUS "Using simulated failures: ${SIMULATE_FAILURES}")
-message(STATUS "Using a fault-tolerant MPI implementation: ${USE_FTMPI}")
+message(STATUS "Using simulated failures: ${${PROJECT_NAME}_SIMULATE_FAILURES}")
+message(STATUS "Using a fault-tolerant MPI implementation: ${${PROJECT_NAME}_USE_FTMPI}")
 
 # Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)

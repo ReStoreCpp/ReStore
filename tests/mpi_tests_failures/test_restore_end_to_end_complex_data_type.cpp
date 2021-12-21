@@ -147,9 +147,9 @@ TEST_F(ReStoreTestWithFailures, ComplexDataType) {
         EXPECT_EQ(allData[index + firstBlockId], dataReceived[index]);
     }
 
-    if constexpr (!SIMULATE_FAILURES) {
-        assert(numRanks(newComm) == 2);
-    }
+#ifdef SIMULATE_FAILURES
+    assert(numRanks(newComm) == 2);
+#endif
 }
 
 int main(int argc, char** argv) {
@@ -161,19 +161,19 @@ int main(int argc, char** argv) {
     // Set errorhandler to return so we have a chance to mitigate failures
     MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
-    if constexpr (SIMULATE_FAILURES) {
-        // Add object that will finalize MPI on exit; Google Test owns this pointer
-        ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
+#ifdef SIMULATE_FAILURES
+    // Add object that will finalize MPI on exit; Google Test owns this pointer
+    ::testing::AddGlobalTestEnvironment(new GTestMPIListener::MPIEnvironment);
 
-        // Get the event listener list.
-        ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
+    // Get the event listener list.
+    ::testing::TestEventListeners& listeners = ::testing::UnitTest::GetInstance()->listeners();
 
-        // Remove default listener: the default printer and the default XML printer
-        ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
+    // Remove default listener: the default printer and the default XML printer
+    ::testing::TestEventListener* l = listeners.Release(listeners.default_result_printer());
 
-        // Adds MPI listener; Google Test owns this pointer
-        listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
-    }
+    // Adds MPI listener; Google Test owns this pointer
+    listeners.Append(new GTestMPIListener::MPIWrapperPrinter(l, MPI_COMM_WORLD));
+#endif
 
     int result = RUN_ALL_TESTS();
 

@@ -7,7 +7,7 @@
 #include <signal.h>
 #include <vector>
 
-#include "mpi_context.hpp"
+#include "restore/mpi_context.hpp"
 
 #ifdef USE_FTMPI
     #include <mpi-ext.h>
@@ -68,7 +68,8 @@ class RankFailureManager {
     // This function will always return true if SIMULATE_FAILURES is set to false.
     bool everyoneStillRunning(bool running = true) {
 #ifndef SIMULATE_FAILURES
-            return true;
+        UNUSED(running);
+        return true;
 #else
         // If we detect that a remote rank is no longer running and therefore exit our testcase, the test fixture's
         // TearDown() will call endOfTestcase() which will then call us. We therefore have to respect

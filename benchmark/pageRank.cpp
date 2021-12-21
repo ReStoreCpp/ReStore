@@ -5,8 +5,8 @@
 #include "restore/equal_load_balancer.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
+#include "restore/restore_vector.hpp"
 #include "restore/timer.hpp"
-#include "restore/helpers.hpp"
 
 #include "memoryMappedFileReader.h"
 
@@ -18,6 +18,7 @@
 #include <cxxopts.hpp>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <mpi.h>
 #include <numeric>
 #include <optional>
@@ -26,13 +27,15 @@
 #include <unordered_set>
 #include <utility>
 
-#ifdef USE_FTMPI
+#if defined(USE_FTMPI)
     #include <mpi-ext.h>
 #elif !defined(SIMULATE_FAILURES)
-#error "If not using a fault-tolerant MPI implementation, you can use only simulated failures."
+    #error "If not using a fault-tolerant MPI implementation, you can use only simulated failures."
 #endif
 
-using node_t = int;
+using node_t              = int;
+const node_t invalid_node = std::numeric_limits<node_t>::max();
+
 using edge_id_t = uint64_t;
 
 struct edge_t {
@@ -40,10 +43,20 @@ struct edge_t {
     node_t to;
     edge_t(node_t u, node_t v) noexcept : from(u), to(v) {}
     edge_t() noexcept : from(0), to(0) {}
-};
 
-auto comm    = MPI_COMM_WORLD;
-bool amIDead = false;
+    bool operator==(const edge_t other) const {
+        return from == other.from && to == other.to;
+    }
+
+    bool operator!=(const edge_t other) const {
+        return !(*this == other);
+    }
+};
+const edge_t invalid_edge = edge_t(invalid_node, invalid_node);
+
+auto comm_    = MPI_COMM_WORLD;
+bool amIDead  = false;
+bool enableFT = true;
 
 using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>>;
 
@@ -51,8 +64,8 @@ std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t
 readGraph(const std::vector<std::string>& graphs) {
     int myRank   = -1;
     int numRanks = -1;
-    MPI_Comm_rank(comm, &myRank);
-    MPI_Comm_size(comm, &numRanks);
+    MPI_Comm_rank(comm_, &myRank);
+    MPI_Comm_size(comm_, &numRanks);
     assert(myRank >= 0);
     assert(numRanks > 0);
 
@@ -181,107 +194,124 @@ double calcDiffL2Norm(const std::vector<double>& lhs, const std::vector<double>&
     return sqrt(qsum);
 }
 
-void recoverFromFailure(
-    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStore<edge_t>& reStore,
-    ReStore::EqualLoadBalancer& loadBalancer, int& myRank, int& numRanks) {
-    MPI_Comm_rank(comm, &myRank);
-    MPI_Comm_size(comm, &numRanks);
-    reStore.updateComm(comm);
-    UNUSED(numEdges);
-
-    auto diedRanks = reStore.getRanksDiedSinceLastCall();
-    auto requests  = loadBalancer.getNewBlocksAfterFailure(diedRanks);
-    reStore.pushBlocksOriginalRankIds(
-        requests, [&edges](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
-            assert(sizeof(edge_t) == size);
-            UNUSED(size);
-            UNUSED(blockId);
-            edges.push_back(*reinterpret_cast<const edge_t*>(dataPtr));
-        });
-    loadBalancer.commitToPreviousCall();
-    assert(std::all_of(edges.begin(), edges.end(), [](edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
-}
-
 std::unordered_set<int> ranksToKill;
 
 template <class F>
 bool fault_tolerant_mpi_call(const F& mpi_call) {
-    assert(comm != MPI_COMM_NULL);
+    assert(comm_ != MPI_COMM_NULL);
+    if (!enableFT) {
+        mpi_call();
+        return true;
+    }
 
-#ifdef (SIMULATE_FAILURES)
-        if (ranksToKill.size() > 0) {
-            MPI_Comm newComm;
+#if defined(SIMULATE_FAILURES)
+    if (ranksToKill.size() > 0) {
+        MPI_Comm newComm;
 
-            int rank;
-            MPI_Comm_rank(comm, &rank);
-            int color = 0;
-            if (ranksToKill.find(rank) != ranksToKill.end()) {
-                color   = 1;
-                amIDead = true;
-            }
-            ranksToKill.clear();
-
-            MPI_Comm_split(comm, color, rank, &newComm);
-            MPI_Comm_free(&comm);
-            comm = newComm;
-            return false;
-        } else {
-            mpi_call();
-            return true;
+        int rank;
+        MPI_Comm_rank(comm_, &rank);
+        int color = 0;
+        if (ranksToKill.find(rank) != ranksToKill.end()) {
+            color   = 1;
+            amIDead = true;
         }
+        ranksToKill.clear();
 
+        MPI_Comm_split(comm_, color, rank, &newComm);
+        MPI_Comm_free(&comm_);
+        comm_ = newComm;
+        return false;
     } else {
-#else
-        if (ranksToKill.size() > 0) {
-            int rank;
-            MPI_Comm_rank(comm, &rank);
-            if (ranksToKill.find(rank) != ranksToKill.end()) {
-                exit(42);
-            }
-            ranksToKill.clear();
+        mpi_call();
+        return true;
+    }
+#elif defined(USE_FTMPI)
+    if (ranksToKill.size() > 0) {
+        int rank;
+        MPI_Comm_rank(comm_, &rank);
+        if (ranksToKill.find(rank) != ranksToKill.end()) {
+            exit(42);
         }
-        int rc, ec;
-        rc = mpi_call();
-        MPI_Error_class(rc, &ec);
+        ranksToKill.clear();
+    }
+    int rc, ec;
+    rc = mpi_call();
+    MPI_Error_class(rc, &ec);
 
-        if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_REVOKED) {
-            if (ec == MPI_ERR_PROC_FAILED) {
-                MPIX_Comm_revoke(comm);
-            }
+    if (ec == MPI_ERR_PROC_FAILED || ec == MPI_ERR_REVOKED) {
+        if (ec == MPI_ERR_PROC_FAILED) {
+            MPIX_Comm_revoke(comm_);
+        }
 
-            // Build a new communicator without the failed ranks
-            MPI_Comm newComm;
-            if ((rc = MPIX_Comm_shrink(comm, &newComm)) != MPI_SUCCESS) {
-                std::cerr << "A rank failure was detected, but building the new communicator failed" << std::endl;
-                exit(1);
-            }
-            assert(comm != MPI_COMM_NULL);
-            // As for the ULFM documentation, freeing the communicator is recommended but will probably
-            // not succeed. This is why we do not check for an error here.
-            // I checked that --mca mpi_show_handle_leaks 1 does not show a leaked handle
-            MPI_Comm_free(&comm);
-            comm = newComm;
-            return false;
-        } else if (rc != MPI_SUCCESS) {
-            std::cerr << "MPI call did non fail because of a faulty rank but still did not return MPI_SUCCESS"
-                      << std::endl;
+        // Build a new communicator without the failed ranks
+        MPI_Comm newComm;
+        if ((rc = MPIX_Comm_shrink(comm_, &newComm)) != MPI_SUCCESS) {
+            std::cerr << "A rank failure was detected, but building the new communicator failed" << std::endl;
             exit(1);
         }
-        return true;
-#endif
+        assert(comm_ != MPI_COMM_NULL);
+        // As for the ULFM documentation, freeing the communicator is recommended but will probably
+        // not succeed. This is why we do not check for an error here.
+        // I checked that --mca mpi_show_handle_leaks 1 does not show a leaked handle
+        MPI_Comm_free(&comm_);
+        comm_ = newComm;
+        return false;
+    } else if (rc != MPI_SUCCESS) {
+        std::cerr << "MPI call did non fail because of a faulty rank but still did not return MPI_SUCCESS" << std::endl;
+        exit(1);
     }
+    return true;
+#endif
+}
+
+// Performs a fault-tolerant global MPI barrier. If SIMULATE_FAILURES is defined, this will degrade into a
+// MPI_Barrier.
+bool ft_barrier() {
+    if (!enableFT) {
+        return true;
+    }
+    return fault_tolerant_mpi_call([&]() {
+#ifndef SIMULATE_FAILURES
+        int flag = 42;
+        return MPIX_Comm_agree(comm_, &flag);
+#endif
+        return MPI_Barrier(comm_);
+    });
+}
+
+void recoverFromFailure(
+    const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStoreVector<edge_t>& reStoreVectorHelper,
+    ReStore::EqualLoadBalancer& loadBalancer, int& myRank, int& numRanks) {
+    MPI_Comm_rank(comm_, &myRank);
+    MPI_Comm_size(comm_, &numRanks);
+    reStoreVectorHelper.updateComm(comm_);
+    UNUSED(numEdges);
+
+    auto diedRanks = reStoreVectorHelper.getRanksDiedSinceLastCall();
+    auto requests  = loadBalancer.getNewBlocksAfterFailure(diedRanks);
+    reStoreVectorHelper.restoreDataAppend(edges, requests);
+    // Barrier to check that everyone successfully recovered. In a final production implementation we would have to
+    // recover from this as well
+    if (!ft_barrier()) {
+        std::cerr << "Failure during recovery. Aborting" << std::endl;
+        exit(1);
+    }
+    loadBalancer.commitToPreviousCall();
+    assert(
+        std::all_of(edges.begin(), edges.end(), [](const edge_t edge) { return !(edge.from == 0 && edge.to == 0); }));
+    assert(std::all_of(edges.begin(), edges.end(), [](const edge_t edge) { return edge != invalid_edge; }));
 }
 
 std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
     const std::vector<node_t>& nodeDegrees, const double dampening, const int numIterations,
-    ReStore::ReStore<edge_t>& reStore, ReStore::EqualLoadBalancer& loadBalancer,
+    std::optional<ReStore::ReStoreVector<edge_t>>& reStoreVectorHelper, ReStore::EqualLoadBalancer& loadBalancer,
     ProbabilisticFailureSimulator& failureSimulator) {
     UNUSED(numEdges);
     int myRank;
     int numRanks;
-    MPI_Comm_rank(comm, &myRank);
-    MPI_Comm_size(comm, &numRanks);
+    MPI_Comm_rank(comm_, &myRank);
+    MPI_Comm_size(comm_, &numRanks);
     std::vector<double> prevPageRanks(static_cast<size_t>(numVertices), 0);
     std::vector<double> currPageRanks(static_cast<size_t>(numVertices), 1 / (double)numVertices);
     std::vector<double> tempPageRanks(static_cast<size_t>(numVertices), 0);
@@ -301,6 +331,7 @@ std::vector<double> pageRank(
             bool isRecomputation = anotherPass;
             anotherPass          = false;
             if (isRecomputation) {
+                assert(enableFT);
                 TIME_PUSH_AND_START("Recomputation");
             }
             for (; i < edges.size(); ++i) {
@@ -316,8 +347,8 @@ std::vector<double> pageRank(
             }
 
             // Failure simulation
-            MPI_Comm_rank(comm, &myRank);
-            MPI_Comm_size(comm, &numRanks);
+            MPI_Comm_rank(comm_, &myRank);
+            MPI_Comm_size(comm_, &numRanks);
             // if (myRank == 0) {
             //     std::cout << "Killing ranks ";
             //     for (const auto rankToKill: ranksToKill) {
@@ -327,13 +358,16 @@ std::vector<double> pageRank(
             // }
 
             if (!fault_tolerant_mpi_call([&]() {
-                    return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm);
-                })) {
+                    return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm_);
+                })
+                || !ft_barrier()) {
+                assert(enableFT);
                 if (amIDead) {
                     return currPageRanks;
                 }
                 TIME_PUSH_AND_START("Recovery");
-                recoverFromFailure(numEdges, edges, reStore, loadBalancer, myRank, numRanks);
+                assert(reStoreVectorHelper.has_value());
+                recoverFromFailure(numEdges, edges, reStoreVectorHelper.value(), loadBalancer, myRank, numRanks);
                 TIME_POP("Recovery");
                 updatedEdges = true;
                 anotherPass  = true;
@@ -347,6 +381,7 @@ std::vector<double> pageRank(
             value = getActualPageRank(value, teleport, dampening);
         });
         if (updatedEdges) {
+            assert(enableFT);
             std::sort(
                 edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
         }
@@ -390,12 +425,12 @@ double getFailureProbabilityForExpectedNumberOfFailures(
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
-    MPI_Comm_set_errhandler(comm, MPI_ERRORS_RETURN);
+    MPI_Comm_set_errhandler(comm_, MPI_ERRORS_RETURN);
 
     int myRank;
-    MPI_Comm_rank(comm, &myRank);
+    MPI_Comm_rank(comm_, &myRank);
     int numRanks;
-    MPI_Comm_size(comm, &numRanks);
+    MPI_Comm_size(comm_, &numRanks);
 
     cxxopts::Options cliParser("pageRank", "Benchmarks a fault tolerant page rank algorithm.");
 
@@ -408,8 +443,11 @@ int main(int argc, char** argv) {
         ("n,numIterations", "Number of PageRank iterations to run",
          cxxopts::value<int>()->default_value("100")) ///
         // ("r,repetitions", "Number of repetitions to run", cxxopts::value<size_t>()->default_value("1")) ///
+        ("e,enable-ft", "Enable fault tolerance", cxxopts::value<bool>()->default_value("true")) ///
         ("f,replications", "Replications for fault tolerance with ReStore",
-         cxxopts::value<size_t>()->default_value("3"))                                                     ///
+         cxxopts::value<size_t>()->default_value("3")) ///
+        ("b,blockSize", "Number of edges to combine into one block for ReStore",
+         cxxopts::value<size_t>()->default_value("8"))                                                     ///
         ("seed", "The seed for failure simulation.", cxxopts::value<unsigned long>()->default_value("42")) ///
         ("percentFailures", "Expected ratio of PEs to fail during the calculation.",
          cxxopts::value<double>()->default_value("0.1")) ///
@@ -457,7 +495,10 @@ int main(int argc, char** argv) {
     const double dampening      = options["dampening"].as<double>();
     const int    numIterations  = options["numIterations"].as<int>();
 
+    enableFT                   = options["enable-ft"].as<bool>();
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
+
+    const auto blockSize = options["blockSize"].as<size_t>();
 
     const auto seed            = options["seed"].as<unsigned long>();
     const auto percentFailures = options["percentFailures"].as<double>();
@@ -476,45 +517,36 @@ int main(int argc, char** argv) {
     auto end              = MPI_Wtime();
     auto graphReadingTime = end - start;
 
-    ReStore::EqualLoadBalancer loadBalancer(blockDistribution, numRanks);
-
     TIME_NEXT_SECTION("Init");
-    ReStore::ReStore<edge_t> reStore(
-        comm, asserting_cast<uint16_t>(numReplications), ReStore::OffsetMode::constant, sizeof(edge_t));
+    auto restoreVectorHelper = enableFT ? std::make_optional<ReStore::ReStoreVector<edge_t>>(
+                                   blockSize, comm_, asserting_cast<uint16_t>(numReplications), invalid_edge)
+                                        : std::nullopt;
+    if (enableFT) {
+        assert(restoreVectorHelper.has_value());
+        auto numBlocksLocal = restoreVectorHelper.value().submitData(edges);
 
-    edge_id_t currentEdgeId = firstEdgeId;
-    auto      getNextBlock  = [firstEdgeId = firstEdgeId, &currentEdgeId,
-                         &edges      = edges]() -> std::optional<ReStore::NextBlock<edge_t>> {
-        if (currentEdgeId - firstEdgeId >= asserting_cast<edge_id_t>(edges.size())) {
-            return std::nullopt;
-        } else {
-            ++currentEdgeId;
-            return ReStore::NextBlock<edge_t>{asserting_cast<ReStore::block_id_t>(currentEdgeId - 1),
-                                              edges[asserting_cast<size_t>(currentEdgeId - 1 - firstEdgeId)]};
-        }
-    };
-
-    auto serializeBlock = [](const edge_t edge, ReStore::SerializedBlockStoreStream& stream) {
-        stream << edge.from << edge.to;
-    };
-
-    reStore.submitBlocks(serializeBlock, getNextBlock, asserting_cast<ReStore::block_id_t>(numEdges));
+        auto mpiContext        = ReStoreMPI::MPIContext(comm_);
+        auto firstBlockIdLocal = mpiContext.exclusive_scan(numBlocksLocal, MPI_SUM);
+        auto blockRangeLocal   = std::make_pair(std::make_pair(firstBlockIdLocal, numBlocksLocal), myRank);
+        blockDistribution      = mpiContext.allgather(blockRangeLocal);
+    }
+    ReStore::EqualLoadBalancer loadBalancer(blockDistribution, numRanks);
     TIME_STOP();
 
     int numRanksStarting = numRanks;
 
-    MPI_Barrier(comm);
+    MPI_Barrier(comm_);
     std::vector<double> result;
     TIME_NEXT_SECTION("Pagerank");
     for (size_t i = 0; i < numRepetitions; ++i) {
         result = pageRank(
-            numVertices, numEdges, edges, nodeDegrees, dampening, numIterations, reStore, loadBalancer,
+            numVertices, numEdges, edges, nodeDegrees, dampening, numIterations, restoreVectorHelper, loadBalancer,
             failureSimulator);
     }
     TIME_STOP();
 
-    MPI_Comm_rank(comm, &myRank);
-    MPI_Comm_size(comm, &numRanks);
+    MPI_Comm_rank(comm_, &myRank);
+    MPI_Comm_size(comm_, &numRanks);
 
     int numRanksFailed = numRanksStarting - numRanks;
 
@@ -525,7 +557,9 @@ int main(int argc, char** argv) {
         resultPrinter.thisResult("numRanksFailed", numRanksFailed);
         resultPrinter.thisResult("failureProbability", failureProbability);
         resultPrinter.thisResult("graphReadingTime", graphReadingTime);
+        resultPrinter.allResults("enableFT", enableFT);
         resultPrinter.allResults("numReplications", numReplications);
+        resultPrinter.allResults("blockSize", blockSize);
         resultPrinter.allResults("numIterations", numIterations);
         resultPrinter.thisResult("seed", seed);
         resultPrinter.allResults("numVertices", numVertices);
