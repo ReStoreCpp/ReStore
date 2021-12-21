@@ -1,8 +1,9 @@
 #include <algorithm>
+#include <cassert>
 #include <random>
 #include <unordered_set>
 
-#include "restore/helpers.hpp"
+#include <restore/helpers.hpp>
 
 class ProbabilisticFailureSimulator {
     public:
