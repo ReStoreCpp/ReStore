@@ -6,6 +6,7 @@
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
 #include "restore/timer.hpp"
+#include "restore/helpers.hpp"
 
 #include "memoryMappedFileReader.h"
 
@@ -25,17 +26,13 @@
 #include <unordered_set>
 #include <utility>
 
-#if USE_FTMPI
+#ifdef USE_FTMPI
     #include <mpi-ext.h>
+#elif !defined(SIMULATE_FAILURES)
+#error "If not using a fault-tolerant MPI implementation, you can use only simulated failures."
 #endif
 
-
-static_assert(
-    USE_FTMPI || SIMULATE_FAILURES,
-    "When not simulating failures, you need to use a fault-tolerant MPI implementation.");
-
 using node_t = int;
-
 using edge_id_t = uint64_t;
 
 struct edge_t {
@@ -211,7 +208,7 @@ template <class F>
 bool fault_tolerant_mpi_call(const F& mpi_call) {
     assert(comm != MPI_COMM_NULL);
 
-    if (SIMULATE_FAILURES) {
+#ifdef (SIMULATE_FAILURES)
         if (ranksToKill.size() > 0) {
             MPI_Comm newComm;
 
@@ -234,7 +231,7 @@ bool fault_tolerant_mpi_call(const F& mpi_call) {
         }
 
     } else {
-#if USE_FTMPI
+#else
         if (ranksToKill.size() > 0) {
             int rank;
             MPI_Comm_rank(comm, &rank);

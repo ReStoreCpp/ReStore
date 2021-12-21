@@ -6,11 +6,11 @@
 #include <mpi.h>
 #include <vector>
 
-#include "restore/block_distribution.hpp"
-#include "restore/block_serialization.hpp"
-#include "restore/common.hpp"
-#include "restore/helpers.hpp"
-#include "restore/mpi_context.hpp"
+#include "block_distribution.hpp"
+#include "block_serialization.hpp"
+#include "common.hpp"
+#include "helpers.hpp"
+#include "mpi_context.hpp"
 
 namespace ReStore {
 using block_range_external_t = std::pair<block_id_t, size_t>;

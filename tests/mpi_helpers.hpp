@@ -4,12 +4,15 @@
 #include <cstdlib>
 #include <iostream>
 #include <mpi.h>
-#include <restore/mpi_context.hpp>
 #include <signal.h>
 #include <vector>
 
-#if USE_FTMPI
+#include "mpi_context.hpp"
+
+#ifdef USE_FTMPI
     #include <mpi-ext.h>
+#elif !defined(SIMULATE_FAILURES)
+    #error "If not using a fault-tolerant MPI implementation, you can use only simulated failures."
 #endif
 
 constexpr int EXIT_SIMULATED_FAILURE = 42;
@@ -43,7 +46,7 @@ class RankFailureManager {
         assert(!iFailed());
         _iFailed = std::find(failedRanks.begin(), failedRanks.end(), myRankId(_comm)) != failedRanks.end();
 
-#if SIMULATE_FAILURES
+#ifdef SIMULATE_FAILURES
         return simulateFailure(_iFailed);
 #else
         if (_iFailed) {
@@ -64,9 +67,9 @@ class RankFailureManager {
     // use the EXIT_IF_FAILED() macro for this (don't forget to invert the return value of this function).
     // This function will always return true if SIMULATE_FAILURES is set to false.
     bool everyoneStillRunning(bool running = true) {
-        if (!SIMULATE_FAILURES) {
+#ifndef SIMULATE_FAILURES
             return true;
-        }
+#else
         // If we detect that a remote rank is no longer running and therefore exit our testcase, the test fixture's
         // TearDown() will call endOfTestcase() which will then call us. We therefore have to respect
         // _noMoreCollectives.
@@ -80,6 +83,7 @@ class RankFailureManager {
         } else {
             return false;
         }
+#endif
     }
 
     // Signals that this ranks test case ended. Either because it ran until the end or because some ASSERT_* failed.
@@ -89,9 +93,11 @@ class RankFailureManager {
         // In the case that this rank simulated a failure, it has already been split off into another communicator. As a
         // result, nobody expect this rank to participate in any collective operation and it can therefore silently
         // exit.
-        if (SIMULATE_FAILURES && !iFailed()) {
+#ifdef SIMULATE_FAILURES
+        if (!iFailed()) {
             everyoneStillRunning(false);
         }
+#endif
     }
 
     // iFailed()
@@ -110,7 +116,7 @@ class RankFailureManager {
     }
 
     private:
-#if SIMULATE_FAILURES
+#ifdef SIMULATE_FAILURES
     // Simulates the failure of this rank if iFailed is set. This is done by splitting the current communictor into
     // alive and failed ranks. The failed ranks must then exit their test case.
     MPI_Comm simulateFailure(bool iFailed) {
@@ -128,7 +134,7 @@ class RankFailureManager {
     }
 #endif
 
-#if USE_FTMPI && !SIMULATE_FAILURES
+#ifndef SIMULATE_FAILURES
     // repairCommunicator()
     //
     // If there was a (non simulated) rank failure we can use this to repair the MPI communicator. It will return

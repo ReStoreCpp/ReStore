@@ -14,10 +14,12 @@
 #include <stdint.h>
 #include <vector>
 
-#include "restore/helpers.hpp"
+#include "helpers.hpp"
 
-#if USE_FTMPI
+#ifdef USE_FTMPI
     #include <mpi-ext.h>
+// #elif !defined(SIMULATE_FAILURES)
+// #error "If not using a fault-tolerant MPI implementation, you can use only simulated failures."
 #endif
 
 #ifndef RESTORE_SPARSE_ALL_TO_ALL_TAG
@@ -213,7 +215,7 @@ class RankManager {
 
 template <class F>
 void successOrThrowMpiCall(const F& mpiCall) {
-#if USE_FTMPI
+#ifdef USE_FTMPI
     int rc, ec;
     rc = mpiCall();
     MPI_Error_class(rc, &ec);
@@ -481,17 +483,18 @@ class MPIContext {
     // MPI_Barrier.
     void ft_barrier() {
         successOrThrowMpiCall([&]() {
-#ifndef SIMULATE_FAILURES
+#ifdef USE_FTMPI
             int flag = 42;
             return MPIX_Comm_agree(_comm, &flag);
-#endif
+#else
             return MPI_Barrier(_comm);
+#endif
         });
     }
 
     // Revokes the current the current communictor. If SIMULATE_FAILURES is defined, this will degrade into a NOP.
     void revokeComm() {
-#ifndef SIMULATE_FAILURES
+#ifdef USE_FTMPI
         MPIX_Comm_revoke(_comm);
 #endif
     }
@@ -499,7 +502,7 @@ class MPIContext {
     // This will fix the communicator (i.e. create a new communicator with all the dead ranks from the old communicator
     // removed). If SIMULATE_FAILURES is defined, this degreades into a NOP.
     void fixComm() {
-#ifndef SIMULATE_FAILURES
+#ifdef USE_FTMPI
         // Build a new communicator without the failed ranks
         MPI_Comm newComm = MPI_COMM_NULL;
         int      rc      = -1;
