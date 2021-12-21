@@ -246,8 +246,9 @@ class BlockSubmissionCommunication {
                 block_id_t       blockId = next->blockId;
                 const BlockType& block   = next->block;
                 if (blockId >= _blockDistribution.numBlocks()) {
-                    throw std::runtime_error("The block id is bigger than the number of blocks. Have you passed "
-                                             "the number of block *in total* (not only on this rank)?");
+                    throw std::runtime_error("The block id (" + std::to_string(blockId)
+                    + ") is bigger than the number of blocks (" + std::to_string(_blockDistribution.numBlocks())
+                    + "). Have you passed the number of block *in total* (not only on this rank)?");
                 }
 
                 // Determine which ranks will get this block; assume that no failures occurred

@@ -65,7 +65,7 @@ class SerializedBlockStoreStream {
     //
     // Can be used to serialize a plain old datatype (pod)
     template <class T>
-    SerializedBlockStoreStream& operator<<(const T& value) {
+    inline SerializedBlockStoreStream& operator<<(const T& value) {
         static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
 
         auto src = reinterpret_cast<const std::byte*>(&value);
@@ -80,7 +80,7 @@ class SerializedBlockStoreStream {
     // writeBytes()
     //
     // Copy n bytes, starting at begin to the buffers.
-    void writeBytes(const std::byte* begin, size_t n) {
+    inline void writeBytes(const std::byte* begin, size_t n) {
         for (auto buffer: _outputBuffers) {
             buffer->insert(buffer->end(), begin, begin + n);
         }
