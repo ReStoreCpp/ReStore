@@ -372,3 +372,6 @@ experiments/page-rank-overhead/*.png
 
 # Presentations
 Presentations/
+
+# Experimental results
+experiments/id-compression/*.csv
