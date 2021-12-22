@@ -1,9 +1,9 @@
 #!/bin/bash
 
-NO_COMPRESSION_FILENAME="microbenchmarks-no-compression.csv"
-YES_COMPRESSION_FILENAME="microbenchmarks-yes-compression.csv"
-TUNED_COMPRESSION_FILENAME="microbenchmarks-tuned-compression.csv"
-VAR_PE_BASENAME="microbenchmarks-"
+# NO_COMPRESSION_FILENAME="microbenchmarks-no-compression.csv"
+# YES_COMPRESSION_FILENAME="microbenchmarks-yes-compression.csv"
+# TUNED_COMPRESSION_FILENAME="microbenchmarks-tuned-compression.csv"
+VAR_PE_BASENAME="microbenchmarks-tuned-pull-"
 
 remove-summary-rows() {
     sed -e "/_mean/d" -e "/_median/d" -e "/_stddev/d"
@@ -14,8 +14,10 @@ keep-first-six-fields() {
 }
 
 expand-name-field() {
-    sed -E "2,\$s/\"BM_([a-zA-Z]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4/" | 
-    sed -E "1s/name,/benchmark,bytesPerBlock,replicationLevel,bytesPerRank,/"
+    # sed -E "2,\$s/\"BM_([a-zA-Z]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4/" | 
+    # sed -E "1s/name,/benchmark,bytesPerBlock,replicationLevel,bytesPerRank,/"
+    sed -E "2,\$s/\"BM_([a-zA-Z]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4,\5/" | 
+    sed -E "1s/name,/benchmark,bytesPerBlock,replicationLevel,bytesPerRank,numSourceRanks,/"
 }
 
 add-code-field() {

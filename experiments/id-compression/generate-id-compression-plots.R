@@ -9,7 +9,7 @@ library(stringr)
 setwd("~/projects/ReStore/experiments/id-compression")
 
 # Load the simulations' results
-data <- read_csv("results.csv",
+data <- read_csv("results-tuned-pull-2.csv",
     col_types = cols(
       code = col_character(),
       numberOfNodes = col_integer(),
@@ -30,8 +30,10 @@ data <- read_csv("results.csv",
     bytesPerBlock = humanReadable(bytesPerBlock, standard = "IEC", digits = 0),
     bytesPerBlock = factor(
       bytesPerBlock,
-      levels = c("  8 B  ", " 16 B  ", " 32 B  ", " 64 B  ", "128 B  ",
-                 "256 B  ", "512 B  ", "  1 KiB", "  1 MiB")
+      #levels = c("8 B  ", "1 KiB", "1 MiB")
+      #levels = c("  8 B  ", " 16 B  ", " 32 B  ", " 64 B  ", "128 B  ",
+      #           "256 B  ", "512 B  ", "  1 KiB", "  1 MiB")
+      levels = c("  8 B", " 16 B", " 32 B", " 64 B", "128 B")
   )) %>%
   group_by(numberOfRanks, benchmark, code, bytesPerBlock, replicationLevel, bytesPerRank) %>%
   summarize(
@@ -130,6 +132,7 @@ tuning_evaluation_data <- filter(data,
   && replicationLevel %in% c(2, 3, 4)
   && bytesPerBlock %in% c("  8 B  ", "  1 KiB", "  1 MiB")
 )
+tuning_evaluation_data <- data
 
 eval_tuned_data <- filter(data,
   code == "tuned-id-compression"
@@ -224,10 +227,11 @@ plot_grid(
 plot_grid(
   data = tuning_evaluation_data %>%
     filter(
-      code == "tuned-id-compression",
-      replicationLevel == 3
+      code == "var-pe",
+      replicationLevel == 3,
+      numberOfRanks == 40 * 32
     ),
-  benchmarkName = "pushBlocks",
+  benchmark = "pushBlocksSmallRange",
   x = bytesPerRankHR,
   xlab = "bytes per rank",
   facet_x = bytesPerBlock,
@@ -241,8 +245,8 @@ plot_grid(
 
 # Runtime depending on the number of bytes per block
 plot_grid(
-  data = tuning_evaluation_data %>% filter(code == "tuned-id-compression"),
-  benchmarkName = "pushBlocks",
+  data = tuning_evaluation_data %>% filter(numberOfRanks == 40 * 32),
+  benchmark = "pushBlocksSmallRange",
   x = bytesPerBlock,
   xlab = "bytes per block",
   facet_x = bytesPerRankHR,
@@ -257,16 +261,16 @@ plot_grid(
 # Scaling with the number of PEs
 # TODO Fix name of numberOfRanks
 plot_grid(
-  data = scaling_evaluation_data %>%
-    filter(bytesPerBlock == "  1 KiB"),
-  benchmarkName = "pushBlocks",
+  data = tuning_evaluation_data %>%
+    filter(replicationLevel == 3),
+  benchmark = "pushBlocksSmallRange",
   x = as.factor(numberOfRanks * 40),
   xlab = "number of ranks",
   facet_x = bytesPerBlock,
   facet_x_description = "bytes per block",
-  facet_y = NA,
-  facet_y_description = NA,
+  facet_y = bytesPerBlock,
+  facet_y_description = "bytes per block",
   color = bytesPerRankHR,
   color_label = "bytes per rank",
-  facet_wrap = "none"
+  facet_wrap = "single"
 )
