@@ -75,7 +75,7 @@ class RankFailureManager {
         // TearDown() will call endOfTestcase() which will then call us. We therefore have to respect
         // _noMoreCollectives.
         if (!_noMoreCollectives) {
-            MPI_Allreduce(&running, &running, 1, MPI_BYTE, MPI_LAND, _comm);
+            MPI_Allreduce(MPI_IN_PLACE, &running, 1, MPI_C_BOOL, MPI_LAND, _comm);
             if (!running) {
                 // Someone stopped running, we should not expect them to participate in collective operations.
                 _noMoreCollectives = true;
