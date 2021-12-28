@@ -17,15 +17,42 @@
 
 constexpr int EXIT_SIMULATED_FAILURE = 42;
 
-int myRankId(MPI_Comm _comm = MPI_COMM_WORLD) {
+// Returns a descriptive string associated with the given MPI error code.
+std::string mpi_error_code_to_string(int errorCode) {
+    int  errorClass;
+    int  errorStringLength;
+    int  errorClassStringLength;
+    char errorString[BUFSIZ];
+    char errorClassString[BUFSIZ];
+
+    // Get the error string for this error.
+    MPI_Error_string(errorCode, errorString, &errorStringLength);
+
+    // Get the error class and error string for the error class.
+    MPI_Error_class(errorCode, &errorClass);
+    MPI_Error_string(errorClass, errorClassString, &errorClassStringLength);
+
+    // Assemble the error message and return.
+    return std::string(errorString) + " (" + std::string(errorClassString) + ")";
+}
+
+int myRankId(MPI_Comm comm = MPI_COMM_WORLD) {
+    assert(comm != MPI_COMM_NULL);
     int rankId;
-    MPI_Comm_rank(_comm, &rankId);
+    if (MPI_Comm_rank(comm, &rankId) != MPI_SUCCESS) {
+        std::cerr << "Error in MPI_Comm_rank" << std::endl;
+        MPI_Abort(comm, EXIT_FAILURE);
+    }
     return rankId;
 }
 
-int numRanks(MPI_Comm _comm = MPI_COMM_WORLD) {
+int numRanks(MPI_Comm comm = MPI_COMM_WORLD) {
+    assert(comm != MPI_COMM_NULL);
     int numRanks;
-    MPI_Comm_size(_comm, &numRanks);
+    if (MPI_Comm_size(comm, &numRanks) != MPI_SUCCESS) {
+        std::cerr << "Error in MPI_Comm_size" << std::endl;
+        MPI_Abort(comm, EXIT_FAILURE);
+    }
     return numRanks;
 }
 
@@ -36,7 +63,9 @@ int numRanks(MPI_Comm _comm = MPI_COMM_WORLD) {
 
 class RankFailureManager {
     public:
-    explicit RankFailureManager(MPI_Comm comm) noexcept : _comm(comm), _iFailed(false), _noMoreCollectives(false) {}
+    explicit RankFailureManager(MPI_Comm comm) noexcept : _comm(comm), _iFailed(false), _noMoreCollectives(false) {
+        assert(comm != MPI_COMM_NULL);
+    }
 
     // failRanks()
     //
@@ -67,16 +96,17 @@ class RankFailureManager {
     // use the EXIT_IF_FAILED() macro for this (don't forget to invert the return value of this function).
     // This function will always return true if SIMULATE_FAILURES is set to false.
     bool everyoneStillRunning(bool running = true) {
-#ifndef SIMULATE_FAILURES
-        UNUSED(running);
-        return true;
-#else
+#ifdef SIMULATE_FAILURES
         // If we detect that a remote rank is no longer running and therefore exit our testcase, the test fixture's
         // TearDown() will call endOfTestcase() which will then call us. We therefore have to respect
         // _noMoreCollectives.
         if (!_noMoreCollectives) {
-            MPI_Allreduce(MPI_IN_PLACE, &running, 1, MPI_C_BOOL, MPI_LAND, _comm);
-            if (!running) {
+            bool everyoneStillRunning;
+            MPI_Barrier(_comm);
+            MPI_Reduce(&running, &everyoneStillRunning, 1, MPI_C_BOOL, MPI_LAND, 0, _comm);
+            MPI_Bcast(&everyoneStillRunning, 1, MPI_C_BOOL, 0, _comm);
+            // MPI_Allreduce(MPI_IN_PLACE, &running, 1, MPI_C_BOOL, MPI_LAND, _comm);
+            if (!everyoneStillRunning) {
                 // Someone stopped running, we should not expect them to participate in collective operations.
                 _noMoreCollectives = true;
             }
@@ -84,6 +114,9 @@ class RankFailureManager {
         } else {
             return false;
         }
+#else
+        UNUSED(running);
+        return true;
 #endif
     }
 
@@ -113,6 +146,7 @@ class RankFailureManager {
     // Reset the communicator to the one given as comm. We can use this if there was a failure somewhere else in the
     // program.
     void resetCommunicator(MPI_Comm comm) noexcept {
+        assert(comm != MPI_COMM_NULL);
         _comm = comm;
     }
 
@@ -122,15 +156,35 @@ class RankFailureManager {
     // alive and failed ranks. The failed ranks must then exit their test case.
     MPI_Comm simulateFailure(bool iFailed) {
         assert(!_noMoreCollectives);
-        MPI_Comm newComm;
-        MPI_Comm_split(
+        assert(_comm != MPI_COMM_NULL);
+        MPI_Comm newComm = MPI_COMM_NULL;
+
+        // Create new communicators for the alive and failed ranks.
+        auto result = MPI_Comm_split(
             _comm,
-            iFailed,    // color 1
+            iFailed,    // color
             myRankId(), // key
             &newComm);
-        MPI_Comm_free(&_comm);
+        if (result != MPI_SUCCESS) {
+            std::cerr << "MPI_Comm_split failed: " << mpi_error_code_to_string(result) << std::endl;
+            MPI_Abort(_comm, EXIT_FAILURE);
+        } else if (newComm == MPI_COMM_NULL) {
+            std::cerr << "MPI_Comm_split returned MPI_COMM_NULL" << std::endl;
+            MPI_Abort(_comm, EXIT_FAILURE);
+        }
 
+        // Free the previous communicator.
+        // result = MPI_Comm_free(&_comm);
+        // if (result != MPI_SUCCESS) {
+        //     std::cerr << "MPI_Comm_free failed: " << mpi_error_code_to_string(result) << std::endl;
+        //     MPI_Abort(_comm, EXIT_FAILURE);
+        // }
+        // assert(_comm == MPI_COMM_NULL);
+
+        // Switch to the new communicator.
         _comm = newComm;
+        assert(_comm != MPI_COMM_NULL);
+
         return newComm;
     }
 #endif
