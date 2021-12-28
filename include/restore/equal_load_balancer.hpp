@@ -8,8 +8,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "common.hpp"
-#include "mpi_context.hpp"
+#include "restore/common.hpp"
+#include "restore/mpi_context.hpp"
 #include "restore/block_retrieval.hpp"
 #include "restore/helpers.hpp"
 

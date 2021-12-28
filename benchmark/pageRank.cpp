@@ -1,3 +1,21 @@
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <cxxopts.hpp>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <numeric>
+#include <optional>
+#include <streambuf>
+#include <string>
+#include <unordered_set>
+#include <utility>
+
+#include <mpi.h>
+
 #include "probabilistic_failure_simulator.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/common.hpp"
@@ -9,23 +27,6 @@
 #include "restore/timer.hpp"
 
 #include "memoryMappedFileReader.h"
-
-#include <algorithm>
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <cxxopts.hpp>
-#include <fstream>
-#include <iostream>
-#include <limits>
-#include <mpi.h>
-#include <numeric>
-#include <optional>
-#include <streambuf>
-#include <string>
-#include <unordered_set>
-#include <utility>
 
 #if defined(USE_FTMPI)
     #include <mpi-ext.h>

@@ -4,9 +4,9 @@
 #include <iostream>
 #include <memory>
 
-#include "common.hpp"
-#include "helpers.hpp"
-#include "mpi_context.hpp"
+#include "restore/common.hpp"
+#include "restore/helpers.hpp"
+#include "restore/mpi_context.hpp"
 
 namespace ReStore {
 

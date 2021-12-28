@@ -14,7 +14,7 @@
 #include <stdint.h>
 #include <vector>
 
-#include "helpers.hpp"
+#include "restore/helpers.hpp"
 
 #ifdef USE_FTMPI
     #include <mpi-ext.h>

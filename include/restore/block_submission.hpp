@@ -8,11 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "block_distribution.hpp"
-#include "block_serialization.hpp"
-#include "common.hpp"
-#include "helpers.hpp"
-#include "mpi_context.hpp"
+#include "restore/block_distribution.hpp"
+#include "restore/block_serialization.hpp"
+#include "restore/common.hpp"
+#include "restore/helpers.hpp"
+#include "restore/mpi_context.hpp"
 
 namespace ReStore {
 

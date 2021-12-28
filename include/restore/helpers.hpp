@@ -7,12 +7,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <mpi.h>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 
-// TODO: Write UnitTests
+#include <mpi.h>
 
 // Suppress compiler warnings about unused variables
 #define UNUSED(expr) (void)(expr)

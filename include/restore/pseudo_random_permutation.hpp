@@ -4,7 +4,8 @@
 #include <random>
 #include <vector>
 
-#include "helpers.hpp"
+#include "restore/helpers.hpp"
+
 #include "xxhash.h"
 
 class LCGPseudoRandomPermutation {

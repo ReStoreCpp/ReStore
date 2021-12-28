@@ -18,12 +18,12 @@
 #include "mpi_context.hpp"
 #include <mpi.h>
 
-#include "helpers.hpp"
-#include "block_distribution.hpp"
-#include "block_retrieval.hpp"
-#include "block_serialization.hpp"
-#include "block_submission.hpp"
-#include "common.hpp"
+#include "restore/helpers.hpp"
+#include "restore/block_distribution.hpp"
+#include "restore/block_retrieval.hpp"
+#include "restore/block_serialization.hpp"
+#include "restore/block_submission.hpp"
+#include "restore/common.hpp"
 
 namespace ReStore {
 

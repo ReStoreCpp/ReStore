@@ -8,8 +8,8 @@
     #include <benchmark/benchmark.h>
 #endif
 
-#include <restore/pseudo_random_permutation.hpp>
-#include <restore/helpers.hpp>
+#include "restore/pseudo_random_permutation.hpp"
+#include "restore/helpers.hpp"
 
 #include <xxhash.h>
 
