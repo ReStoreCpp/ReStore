@@ -61,7 +61,7 @@ if (${PROJECT_NAME}_SIMULATE_FAILURES)
     target_compile_options(${KMEANS} PRIVATE -O3 "${WARNING_FLAGS}")
     target_compile_definitions(${PROJECT_NAME}_kmeans INTERFACE "ENABLE_TIMERS")
 else()
-    message(STATUS "Simulation of failures is disabled. I'm not building the k-means benchmark.")
+    message(STATUS "Simulation of failures is disabled. I'm not building the k-means benchmark and unittests.")
 endif() 
 
 # microbenchmarks
