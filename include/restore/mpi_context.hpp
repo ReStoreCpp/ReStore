@@ -16,7 +16,7 @@
 
 #include "restore/helpers.hpp"
 
-#if USE_FTMPI
+#ifdef USE_FTMPI
     #include <mpi-ext.h>
 #elif !defined(SIMULATE_FAILURES)
     #error "If not using a fault-tolerant MPI implementation, you can use only simulated failures."
