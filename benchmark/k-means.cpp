@@ -52,10 +52,12 @@ class CommandLineOptions {
             ("s,seed", "Random seed for the data generation and cluster center selection.",
              cxxopts::value<unsigned long>()->default_value("0"))                                                 ///
             ("failure-simulator-seed", "Random seed for the failure simulator.", cxxopts::value<unsigned long>()) ///
-            ("n,no-header", "Do not print the csv header.", cxxopts::value<bool>()->default_value("false"))       ///
-            ("i,input", "Name of the input file.", cxxopts::value<std::string>())                                 ///
-            ("o,output", "Name of the output file.", cxxopts::value<std::string>())                               ///
-            ("h,help", "Print help message.");                                                                    ///
+            ("a,write-assignment", "Write the assignment to disk (one file per rank).",
+             cxxopts::value<bool>()->default_value("false"))                                                ///
+            ("n,no-header", "Do not print the csv header.", cxxopts::value<bool>()->default_value("false")) ///
+            ("i,input", "Name of the input file.", cxxopts::value<std::string>())                           ///
+            ("o,output", "Name of the output file.", cxxopts::value<std::string>())                         ///
+            ("h,help", "Print help message.");                                                              ///
 
         cliParser.parse_positional({"mode"});
         cliParser.positional_help("<mode>");
@@ -166,6 +168,8 @@ class CommandLineOptions {
             }
 
             _repeatId = options["repeat-id"].as<std::string>();
+
+            _writeAssignment = options["write-assignment"].as<bool>();
 
             if (_useFaultTolerance) {
                 if (options.count("failure-probability") > 0 && options.count("expected-failure-rate") > 0) {
@@ -323,6 +327,10 @@ class CommandLineOptions {
         return _repeatId;
     }
 
+    bool writeAssignment() const {
+        return _writeAssignment;
+    }
+
     private:
     size_t                       _numDataPointsPerRank;
     size_t                       _numCenters;
@@ -339,6 +347,7 @@ class CommandLineOptions {
     std::optional<unsigned long> _failureSimulatorSeed = std::nullopt;
     bool                         _useFaultTolerance    = false;
     bool                         _printCSVHeader       = true;
+    bool                         _writeAssignment      = false;
     size_t                       _numRepetitions       = 1;
     std::string                  _simulationId;
     bool                         _validConfiguration = true;
@@ -497,11 +506,14 @@ void runKMeansAndReport(ReStoreMPI::MPIContext& mpiContext, CommandLineOptions& 
 
         writeClusterCentersToFile(options.clusterCentersOutputFile(), kmeansInstance.centers());
     }
-    // The cluster assignments to data is written per rank, to avoid having to collect the data from all ranks and
-    // therefore needing a lot of memory on the main rank.
-    writeDataAssignmentToFile(
-        options.assignmentOutputFile(mpiContext.getMyCurrentRank()), kmeansInstance.data(),
-        kmeansInstance.pointToCenterAssignment().assignedCenter);
+
+    if (options.writeAssignment()) {
+        // The cluster assignments to data is written per rank, to avoid having to collect the data from all ranks and
+        // therefore needing a lot of memory on the main rank.
+        writeDataAssignmentToFile(
+            options.assignmentOutputFile(mpiContext.getMyCurrentRank()), kmeansInstance.data(),
+            kmeansInstance.pointToCenterAssignment().assignedCenter);
+    }
 }
 
 int main(int argc, char** argv) {
