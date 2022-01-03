@@ -13,6 +13,7 @@
 #include "restore/common.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
+#include "restore/pseudo_random_permutation.hpp"
 
 namespace ReStore {
 
@@ -155,10 +156,9 @@ class BlockSubmissionCommunication {
 // GCC throws a false-positive warning here.
 #pragma GCC diagnostic push
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+    #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
             if (_currentRange.has_value() && _lastId < _currentRange->last) {
-
 #pragma GCC diagnostic pop
                 return std::make_pair(0, ++_lastId);
             } else {
@@ -213,10 +213,10 @@ class BlockSubmissionCommunication {
     // serializeFunc and nextBlock are identical to the parameters described in submitBlocks
     // Allocates and returns the send buffers.
     // Assumes that no ranks have failed since the creation of BlockDistribution and reset of MPIContext.
-    template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction>
+    template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction, typename Permutation>
     SendBuffers serializeBlocksForTransmission(
         SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
-        bool canBeParallelized = false // not supported yet
+        const Permutation& blockIdPermuter, bool canBeParallelized = false // not supported yet
     ) {
         UNUSED(canBeParallelized);
 
@@ -246,10 +246,14 @@ class BlockSubmissionCommunication {
                 block_id_t       blockId = next->blockId;
                 const BlockType& block   = next->block;
                 if (blockId >= _blockDistribution.numBlocks()) {
-                    throw std::runtime_error("The block id (" + std::to_string(blockId)
-                    + ") is bigger than the number of blocks (" + std::to_string(_blockDistribution.numBlocks())
-                    + "). Have you passed the number of block *in total* (not only on this rank)?");
+                    throw std::runtime_error(
+                        "The block id (" + std::to_string(blockId) + ") is bigger than the number of blocks ("
+                        + std::to_string(_blockDistribution.numBlocks())
+                        + "). Have you passed the number of block *in total* (not only on this rank)?");
                 }
+
+                // Use a pseudorandom bijection to break patterns in the distribution of the block id's over the ranks.
+                blockId = blockIdPermuter.f(blockId);
 
                 // Determine which ranks will get this block; assume that no failures occurred
                 assert(_mpiContext.numFailuresSinceReset() == 0);

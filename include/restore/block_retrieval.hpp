@@ -15,6 +15,7 @@
 #include "restore/common.hpp"
 #include "restore/helpers.hpp"
 #include "restore/mpi_context.hpp"
+#include "restore/pseudo_random_permutation.hpp"
 
 namespace ReStore {
 using block_range_external_t = std::pair<block_id_t, size_t>;
@@ -87,22 +88,34 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
     std::vector<block_range_request_t> sendBlockRanges;
     std::vector<block_range_request_t> recvBlockRanges;
     for (const auto& blockRange: blockRanges) {
-        for (block_id_t blockId = blockRange.first.first; blockId < blockRange.first.first + blockRange.first.second;
-             blockId            = _blockDistribution->rangeOfBlock(blockId).start()
-                       + _blockDistribution->rangeOfBlock(blockId).length()) {
+        const auto firstBlockIdInRange = blockRange.first.first;
+        const auto lengthOfRange       = blockRange.first.second;
+        assert(lengthOfRange > 0);
+        const auto lastBlockIdInRange = firstBlockIdInRange + lengthOfRange - 1;
+        const auto destinationRank    = blockRange.second;
+
+        const auto firstBlockIdOfNextInternalRange = [&_blockDistribution](const block_id_t blockId) {
+            return _blockDistribution->rangeOfBlock(blockId).start()
+                   + _blockDistribution->rangeOfBlock(blockId).length();
+        };
+
+        // The requested block range might span over multiple internal block ranges. We therefore might need to split up
+        // the request.
+        for (block_id_t blockId = firstBlockIdInRange; blockId <= lastBlockIdInRange;
+             blockId            = firstBlockIdOfNextInternalRange(blockId)) {
             const typename BlockDistribution<MPIContext>::BlockRange blockRangeInternal =
                 _blockDistribution->rangeOfBlock(blockId);
-            block_id_t end = std::min(
-                blockRangeInternal.start() + blockRangeInternal.length(),
-                blockRange.first.first + blockRange.first.second);
+
+            block_id_t end =
+                std::min(blockRangeInternal.start() + blockRangeInternal.length(), firstBlockIdInRange + lengthOfRange);
             size_t size = end - blockId;
             assert(blockRangeInternal.contains(blockId));
             assert(blockRangeInternal.contains(blockId + size - 1));
-            auto servingRank =
-                getServingRank(blockRangeInternal, _blockDistribution, _mpiContext.getOriginalRank(blockRange.second));
 
+            const auto servingRank =
+                getServingRank(blockRangeInternal, _blockDistribution, _mpiContext.getOriginalRank(destinationRank));
             if (servingRank == _mpiContext.getMyOriginalRank()) {
-                sendBlockRanges.emplace_back(block_range_external_t(blockId, size), blockRange.second);
+                sendBlockRanges.emplace_back(block_range_external_t(blockId, size), destinationRank);
             }
 
             if (blockRange.second == _mpiContext.getMyCurrentRank()) {
@@ -123,10 +136,11 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
 }
 
 // Takes recvBlockRanges with current ranks
-template <class HandleSerializedBlockFunction>
+template <typename HandleSerializedBlockFunction, typename Permutation>
 inline void handleReceivedBlocks(
     const std::vector<ReStoreMPI::RecvMessage>& recvMessages, const std::vector<block_range_request_t>& recvBlockRanges,
-    const OffsetMode _offsetMode, const size_t _constOffset, HandleSerializedBlockFunction handleSerializedBlock) {
+    const OffsetMode _offsetMode, const size_t _constOffset, HandleSerializedBlockFunction handleSerializedBlock,
+    const Permutation& blockIdPermuter) {
     static_assert(
         std::is_invocable<HandleSerializedBlockFunction, const std::byte*, size_t, block_id_t>(),
         "HandleSerializedBlockFunction must be invocable as (const std::byte*, size_t, "
@@ -145,28 +159,39 @@ inline void handleReceivedBlocks(
             return lhs.srcRank < rhs.srcRank;
         }));
 
-    size_t currentIndexRecvBlockRanges = 0;
+    // Iterate over all received messages and all block ranges contained in those messages.
+    assert(_offsetMode == OffsetMode::constant); // TODO: Implement LUT mode
+    UNUSED(_offsetMode);
+    size_t idxRecvBlockRanges = 0; // Index into the recvBlockRanges vector
+    // recvBlockRanges contains the block ranges we are expecting, recvMessages the block ranges we actually received.
     for (const ReStoreMPI::RecvMessage& recvMessage: recvMessages) {
-        assert(currentIndexRecvBlockRanges < recvBlockRanges.size());
-        assert(recvMessage.srcRank == recvBlockRanges[currentIndexRecvBlockRanges].second);
-        // TODO: Implement LUT mode
-        assert(_offsetMode == OffsetMode::constant);
-        UNUSED(_offsetMode);
-        size_t currentIndexRecvMessage = 0;
-        while (currentIndexRecvBlockRanges < recvBlockRanges.size()
-               && recvBlockRanges[currentIndexRecvBlockRanges].second == recvMessage.srcRank) {
-            for (block_id_t blockId = recvBlockRanges[currentIndexRecvBlockRanges].first.first;
-                 blockId < recvBlockRanges[currentIndexRecvBlockRanges].first.first
-                               + recvBlockRanges[currentIndexRecvBlockRanges].first.second;
-                 ++blockId) {
-                assert(currentIndexRecvMessage < recvMessage.data.size());
-                assert(currentIndexRecvMessage + _constOffset <= recvMessage.data.size());
-                handleSerializedBlock(&(recvMessage.data[currentIndexRecvMessage]), _constOffset, blockId);
-                currentIndexRecvMessage += _constOffset;
+        assert(recvMessage.data.size() > 0);
+        assert(idxRecvBlockRanges < recvBlockRanges.size());
+        assert(recvMessage.srcRank == recvBlockRanges[idxRecvBlockRanges].second);
+
+        size_t idxRecvMessageData = 0; // Index into the recvMessages.data() vector
+        while (idxRecvBlockRanges < recvBlockRanges.size()
+               && recvBlockRanges[idxRecvBlockRanges].second == recvMessage.srcRank) {
+            // For each block, call the user-provided deserialization function.
+            const auto firstBlockId = recvBlockRanges[idxRecvBlockRanges].first.first;
+            const auto numBlocks    = recvBlockRanges[idxRecvBlockRanges].first.second;
+            const auto lastBlockId  = firstBlockId + numBlocks - 1;
+            for (auto blockId = firstBlockId; blockId <= lastBlockId; ++blockId) {
+                assert(idxRecvMessageData < recvMessage.data.size());
+                assert(idxRecvMessageData + _constOffset <= recvMessage.data.size());
+
+                // Provide the user with the de-permuted id (the one he specified when submitting the block).
+                const auto userBlockId = blockIdPermuter.finv(blockId);
+                handleSerializedBlock(&(recvMessage.data[idxRecvMessageData]), _constOffset, userBlockId);
+
+                // Move onto the next block in recvMessage.data
+                idxRecvMessageData += _constOffset;
             }
 
-            currentIndexRecvBlockRanges++;
+            idxRecvBlockRanges++;
         }
+        // Has the whole message been consumed?
+        assert(idxRecvMessageData == recvMessage.data.size());
     }
 }
 

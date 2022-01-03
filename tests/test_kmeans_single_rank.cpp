@@ -220,6 +220,9 @@ TEST(kMeansAlgorithm, constructor) {
         data << 2.5f;
         data << typename kMeansData<float>::FinalizeDataPoint();
         ASSERT_TRUE(data.valid());
+        data << 1.3f << 1.7f << typename kMeansData<float>::FinalizeDataPoint();
+        ASSERT_TRUE(data.valid());
+        ASSERT_GT(data.dataSize(), 0);
         ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext, true, REPLICATION_LEVEL)));
     }
 
@@ -392,9 +395,10 @@ TEST(kMeansAlgorithm, updateCenters) {
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 1, 1));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(2, 2));
             kmeansInstance.updateCenters();
+            kmeansInstance.assignPointsToCenters();
+            ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(2, 2));
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 1));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 1, 1));
-            ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(2, 2));
         }
 
         { // If the centers already match the data, nothing should change
@@ -446,6 +450,7 @@ TEST(kMeansAlgorithm, updateCenters) {
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 0));
             kmeansInstance.updateCenters();
+            kmeansInstance.assignPointsToCenters();
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5, 20));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 0));
@@ -500,11 +505,13 @@ TEST(kMeansAlgorithm, smallExample) {
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 17));
 
         kmeansInstance.performIterations(1);
+        kmeansInstance.assignPointsToCenters(); // We want to test the local assignment.
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1));
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 4));
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(3.5, 18));
 
         kmeansInstance.performIterations(1);
+        kmeansInstance.assignPointsToCenters(); // We want to test the local assignment.
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1));
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 4));
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(3.5, 18));

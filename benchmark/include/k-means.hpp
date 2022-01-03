@@ -247,7 +247,7 @@ class kMeansAlgorithm {
         if (faultTolerant) {
             TIME_PUSH_AND_START("submit-data"); // I tried to use TIME_BLOCK() here, but the compiler reordered the
                                                 // instructions and I timed nothing.
-            auto numBlocksLocal = _reStoreWrapper->submitData(_data.dataVector());
+            const auto numBlocksLocal = _reStoreWrapper->submitData(_data.dataVector());
             assert(numBlocksLocal == _data.numDataPoints());
             UNUSED(numBlocksLocal);
             TIME_POP();
@@ -351,11 +351,11 @@ class kMeansAlgorithm {
 
     // Return the points to center assignment. This is a local operation and will therefore not report rank failures.
     const PointToCenterAssignment& pointToCenterAssignment() const {
+        assert(_pointToCenterAssignment);
         return *_pointToCenterAssignment;
     }
 
     // Assign each (local) data point to the closest center. This is a local operation and will therefore not report
-    // rank failures. Consider using performIterations(...) if you have no special needs.
     // rank failures. Consider using performIterations(...) if you have no special needs.
     // We assume that all data points with an index < startIndex are allready assigned to their respective centers. Use
     // a startIndex > 0 for example after restoring data which resided on a failed rank and is thus new to this rank.
@@ -372,7 +372,7 @@ class kMeansAlgorithm {
             throw std::out_of_range("You requested to start at a non-existing data point.");
         }
 
-        // Engage data structure if it is not already
+        // Engage data structure if it is not already.
         assert(_pointToCenterAssignment || startIndex == 0);
         if (!_pointToCenterAssignment) {
             _pointToCenterAssignment.emplace(numDataPoints(), numCenters());
@@ -384,6 +384,7 @@ class kMeansAlgorithm {
                 _pointToCenterAssignment->numPointsAssignedToCenter.end(), 0);
             // Resetting the assignments is not necessary as these are overwritten anyway
         }
+        assert(_pointToCenterAssignment);
 
         // If we got new data since the last time we were called, we need to increase the size of the assignedCenter
         // data structure.
@@ -421,11 +422,19 @@ class kMeansAlgorithm {
         assert(_pointToCenterAssignment->assignedCenter.size() == numDataPoints());
 
         // Compute how many points are assigned to each center.
+        assert(std::for_each(
+            _pointToCenterAssignment->numPointsAssignedToCenter.begin(),
+            _pointToCenterAssignment->numPointsAssignedToCenter.end(),
+            [](uint64_t numPoints) { return numPoints == 0; }));
+
+        assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
         for (uint64_t dataIdx = startIndex; dataIdx < numDataPoints(); dataIdx++) {
+            assert(dataIdx < _pointToCenterAssignment->assignedCenter.size());
             auto assignedCenter = _pointToCenterAssignment->assignedCenter[dataIdx];
+
+            assert(assignedCenter < _pointToCenterAssignment->numPointsAssignedToCenter.size());
             _pointToCenterAssignment->numPointsAssignedToCenter[assignedCenter]++;
         }
-        assert(_pointToCenterAssignment->numPointsAssignedToCenter.size() == numCenters());
     }
 
     // Do one update round of the center positions with the current data. This is a global operation and might throw
@@ -441,7 +450,7 @@ class kMeansAlgorithm {
         uint64_t startIndex;
         if (!_contribToCenterPosition) {
             if (onlyNewData) {
-                throw std::runtime_error("onlyNewData = true is now allowed when first calling updateCenters.");
+                throw std::runtime_error("onlyNewData = true is not allowed when first calling updateCenters.");
             }
             _contribToCenterPosition.emplace(numCenters(), numDimensions(), 0);
             startIndex = 0;

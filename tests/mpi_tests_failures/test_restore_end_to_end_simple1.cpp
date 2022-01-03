@@ -52,17 +52,20 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
             requests.emplace_back(std::make_pair(std::make_pair(0, data.size()), rank));
         }
 
-        std::vector<int>    dataReceived;
-        ReStore::block_id_t nextBlockId = 0;
+        std::vector<int> dataReceived(data.size());
+        std::fill(dataReceived.begin(), dataReceived.end(), -1);
+        ReStore::block_id_t numBlocksReceived = 0;
         store.pushBlocksCurrentRankIds(
             requests,
-            [&dataReceived, &nextBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
-                EXPECT_EQ(nextBlockId, blockId);
-                ++nextBlockId;
+            [&dataReceived, &numBlocksReceived](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
                 ASSERT_EQ(sizeof(int), size);
-                dataReceived.emplace_back(*reinterpret_cast<const int*>(dataPtr));
+                ASSERT_LT(blockId, dataReceived.size());
+                EXPECT_EQ(dataReceived[blockId], -1);
+                dataReceived[blockId] = *reinterpret_cast<const int*>(dataPtr);
+                EXPECT_NE(dataReceived[blockId], -1);
+                numBlocksReceived++;
             });
-        EXPECT_EQ(data.size(), nextBlockId);
+        EXPECT_EQ(data.size(), numBlocksReceived);
 
         ASSERT_EQ(data.size(), dataReceived.size());
         for (size_t i = 0; i < data.size(); ++i) {
@@ -77,17 +80,22 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
                 std::make_pair(std::make_pair(static_cast<size_t>(rank) * data.size(), data.size()), rank));
         }
 
-        std::vector<int>    dataReceived;
-        ReStore::block_id_t nextBlockId = static_cast<size_t>(myRankId()) * data.size();
+        std::vector<int> dataReceived(data.size());
+        std::fill(dataReceived.begin(), dataReceived.end(), -1);
+        ReStore::block_id_t numBlocksReceived = 0;
+        const auto thisRanksBlockIdOffset = data.size() * static_cast<size_t>(myRankId());
         store.pushBlocksCurrentRankIds(
             requests,
-            [&dataReceived, &nextBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
-                EXPECT_EQ(nextBlockId, blockId);
-                ++nextBlockId;
+            [&dataReceived, &numBlocksReceived, thisRanksBlockIdOffset](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
+                const auto idxDataReceived = blockId - thisRanksBlockIdOffset;
                 ASSERT_EQ(sizeof(int), size);
-                dataReceived.emplace_back(*reinterpret_cast<const int*>(dataPtr));
+                ASSERT_LT(idxDataReceived, dataReceived.size());
+                EXPECT_EQ(dataReceived[idxDataReceived], -1);
+                dataReceived[idxDataReceived] = *reinterpret_cast<const int*>(dataPtr);
+                EXPECT_NE(dataReceived[idxDataReceived], -1);
+                numBlocksReceived++;
             });
-        EXPECT_EQ(static_cast<size_t>(myRankId()) * data.size() + data.size(), nextBlockId);
+        EXPECT_EQ(data.size(), numBlocksReceived);
 
         ASSERT_EQ(data.size(), dataReceived.size());
         for (size_t i = 0; i < data.size(); ++i) {

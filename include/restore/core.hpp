@@ -18,12 +18,12 @@
 #include "mpi_context.hpp"
 #include <mpi.h>
 
-#include "restore/helpers.hpp"
 #include "restore/block_distribution.hpp"
 #include "restore/block_retrieval.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/block_submission.hpp"
 #include "restore/common.hpp"
+#include "restore/helpers.hpp"
 
 namespace ReStore {
 
@@ -44,10 +44,13 @@ class ReStore {
     //      a look-up-table. The drawback is, that each block will take up constOffset _bytes_ of space.
     // constOffset: An upper bound for the number of _bytes_ a serialized block takes up. Has to be equal to 0
     //      when using look-up-table offset mode and greater than 0 when using consOffset mode.
-    ReStore(MPI_Comm mpiCommunicator, uint16_t replicationLevel, OffsetMode offsetMode, size_t constOffset = 0)
+    ReStore(
+        MPI_Comm mpiCommunicator, uint16_t replicationLevel, OffsetMode offsetMode, size_t constOffset = 0,
+        uint64_t randomPermutationSeed = 0)
         : _replicationLevel(replicationLevel),
           _offsetMode(offsetMode),
           _constOffset(constOffset),
+          _randomPermutationSeed(randomPermutationSeed),
           _mpiContext(mpiCommunicator),
           _blockDistribution(nullptr), // Depends on the number of blocks which are submitted in submitBlocks.
           _serializedBlocks(nullptr) { // Depends on _blockDistribution
@@ -122,6 +125,8 @@ class ReStore {
     ) {
         if (_offsetMode == OffsetMode::lookUpTable) {
             throw std::runtime_error("LUT mode is not implemented yet.");
+        } else if (totalNumberOfBlocks == 1) {
+            throw std::runtime_error("Cannot submit a single block, please use at least two blocks.");
         }
         static_assert(
             std::is_invocable<SerializeBlockCallbackFunction, const BlockType&, SerializedBlockStoreStream&>(),
@@ -133,6 +138,13 @@ class ReStore {
         if (totalNumberOfBlocks == 0) {
             throw std::runtime_error("Invalid number of blocks: 0.");
         }
+
+        // Initialize the block id permuter.
+        const auto largestBlockId = totalNumberOfBlocks - 1;
+        const auto lengthOfRanges =
+            std::max(1ul, totalNumberOfBlocks / asserting_cast<size_t>(_mpiContext.getCurrentSize()) / 100ul);
+        _blockIdPermuter.emplace(largestBlockId, lengthOfRanges, _randomPermutationSeed);
+        assert(_blockIdPermuter);
 
         try { // Ranks failures might be detected during this block
             // We define original rank ids to be the rank ids during this function call
@@ -154,11 +166,12 @@ class ReStore {
             BlockSubmissionCommunication<BlockType> comm(_mpiContext, *_blockDistribution, offsetMode());
 
             // Allocate send buffers and serialize the blocks to be sent
-            auto sendBuffers = comm.serializeBlocksForTransmission(serializeFunc, nextBlock, canBeParallelized);
+            auto sendBuffers =
+                comm.serializeBlocksForTransmission(serializeFunc, nextBlock, *_blockIdPermuter, canBeParallelized);
 
             // All blocks have been serialized, send & receive replicas
             auto receivedMessages = comm.exchangeData(sendBuffers);
-            
+
             // Deallocate sendBuffers, they are no longer needed and take up replicationLevel * bytesPerRank memory.
             // By deallocating them now, before the received messages are stored into the serialized block storage,
             // we can reduce the peak memory consumption of this algorithm.
@@ -235,10 +248,55 @@ class ReStore {
             throw std::runtime_error("LUT mode is not implemented yet.");
         }
         UNUSED(canBeParallelized);
+
+        // for (auto& blockRange: blockRanges) {
+        //     std::cout << "{ " << blockRange.first.first << ", " << blockRange.first.second << " }"
+        //               << " -> " << blockRange.second << std::endl;
+        // }
+
+        // Project the block ids from the user ids to the internal ids. This means that the length of the requested
+        // block ranges change, too. If we are using the RangePermutation, we will still get some consecutive blocks
+        // ids. E.g. the requested range [0,100) might get translated to [0,10), [80, 90), [20, 30), ...
+        assert(_blockIdPermuter);
+        std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> internalBlockRanges;
+        for (auto& blockRange: blockRanges) {
+            const auto destinationRank = blockRange.second;
+
+            auto blockIdUser       = blockRange.first.first;
+            auto lengthOfUserRange = blockRange.first.second;
+
+            for (;;) {
+                const auto blockIdInternal       = _blockIdPermuter->f(blockIdUser);
+                const auto lastIdOfInternalRange = _blockIdPermuter->lastIdOfRange(blockIdInternal);
+
+                if (blockIdInternal + lengthOfUserRange - 1 <= lastIdOfInternalRange) {
+                    // The remainder of the user-requested range is completely contained in the internal range.
+                    assert(lengthOfUserRange > 0);
+                    internalBlockRanges.push_back({{blockIdInternal, lengthOfUserRange}, destinationRank});
+                    break;
+                } else {
+                    // We have to split the user-requested range into into multiple internal ranges.
+                    assert(lastIdOfInternalRange >= blockIdInternal);
+                    const auto consumedBlocks = lastIdOfInternalRange - blockIdInternal + 1;
+                    assert(consumedBlocks >= 1);
+                    assert(consumedBlocks < lengthOfUserRange);
+
+                    internalBlockRanges.push_back({{blockIdInternal, consumedBlocks}, destinationRank});
+                    lengthOfUserRange -= consumedBlocks;
+                    blockIdUser += consumedBlocks;
+                }
+            }
+        }
+
+        // Transfer the blocks over the network
         const auto [sendBlockRanges, recvBlockRanges] =
-            getSendRecvBlockRanges(blockRanges, _blockDistribution.get(), _mpiContext);
+            getSendRecvBlockRanges(internalBlockRanges, _blockDistribution.get(), _mpiContext);
         const auto recvMessages = sparseAllToAll(sendBlockRanges, _offsetMode, _mpiContext, _serializedBlocks.get());
-        handleReceivedBlocks(recvMessages, recvBlockRanges, _offsetMode, _constOffset, handleSerializedBlock);
+
+        // Parse the received messages and call the user provided deserialization function.
+        assert(_blockIdPermuter);
+        handleReceivedBlocks(
+            recvMessages, recvBlockRanges, _offsetMode, _constOffset, handleSerializedBlock, *_blockIdPermuter);
     }
 
     // Warning! This changes the blockRanges destination rank from original ranks to current ranks!
@@ -259,7 +317,7 @@ class ReStore {
     template <class HandleSerializedBlockFunction>
     void pushBlocksOriginalRankIds(
         const std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>& blockRanges,
-        HandleSerializedBlockFunction                                                       handleSerializedBlock,
+        HandleSerializedBlockFunction                                                             handleSerializedBlock,
         bool canBeParallelized = false // not supported yet
     ) {
         auto blockRangesCopy(blockRanges);
@@ -267,12 +325,14 @@ class ReStore {
     }
 
     private:
-    const uint16_t                            _replicationLevel;
-    const OffsetMode                          _offsetMode;
-    const size_t                              _constOffset;
-    ReStoreMPI::MPIContext                    _mpiContext;
-    std::shared_ptr<BlockDistribution<>>      _blockDistribution;
-    std::unique_ptr<SerializedBlockStorage<>> _serializedBlocks;
+    const uint16_t                                                  _replicationLevel;
+    const OffsetMode                                                _offsetMode;
+    const size_t                                                    _constOffset;
+    const uint64_t                                                  _randomPermutationSeed;
+    ReStoreMPI::MPIContext                                          _mpiContext;
+    std::shared_ptr<BlockDistribution<>>                            _blockDistribution;
+    std::unique_ptr<SerializedBlockStorage<>>                       _serializedBlocks;
+    std::optional<RangePermutation<FeistelPseudoRandomPermutation>> _blockIdPermuter;
 
     void _assertInvariants() const {
         assert(
@@ -280,7 +340,6 @@ class ReStore {
             || (_offsetMode == OffsetMode::lookUpTable && _constOffset == 0));
         assert(_replicationLevel > 0);
     }
-
 }; // class ReStore
 
 /*
