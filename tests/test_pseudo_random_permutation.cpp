@@ -6,6 +6,7 @@
 #include "restore/helpers.hpp"
 #include "restore/pseudo_random_permutation.hpp"
 
+
 using namespace ::testing;
 
 // TEST(PseudoRandomPermutationTest, LCG) {
@@ -121,4 +122,228 @@ TEST(PseudoRandomPermutationTest, FeistelUnevenBitCount) {
     EXPECT_THAT(
         sequence,
         UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23));
+}
+
+TEST(PseudoRandomPermutationTest, IdentityPermutation) {
+    const uint64_t n = 10;
+
+    IdentityPermutation   permutation;
+    std::vector<uint64_t> sequence;
+
+    // Build test vector
+    sequence.reserve(n);
+    for (uint64_t i = 0; i < n; ++i) {
+        sequence.push_back(i);
+    }
+
+    // Apply permutation to every element in the test vector.
+    for (size_t idx = 0; idx < n; ++idx) {
+        // Test that the permutation is invertible
+        ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
+
+        // Compute the permutation, to later check that each element only appears once.
+        sequence[idx] = permutation.f(sequence[idx]);
+    }
+
+    // Check that no element appears more than once. Also check, that we did not exceed the given range and that we
+    // really applied the identity permutation.
+    EXPECT_THAT(sequence, ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+}
+
+TEST(PseudoRandomPermutationTest, RangePermutation) {
+    { // Identity permutation
+        const uint64_t numElements    = 10;
+        const uint64_t lengthOfRanges = 5;
+        const uint64_t seed           = 34348128;
+
+        RangePermutation<IdentityPermutation> permutation(numElements - 1, lengthOfRanges, seed);
+        ASSERT_EQ(permutation.numRanges(), 2);
+        ASSERT_EQ(permutation.maxValue(), numElements - 1);
+        ASSERT_EQ(permutation.lengthOfRanges(), lengthOfRanges);
+
+        EXPECT_EQ(permutation.lastIdOfRange(0), 4);
+        EXPECT_EQ(permutation.lastIdOfRange(1), 4);
+        EXPECT_EQ(permutation.lastIdOfRange(2), 4);
+        EXPECT_EQ(permutation.lastIdOfRange(3), 4);
+        EXPECT_EQ(permutation.lastIdOfRange(4), 4);
+        EXPECT_EQ(permutation.lastIdOfRange(5), 9);
+        EXPECT_EQ(permutation.lastIdOfRange(6), 9);
+        EXPECT_EQ(permutation.lastIdOfRange(7), 9);
+        EXPECT_EQ(permutation.lastIdOfRange(8), 9);
+        EXPECT_EQ(permutation.lastIdOfRange(8), 9);
+
+        // Build test vector
+        std::vector<uint64_t> sequence;
+        sequence.reserve(numElements);
+        for (uint64_t i = 0; i < numElements; ++i) {
+            sequence.push_back(i);
+        }
+
+        // Apply permutation to every element in the test vector.
+        for (size_t idx = 0; idx < numElements; ++idx) {
+            // Test that the permutation is invertible
+            ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
+
+            // Compute the permutation, to later check that each element only appears once.
+            sequence[idx] = permutation.f(sequence[idx]);
+        }
+
+        // Check that no element appears more than once. Also check, that we did not exceed the given range and that we
+        // really applied the identity permutation.
+        EXPECT_THAT(sequence, ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+    }
+
+    { // Identity permutation numElements is not evenly divisible by numRanges
+        const uint64_t                        numElements    = 10;
+        const uint64_t                        lengthOfRanges = 3;
+        const uint64_t                        seed           = 91244356213;
+        RangePermutation<IdentityPermutation> permutation(numElements - 1, lengthOfRanges, seed);
+        ASSERT_EQ(permutation.numRanges(), 4);
+        ASSERT_EQ(permutation.maxValue(), numElements - 1);
+        ASSERT_EQ(permutation.lengthOfRanges(), lengthOfRanges);
+
+        EXPECT_EQ(permutation.lastIdOfRange(0), 2);
+        EXPECT_EQ(permutation.lastIdOfRange(1), 2);
+        EXPECT_EQ(permutation.lastIdOfRange(2), 2);
+        EXPECT_EQ(permutation.lastIdOfRange(3), 5);
+        EXPECT_EQ(permutation.lastIdOfRange(4), 5);
+        EXPECT_EQ(permutation.lastIdOfRange(5), 5);
+        EXPECT_EQ(permutation.lastIdOfRange(6), 8);
+        EXPECT_EQ(permutation.lastIdOfRange(7), 8);
+        EXPECT_EQ(permutation.lastIdOfRange(8), 8);
+        EXPECT_EQ(permutation.lastIdOfRange(9), 9);
+
+        // Build test vector
+        std::vector<uint64_t> sequence;
+        sequence.reserve(numElements);
+        for (uint64_t i = 0; i < numElements; ++i) {
+            sequence.push_back(i);
+        }
+
+        // Apply permutation to every element in the test vector.
+        for (size_t idx = 0; idx < numElements; ++idx) {
+            // Test that the permutation is invertible
+            ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
+
+            // Compute the permutation, to later check that each element only appears once.
+            sequence[idx] = permutation.f(sequence[idx]);
+        }
+
+        // Check that no element appears more than once. Also check, that we did not exceed the given range and that we
+        // really applied the identity permutation.
+        EXPECT_THAT(sequence, ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+    }
+
+    { // Feistel Permutation
+        const uint64_t numElements    = 10;
+        const uint64_t lengthOfRanges = 2;
+        const uint64_t seed           = 91244356213;
+
+        RangePermutation<FeistelPseudoRandomPermutation> permutation(numElements - 1, lengthOfRanges, seed);
+
+        ASSERT_EQ(permutation.numRanges(), 5);
+        ASSERT_EQ(permutation.maxValue(), numElements - 1);
+        ASSERT_EQ(permutation.lengthOfRanges(), lengthOfRanges);
+
+        EXPECT_EQ(permutation.lastIdOfRange(0), 1);
+        EXPECT_EQ(permutation.lastIdOfRange(1), 1);
+        EXPECT_EQ(permutation.lastIdOfRange(2), 3);
+        EXPECT_EQ(permutation.lastIdOfRange(3), 3);
+        EXPECT_EQ(permutation.lastIdOfRange(4), 5);
+        EXPECT_EQ(permutation.lastIdOfRange(5), 5);
+        EXPECT_EQ(permutation.lastIdOfRange(6), 7);
+        EXPECT_EQ(permutation.lastIdOfRange(7), 7);
+        EXPECT_EQ(permutation.lastIdOfRange(8), 9);
+        EXPECT_EQ(permutation.lastIdOfRange(8), 9);
+
+        // Build test vector
+        std::vector<uint64_t> sequence;
+        sequence.reserve(numElements);
+        for (uint64_t i = 0; i < numElements; ++i) {
+            sequence.push_back(i);
+        }
+
+        // Apply permutation to every element in the test vector.
+        for (size_t idx = 0; idx < numElements; ++idx) {
+            // Test that the permutation is invertible
+            ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
+
+            // Compute the permutation, to later check that each element only appears once.
+            sequence[idx] = permutation.f(sequence[idx]);
+        }
+
+        // Check that no element appears more than once. Also check, that we did not exceed the given range.
+        EXPECT_THAT(sequence, UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+
+        // Check that elements (0, 1), (2, 3), (4, 5), ... have consecutive values.
+        for (uint64_t i = 0; i < numElements - 1; i += 2) {
+            EXPECT_EQ(sequence[i] + 1, sequence[i + 1]);
+        }
+    }
+
+    { // Feistel Permutation: bigger example
+        const uint64_t numElements    = 100;
+        const uint64_t lengthOfRanges = 10;
+        const uint64_t seed           = 8234098;
+
+        RangePermutation<FeistelPseudoRandomPermutation> permutation(numElements - 1, lengthOfRanges, seed);
+
+        ASSERT_EQ(permutation.numRanges(), 10);
+        ASSERT_EQ(permutation.maxValue(), numElements - 1);
+        ASSERT_EQ(permutation.lengthOfRanges(), lengthOfRanges);
+
+        // Build test vector
+        std::vector<uint64_t> sequence;
+        sequence.reserve(numElements);
+        for (uint64_t i = 0; i < numElements; ++i) {
+            sequence.push_back(i);
+        }
+
+        // Apply permutation to every element in the test vector.
+        for (size_t idx = 0; idx < numElements; ++idx) {
+            // Test that the permutation is invertible
+            ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
+
+            // Compute the permutation, to later check that each element only appears once.
+            sequence[idx] = permutation.f(sequence[idx]);
+        }
+
+        // Check that elements (0, 1, ..., 10), (11, 12, ..., 19), ... have consecutive values.
+        for (uint64_t i = 0; i < numElements - 1; i += permutation.lengthOfRanges()) {
+            for (uint64_t j = 0; j < permutation.lengthOfRanges(); ++j) {
+                ASSERT_EQ(sequence[i] + j, sequence[i + j]);
+            }
+        }
+    }
+
+    { // lengthOfRanges = 1 should work
+        const uint64_t numElements    = 10;
+        const uint64_t lengthOfRanges = 1;
+        const uint64_t seed           = 145213;
+
+        RangePermutation<FeistelPseudoRandomPermutation> permutation(numElements - 1, lengthOfRanges, seed);
+
+        ASSERT_EQ(permutation.numRanges(), numElements);
+        ASSERT_EQ(permutation.maxValue(), numElements - 1);
+        ASSERT_EQ(permutation.lengthOfRanges(), 1);
+
+        // Build test vector
+        std::vector<uint64_t> sequence;
+        sequence.reserve(numElements);
+        for (uint64_t i = 0; i < numElements; ++i) {
+            sequence.push_back(i);
+        }
+
+        // Apply permutation to every element in the test vector.
+        for (size_t idx = 0; idx < numElements; ++idx) {
+            // Test that the permutation is invertible
+            ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
+
+            // Compute the permutation, to later check that each element only appears once.
+            sequence[idx] = permutation.f(sequence[idx]);
+        }
+
+        // The ids should still be unique and not out of range.
+        ASSERT_THAT(sequence, UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+    }
 }

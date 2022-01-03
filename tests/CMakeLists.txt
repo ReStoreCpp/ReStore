@@ -100,7 +100,7 @@ restore_add_test(test_block_retrieval.cpp "ReStore::ReStore")
 restore_add_test(test_helpers.cpp "ReStore::ReStore;cppitertools")
 restore_add_test(test_equal_load_balancer.cpp "ReStore::ReStore")
 restore_add_test(test_two_phase_commit.cpp "ReStore::ReStore")
-restore_add_test(test_pseudo_random_permutation.cpp "ReStore::ReStore")
+restore_add_test(test_pseudo_random_permutation.cpp "ReStore::ReStore;cppitertools")
 
 ## Single-rank MPI tests
 restore_add_mpi_test(

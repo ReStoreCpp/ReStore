@@ -95,6 +95,30 @@ class LCGPseudoRandomPermutation {
 
 class FeistelPseudoRandomPermutation {
     public:
+    static FeistelPseudoRandomPermutation buildPermutation(uint64_t maxValue, uint64_t seed) {
+        std::mt19937_64 rng(seed);
+        return buildPermutation(maxValue, rng);
+    }
+
+    // //! Each rank will get a different permutation!
+    // static FeistelPseudoRandomPermutation buildPermutation(uint64_t maxValue) {
+    //     std::random_device rd;
+    //     return buildPermutation(maxValue, rd);
+    // }
+
+    template <typename EntropySource>
+    static FeistelPseudoRandomPermutation buildPermutation(uint64_t maxValue, EntropySource& entropySource) {
+        const uint8_t num_rounds = 4;
+
+        std::vector<XXH64_hash_t> keys;
+        keys.reserve(num_rounds);
+        for (uint8_t round = 0; round < num_rounds; round++) {
+            keys.push_back(entropySource());
+        }
+
+        return FeistelPseudoRandomPermutation(maxValue, keys);
+    }
+
     FeistelPseudoRandomPermutation(
         uint64_t max_value, const std::vector<XXH64_hash_t>& keys, const uint8_t num_rounds = 4)
         : _max_value(max_value),
@@ -248,5 +272,111 @@ class FeistelPseudoRandomPermutation {
     inline XXH64_hash_t _xxhash(Data n, XXH64_hash_t key) const {
         static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
         return XXH64(&n, sizeof(Data), key);
+    }
+};
+
+class IdentityPermutation {
+    public:
+    static IdentityPermutation buildPermutation(uint64_t maxValueDummy = 0, uint64_t seedDummy = 0) {
+        UNUSED(maxValueDummy);
+        UNUSED(seedDummy);
+        return IdentityPermutation();
+    }
+
+    uint64_t f(uint64_t n) const {
+        return n;
+    }
+
+    uint64_t finv(uint64_t n) const {
+        return n;
+    }
+};
+
+template <typename Permutation = FeistelPseudoRandomPermutation>
+class RangePermutation {
+    public:
+    RangePermutation(uint64_t maxValue, uint64_t lengthOfRanges, uint64_t seed)
+        : _maxValue(maxValue),
+          _lengthOfRanges(lengthOfRanges),
+          _numRanges(RangePermutation::_computeNumRanges(maxValue, lengthOfRanges)),
+          _permutation(Permutation::buildPermutation(_numRanges - 1, seed)) {
+        assert(maxValue > 0);
+        assert(lengthOfRanges > 0);
+        assert(numRanges() > 0);
+        assert(numRanges() <= maxValue + 1);
+        assert(lengthOfRanges <= maxValue);
+        // The last range might be smaller than the others.
+        assert(numRanges() * lengthOfRanges >= maxValue);
+    }
+
+    inline uint64_t f(uint64_t n) const {
+        assert(_range(n) < _numRanges);
+        assert(_offset(n) < _lengthOfRanges);
+        return _permutation.f(_range(n)) * _lengthOfRanges + _offset(n);
+    }
+
+    inline uint64_t finv(uint64_t n) const {
+        assert(_range(n) < _numRanges);
+        assert(_offset(n) < _lengthOfRanges);
+        assert(_range(n) < _numRanges - 1 || _offset(n) < _elementsInLastRange());
+        return _permutation.finv(_range(n)) * _lengthOfRanges + _offset(n);
+    }
+
+    inline uint64_t numRanges() const {
+        return _numRanges;
+    }
+
+    inline uint64_t maxValue() const {
+        return _maxValue;
+    }
+
+    inline uint64_t lengthOfRanges() const {
+        return _lengthOfRanges;
+    }
+
+    // Given a block id, return the last id of the range \c blockId belongs to.
+    // static struct idIsFromLeftSideOfBijection{} idIsFromLeftSideOfBijection;
+    // static struct idIsFromRightSideOfBijection{} idIsFromRightSideOfBijection;
+
+    inline uint64_t lastIdOfRange(uint64_t blockId) const {
+        const auto rangeId = _range(blockId);
+        if (rangeId == _numRanges - 1) {
+            return _maxValue;
+        } else {
+            return rangeId * _lengthOfRanges + _lengthOfRanges - 1;
+        }
+    }
+
+    private:
+    const uint64_t    _maxValue;
+    const uint64_t    _lengthOfRanges;
+    const uint64_t    _numRanges;
+    const Permutation _permutation;
+
+    inline uint64_t _range(uint64_t n) const {
+        return n / _lengthOfRanges;
+    }
+
+    inline uint64_t _offset(uint64_t n) const {
+        return n % _lengthOfRanges;
+    }
+
+    inline static uint64_t _computeNumRanges(uint64_t maxValue, uint64_t lengthOfRanges) {
+        assert(lengthOfRanges > 0);
+        assert(maxValue > 0);
+        assert(maxValue >= lengthOfRanges);
+        if ((maxValue + 1) % lengthOfRanges == 0) {
+            return (maxValue + 1) / lengthOfRanges;
+        } else {
+            return (maxValue + 1) / lengthOfRanges + 1;
+        }
+    }
+
+    inline uint64_t _elementsInLastRange() const {
+        if ((_maxValue + 1) % _lengthOfRanges == 0) {
+            return _lengthOfRanges;
+        } else {
+            return (_maxValue + 1) % _lengthOfRanges;
+        }
     }
 };
