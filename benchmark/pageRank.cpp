@@ -448,7 +448,10 @@ int main(int argc, char** argv) {
         ("f,replications", "Replications for fault tolerance with ReStore",
          cxxopts::value<size_t>()->default_value("3")) ///
         ("b,blockSize", "Number of edges to combine into one block for ReStore",
-         cxxopts::value<size_t>()->default_value("8"))                                                     ///
+         cxxopts::value<size_t>()->default_value("8")) ///
+        ("blocksPerPermutationRange",
+         "Number of blocks that get consecutive ids when using a pseudo-random permutation on the block ids.",
+         cxxopts::value<size_t>()->default_value("100"))                                                   ///
         ("seed", "The seed for failure simulation.", cxxopts::value<unsigned long>()->default_value("42")) ///
         ("percentFailures", "Expected ratio of PEs to fail during the calculation.",
          cxxopts::value<double>()->default_value("0.1")) ///
@@ -499,7 +502,8 @@ int main(int argc, char** argv) {
     enableFT                   = options["enable-ft"].as<bool>();
     const auto numReplications = std::min(options["replications"].as<size_t>(), static_cast<size_t>(numRanks));
 
-    const auto blockSize = options["blockSize"].as<size_t>();
+    const auto blockSize                 = options["blockSize"].as<size_t>();
+    const auto blocksPerPermutationRange = options["blocksPerPermutationRange"].as<size_t>();
 
     const auto seed            = options["seed"].as<unsigned long>();
     const auto percentFailures = options["percentFailures"].as<double>();
@@ -519,9 +523,10 @@ int main(int argc, char** argv) {
     auto graphReadingTime = end - start;
 
     TIME_NEXT_SECTION("Init");
-    auto restoreVectorHelper = enableFT ? std::make_optional<ReStore::ReStoreVector<edge_t>>(
-                                   blockSize, comm_, asserting_cast<uint16_t>(numReplications), invalid_edge)
-                                        : std::nullopt;
+    auto restoreVectorHelper =
+        enableFT ? std::make_optional<ReStore::ReStoreVector<edge_t>>(
+            blockSize, comm_, asserting_cast<uint16_t>(numReplications), blocksPerPermutationRange, invalid_edge)
+                 : std::nullopt;
     if (enableFT) {
         assert(restoreVectorHelper.has_value());
         auto numBlocksLocal = restoreVectorHelper.value().submitData(edges);
@@ -565,6 +570,7 @@ int main(int argc, char** argv) {
         resultPrinter.thisResult("seed", seed);
         resultPrinter.allResults("numVertices", numVertices);
         resultPrinter.allResults("numEdges", numEdges);
+        resultPrinter.allResults("blocksPerPermutationRange", blocksPerPermutationRange);
         resultPrinter.thisResult(timers);
         resultPrinter.finalizeAndPrintResult();
     }

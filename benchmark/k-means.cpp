@@ -49,6 +49,9 @@ class CommandLineOptions {
              cxxopts::value<std::string>()) ///
             ("repeat-id", "Repeat id. Will be echoed as is; can be used to identify the results of this experiment.",
              cxxopts::value<std::string>()->default_value("0")) ///
+            ("blocks-per-permutation-range",
+             " The number of blocks with consecutive id's when using the range based pseudo-random permuter.",
+             cxxopts::value<size_t>()) ///
             ("s,seed", "Random seed for the data generation and cluster center selection.",
              cxxopts::value<unsigned long>()->default_value("0"))                                                 ///
             ("failure-simulator-seed", "Random seed for the failure simulator.", cxxopts::value<unsigned long>()) ///
@@ -165,6 +168,12 @@ class CommandLineOptions {
                 _fail("Required option missing or provided more than once: --simulation-id");
             } else {
                 _simulationId = options["simulation-id"].as<std::string>();
+            }
+
+            if (options.count("blocks-per-permutation-range") != 1) {
+                _fail("Required option missing or provided more than once: --blocks-per-permutation-range");
+            } else {
+                _blocksPerPermutationRange = options["blocks-per-permutation-range"].as<size_t>();
             }
 
             _repeatId = options["repeat-id"].as<std::string>();
@@ -327,6 +336,11 @@ class CommandLineOptions {
         return _repeatId;
     }
 
+    uint64_t blocksPerPermutationRange() const {
+        assert(_blocksPerPermutationRange > 0);
+        return _blocksPerPermutationRange;
+    }
+
     bool writeAssignment() const {
         return _writeAssignment;
     }
@@ -341,14 +355,15 @@ class CommandLineOptions {
     std::string                  _inputFile;
     std::string                  _outputFile;
     std::string                  _repeatId;
-    double                       _failureProbability   = 0;
-    uint64_t                     _numFailures          = 0;
-    unsigned long                _seed                 = 0;
-    std::optional<unsigned long> _failureSimulatorSeed = std::nullopt;
-    bool                         _useFaultTolerance    = false;
-    bool                         _printCSVHeader       = true;
-    bool                         _writeAssignment      = false;
-    size_t                       _numRepetitions       = 1;
+    double                       _failureProbability        = 0;
+    uint64_t                     _blocksPerPermutationRange = 100;
+    uint64_t                     _numFailures               = 0;
+    unsigned long                _seed                      = 0;
+    std::optional<unsigned long> _failureSimulatorSeed      = std::nullopt;
+    bool                         _useFaultTolerance         = false;
+    bool                         _printCSVHeader            = true;
+    bool                         _writeAssignment           = false;
+    size_t                       _numRepetitions            = 1;
     std::string                  _simulationId;
     bool                         _validConfiguration = true;
 
@@ -400,6 +415,7 @@ void writeMeasurementsToFile(
     resultPrinter.allResults("replicationLevel", options.replicationLevel());
     resultPrinter.allResults("failureSimulatorSeed", options.failureSimulatorSeed());
     resultPrinter.allResults("clusterCenterSeed", options.clusterCenterSeed());
+    resultPrinter.allResults("blocksPerPermutationRange", options.blocksPerPermutationRange());
 
     resultPrinter.thisResult("failureProbability", options.failureProbability());
     resultPrinter.thisResult("numSimulatedRankFailures", numFailures);
@@ -458,8 +474,8 @@ void runKMeansAndReport(ReStoreMPI::MPIContext& mpiContext, CommandLineOptions& 
     TIME_NEXT_SECTION("load-data");
     auto inputFile      = options.dataInputFile(mpiContext.getMyCurrentRank());
     auto kmeansInstance = kmeans::kMeansAlgorithm<float, ReStoreMPI::MPIContext>(
-        kmeans::loadDataFromFile<float>(inputFile), mpiContext, options.useFaultTolerance(),
-        options.replicationLevel());
+        kmeans::loadDataFromFile<float>(inputFile), mpiContext, options.useFaultTolerance(), options.replicationLevel(),
+        options.blocksPerPermutationRange());
 
     options.numDimensions(kmeansInstance.numDimensions());
     options.numDataPointsPerRank(kmeansInstance.numDataPoints());

@@ -46,11 +46,12 @@ class ReStore {
     //      when using look-up-table offset mode and greater than 0 when using consOffset mode.
     ReStore(
         MPI_Comm mpiCommunicator, uint16_t replicationLevel, OffsetMode offsetMode, size_t constOffset = 0,
-        uint64_t randomPermutationSeed = 0)
+        uint64_t blocksPerPermutationRange = 1000, uint64_t randomPermutationSeed = 0)
         : _replicationLevel(replicationLevel),
           _offsetMode(offsetMode),
           _constOffset(constOffset),
           _randomPermutationSeed(randomPermutationSeed),
+          _blocksPerPermutationRange(blocksPerPermutationRange),
           _mpiContext(mpiCommunicator),
           _blockDistribution(nullptr), // Depends on the number of blocks which are submitted in submitBlocks.
           _serializedBlocks(nullptr) { // Depends on _blockDistribution
@@ -60,6 +61,10 @@ class ReStore {
             throw std::invalid_argument("Constant offset mode requires a constOffset > 0.");
         } else if (replicationLevel == 0) {
             throw std::invalid_argument("What is a replication level of 0 supposed to mean?");
+        } else if (mpiCommunicator == MPI_COMM_NULL) {
+            throw std::invalid_argument("MPI Communicator is MPI_COMM_NULL.");
+        } else if (blocksPerPermutationRange == 0) {
+            throw std::invalid_argument("blocksPerPermutationRange must be greater than zero.");
         } else {
             _assertInvariants();
         }
@@ -120,8 +125,8 @@ class ReStore {
     // includes updating the communicator of MPIContext.
     template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction>
     void submitBlocks(
-        SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock, size_t totalNumberOfBlocks,
-        bool canBeParallelized = false // not supported yet
+        SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock,
+        size_t totalNumberOfBlocks, bool canBeParallelized = false // not supported yet
     ) {
         if (_offsetMode == OffsetMode::lookUpTable) {
             throw std::runtime_error("LUT mode is not implemented yet.");
@@ -141,8 +146,9 @@ class ReStore {
 
         // Initialize the block id permuter.
         const auto largestBlockId = totalNumberOfBlocks - 1;
-        const auto lengthOfRanges =
-            std::max(1ul, totalNumberOfBlocks / asserting_cast<size_t>(_mpiContext.getCurrentSize()) / 100ul);
+        const auto lengthOfRanges = std::max(
+            1ul,
+            totalNumberOfBlocks / asserting_cast<size_t>(_mpiContext.getCurrentSize()) / _blocksPerPermutationRange);
         _blockIdPermuter.emplace(largestBlockId, lengthOfRanges, _randomPermutationSeed);
         assert(_blockIdPermuter);
 
@@ -329,6 +335,7 @@ class ReStore {
     const OffsetMode                                                _offsetMode;
     const size_t                                                    _constOffset;
     const uint64_t                                                  _randomPermutationSeed;
+    const uint64_t                                                  _blocksPerPermutationRange;
     ReStoreMPI::MPIContext                                          _mpiContext;
     std::shared_ptr<BlockDistribution<>>                            _blockDistribution;
     std::unique_ptr<SerializedBlockStorage<>>                       _serializedBlocks;

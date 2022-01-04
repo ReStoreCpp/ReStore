@@ -56,8 +56,13 @@ TEST_F(ReStoreTestWithFailures, ComplexDataType) {
     // The logic of this tests assumes that there are four ranks
     assert(numRanks() == 4);
 
-    ReStore::ReStore<AwesomeDataType> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, 10);
-    std::vector<AwesomeDataType>      data;
+    const uint8_t replicationLevel = 3;
+    const size_t  constantOffset   = 10;
+    const uint64_t blocksPerPermutationRange = 2;
+
+    ReStore::ReStore<AwesomeDataType> store(
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, constantOffset, blocksPerPermutationRange);
+    std::vector<AwesomeDataType> data;
 
     signed int myStart = (myRankId() - (numRanks() / 2)) * 1000;
     signed int myEnd   = myStart + 1000;

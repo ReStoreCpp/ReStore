@@ -28,8 +28,12 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
     // The logic of this tests assumes that there are four ranks
     assert(numRanks() == 4);
 
-    ReStore::ReStore<int> store(MPI_COMM_WORLD, 1, ReStore::OffsetMode::constant, sizeof(int));
-    std::vector<int>      data{0, 1, 2, 3, 42, 1337};
+    const uint8_t         replicationLevel          = 1;
+    const size_t          constantOffset            = sizeof(int);
+    const uint64_t        blocksPerPermutationRange = 1;
+    ReStore::ReStore<int> store(
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, constantOffset, blocksPerPermutationRange);
+    std::vector<int> data{0, 1, 2, 3, 42, 1337};
 
     unsigned counter = 0;
     store.submitBlocks(
@@ -82,11 +86,11 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
 
         std::vector<int> dataReceived(data.size());
         std::fill(dataReceived.begin(), dataReceived.end(), -1);
-        ReStore::block_id_t numBlocksReceived = 0;
-        const auto thisRanksBlockIdOffset = data.size() * static_cast<size_t>(myRankId());
+        ReStore::block_id_t numBlocksReceived      = 0;
+        const auto          thisRanksBlockIdOffset = data.size() * static_cast<size_t>(myRankId());
         store.pushBlocksCurrentRankIds(
-            requests,
-            [&dataReceived, &numBlocksReceived, thisRanksBlockIdOffset](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
+            requests, [&dataReceived, &numBlocksReceived,
+                       thisRanksBlockIdOffset](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
                 const auto idxDataReceived = blockId - thisRanksBlockIdOffset;
                 ASSERT_EQ(sizeof(int), size);
                 ASSERT_LT(idxDataReceived, dataReceived.size());

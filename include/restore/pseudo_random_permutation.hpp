@@ -304,7 +304,7 @@ class RangePermutation {
         assert(lengthOfRanges > 0);
         assert(numRanges() > 0);
         assert(numRanges() <= maxValue + 1);
-        assert(lengthOfRanges <= maxValue);
+        assert(maxValue + 1 >= lengthOfRanges);
         // The last range might be smaller than the others.
         assert(numRanges() * lengthOfRanges >= maxValue);
     }
@@ -364,7 +364,7 @@ class RangePermutation {
     inline static uint64_t _computeNumRanges(uint64_t maxValue, uint64_t lengthOfRanges) {
         assert(lengthOfRanges > 0);
         assert(maxValue > 0);
-        assert(maxValue >= lengthOfRanges);
+        assert(maxValue + 1 >= lengthOfRanges);
         if ((maxValue + 1) % lengthOfRanges == 0) {
             return (maxValue + 1) / lengthOfRanges;
         } else {

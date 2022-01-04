@@ -16,35 +16,45 @@ using namespace testing;
 
 // This test does not simulate a failure and thus does not need to be in a separate executable.
 TEST_F(ReStoreVectorTest, ArgumentChecking) {
-    const size_t   blockSize        = 10;
-    const MPI_Comm mpiComm          = MPI_COMM_WORLD;
-    const uint16_t replicationLevel = 3;
+    const size_t   blockSize                 = 10;
+    const MPI_Comm mpiComm                   = MPI_COMM_WORLD;
+    const uint16_t replicationLevel          = 3;
+    const uint64_t blocksPerPermutationRange = 2;
 
     { // Invalid constructor arguments
-        EXPECT_THROW(ReStoreVector<int>(0, mpiComm, replicationLevel), std::invalid_argument);
-        EXPECT_THROW(ReStoreVector<int>(blockSize, MPI_COMM_NULL, replicationLevel), std::invalid_argument);
-        EXPECT_THROW(ReStoreVector<int>(blockSize, mpiComm, 0), std::invalid_argument);
+        EXPECT_THROW(
+            ReStoreVector<int>(0, mpiComm, replicationLevel, blocksPerPermutationRange), std::invalid_argument);
+        EXPECT_THROW(
+            ReStoreVector<int>(blockSize, MPI_COMM_NULL, replicationLevel, blocksPerPermutationRange),
+            std::invalid_argument);
+        EXPECT_THROW(ReStoreVector<int>(blockSize, mpiComm, 0, blocksPerPermutationRange), std::invalid_argument);
+        EXPECT_THROW(ReStoreVector<int>(blockSize, mpiComm, replicationLevel, 0), std::invalid_argument);
     }
 
     { // All arguments valid
-        EXPECT_NO_THROW(ReStoreVector<int>(blockSize, mpiComm, replicationLevel));
+        EXPECT_NO_THROW(ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange));
+        EXPECT_NO_THROW(ReStoreVector<int>(blockSize, mpiComm, replicationLevel, 1));
+        EXPECT_NO_THROW(ReStoreVector<int>(10, mpiComm, 20, 20));
+        EXPECT_NO_THROW(ReStoreVector<int>(4, mpiComm, 18, 1));
+        EXPECT_NO_THROW(ReStoreVector<int>(13, mpiComm, 42, 31));
+        EXPECT_NO_THROW(ReStoreVector<int>(1337, mpiComm, 9, 1));
     }
 
     { // Empty data vector
-        auto             store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel);
+        auto             store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange);
         std::vector<int> vec(0);
         EXPECT_THROW(store.submitData(vec), std::invalid_argument);
     }
 
     { // Updating with invalid communictor
-        auto store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel);
+        auto store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange);
         EXPECT_THROW(store.updateComm(MPI_COMM_NULL), std::invalid_argument);
     }
 
     { // Nobody gets new blocks
         ReStoreVector<int>::BlockRangeToRestoreList newBlocksPerRank;
-        auto                                        store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel);
-        std::vector<int>                            vec{0, 12, 3, 45, 4311, 12564311};
+        auto             store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange);
+        std::vector<int> vec{0, 12, 3, 45, 4311, 12564311};
         ASSERT_NO_THROW(store.submitData(vec));
         EXPECT_NO_THROW(store.restoreDataAppend(vec, newBlocksPerRank));
     }
@@ -86,7 +96,9 @@ TEST_F(ReStoreVectorTest, EndToEnd) {
     }
 
     // Submit the data into the ReStore
-    auto store             = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, -1);
+    const uint64_t blocksPerPermutationRange = 2;
+    const int      paddingValue              = -1;
+    auto store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange, paddingValue);
     auto numBlocksInternal = store.submitData(vec);
     ASSERT_EQ(numBlocksInternal, numBlocksPerRank);
 

@@ -15,9 +15,9 @@ class ReStoreVector {
     using BlockRangeToRestore     = std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>;
     using BlockRangeToRestoreList = std::vector<BlockRangeToRestore>;
 
-    ReStoreVector(size_t blockSize, MPI_Comm comm, uint16_t replicationLevel, data_t paddingValue = data_t())
+    ReStoreVector(size_t blockSize, MPI_Comm comm, uint16_t replicationLevel, uint64_t blocksPerPermutationRange, data_t paddingValue = data_t())
         : _nativeBlockSize(blockSize),
-          _reStore(comm, replicationLevel, OffsetMode::constant, _bytesPerBlock()),
+          _reStore(comm, replicationLevel, OffsetMode::constant, _bytesPerBlock(), blocksPerPermutationRange),
           _mpiContext(comm),
           _paddingValue(paddingValue),
           _isPadded(false) {

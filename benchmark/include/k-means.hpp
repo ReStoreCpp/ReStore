@@ -226,7 +226,9 @@ class kMeansAlgorithm {
     // TODO: Simplify these constructors using templating and forwarding
     // Constructor, takes a rvalue reference to data, which we take ownership of, the number of centers/clusters to
     // compute and the number of iterations to perform.
-    kMeansAlgorithm(kMeansData<data_t>&& data, MPI_Context& mpiContext, bool faultTolerant, uint16_t replicationLevel)
+    kMeansAlgorithm(
+        kMeansData<data_t>&& data, MPI_Context& mpiContext, bool faultTolerant, uint16_t replicationLevel,
+        uint64_t blocksPerPermutationRange)
         : _data(std::move(data)),
           _centers(std::nullopt),
           _pointToCenterAssignment(std::nullopt),
@@ -234,7 +236,7 @@ class kMeansAlgorithm {
           _faultTolerant(faultTolerant),
           _reStoreWrapper(
               faultTolerant ? std::make_optional<ReStore::ReStoreVector<data_t>>(
-                  numDimensions(), _mpiContext.getComm(), replicationLevel)
+                  numDimensions(), _mpiContext.getComm(), replicationLevel, blocksPerPermutationRange)
                             : std::nullopt),
           _loadBalancer(_initialBlockRanges(), _mpiContext.getCurrentSize()) {
         if (_data.numDataPoints() == 0) {
@@ -245,26 +247,33 @@ class kMeansAlgorithm {
 
         // Submit the data points to the ReStore so we are able to recover them after a failure.
         if (faultTolerant) {
-            TIME_PUSH_AND_START("submit-data"); // I tried to use TIME_BLOCK() here, but the compiler reordered the
-                                                // instructions and I timed nothing.
-            const auto numBlocksLocal = _reStoreWrapper->submitData(_data.dataVector());
-            assert(numBlocksLocal == _data.numDataPoints());
-            UNUSED(numBlocksLocal);
-            TIME_POP();
+            try {
+                TIME_PUSH_AND_START("submit-data"); // I tried to use TIME_BLOCK() here, but the compiler reordered the
+                                                    // instructions and I timed nothing.
+                const auto numBlocksLocal = _reStoreWrapper->submitData(_data.dataVector());
+                assert(numBlocksLocal == _data.numDataPoints());
+                UNUSED(numBlocksLocal);
+                TIME_POP();
+            } catch (std::runtime_error& e) {
+                TIME_POP();
+                throw e;
+            }
         }
     }
 
     kMeansAlgorithm(
         std::initializer_list<data_t> initializerList, uint64_t numDimensions, MPI_Context& mpiContext,
-        bool faultTolerant, uint16_t replicationLevel)
+        bool faultTolerant, uint16_t replicationLevel, uint64_t blocksPerPermutationRange)
         : kMeansAlgorithm(
-            kMeansData<data_t>(initializerList, numDimensions), mpiContext, faultTolerant, replicationLevel) {}
+            kMeansData<data_t>(initializerList, numDimensions), mpiContext, faultTolerant, replicationLevel,
+            blocksPerPermutationRange) {}
 
     kMeansAlgorithm(
         std::vector<data_t>&& data, uint64_t numDimensions, MPI_Context& mpiContext, bool faultTolerant,
-        uint16_t replicationLevel)
+        uint16_t replicationLevel, uint64_t blocksPerPermutationRange)
         : kMeansAlgorithm(
-            kMeansData<data_t>(std::move(data), numDimensions), mpiContext, faultTolerant, replicationLevel) {}
+            kMeansData<data_t>(std::move(data), numDimensions), mpiContext, faultTolerant, replicationLevel,
+            blocksPerPermutationRange) {}
 
     // Sets the centers to the provided data, takes ownership of the data object. Must be called with the same
     // parameters on all ranks. Local operation, does therefore not report rank failures.
