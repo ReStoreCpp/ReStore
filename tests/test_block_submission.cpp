@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "mocks.hpp"
+#include "mpi_helpers.hpp"
 #include "restore/block_serialization.hpp"
 #include "restore/block_submission.hpp"
 #include "restore/common.hpp"
@@ -273,11 +274,14 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
     ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(
         mpiContext, *blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, 2});
 
-    World              earth       = {false, 0};
-    World              narnia      = {true, 10};
-    World              middleEarth = {true, 0};
-    std::vector<World> worlds      = {earth, narnia, middleEarth};
-    size_t             worldId     = 0;
+    World              earth                 = {false, 0};
+    World              narnia                = {true, 10};
+    World              middleEarth           = {true, 0};
+    std::vector<World> worlds                = {earth, narnia, middleEarth};
+    const auto         numBlocks             = worlds.size();
+    size_t             worldId               = 0;
+    const auto         permutatorSeed        = 42;
+    const auto         permutatorRangeLength = 1;
 
     auto sendBuffers = comm.serializeBlocksForTransmission(
         [](World world, ReStore::SerializedBlockStoreStream& stream) {
@@ -289,7 +293,8 @@ TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
                                                : std::nullopt;
             ++worldId;
             return ret;
-        });
+        },
+        RangePermutation<IdentityPermutation>(numBlocks, permutatorRangeLength, permutatorSeed));
 
     // All these three blocks belong to range 0 and are therefore stored on ranks 0, 3 and 6
     // std::vector<std::byte> expectedSendBuffer = {
@@ -344,11 +349,15 @@ TEST(BlockSubmissionTest, BlockIsAPointer) {
         ReStore::OffsetModeDescriptor{OffsetMode::constant, sizeof(uint8_t) * NUM_DIMENSIONS});
 
     assert(data.size() % NUM_DIMENSIONS == 0);
-    const size_t numDataPointsLocal = data.size() / NUM_DIMENSIONS;
+    const size_t numDataPointsLocal  = data.size() / NUM_DIMENSIONS;
+    const size_t numDataPointsGlobal = numDataPointsLocal * 10ul;
 
     // Reserve memory for the Block Proxies (we are only pushing references around during
     // serializeBlocksForTransmission, the actual data is not copied).
     BlockProxy currentProxy = nullptr;
+
+    const auto permutatorSeed        = 1337;
+    const auto permutatorRangeLength = 1;
 
     unsigned counter     = 0;
     auto     sendBuffers = comm.serializeBlocksForTransmission(
@@ -368,7 +377,7 @@ TEST(BlockSubmissionTest, BlockIsAPointer) {
             }
             return nextBlock;
         },
-        numDataPointsLocal);
+        RangePermutation<IdentityPermutation>(numDataPointsGlobal, permutatorRangeLength, permutatorSeed));
 
     // All these three blocks belong to range 0 and are therefore stored on ranks 0, 3 and 6
     std::vector<std::byte> expectedSendBuffer = {

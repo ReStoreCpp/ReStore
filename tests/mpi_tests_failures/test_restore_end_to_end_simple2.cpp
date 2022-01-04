@@ -21,12 +21,12 @@ using namespace ::testing;
 using iter::range;
 
 TEST(ReStoreTest, EndToEnd_Simple2) {
-    // TODO Assert the number of ranks (also in the other tests)
     // Each rank submits different data. The replication level is set to 3. There is no rank failure.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
+    const int             numDataPointsPerRank = 2;
 
     std::vector<int> data;
-    for (int value: range(1000 * myRankId(), 1000 * myRankId() + 1000)) {
+    for (int value: range(numDataPointsPerRank * myRankId(), numDataPointsPerRank * (myRankId() + 1))) {
         data.push_back(value);
     }
 
@@ -44,23 +44,33 @@ TEST(ReStoreTest, EndToEnd_Simple2) {
         },
         data.size() * static_cast<size_t>(numRanks()));
 
-    // No failure
+    // Each rank requests those blocks it submitted.
     std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
     for (int rank = 0; rank < numRanks(); ++rank) {
         requests.emplace_back(
-            std::make_pair(std::make_pair(static_cast<size_t>(rank) * data.size(), data.size()), rank));
+            std::make_pair(std::make_pair(asserting_cast<size_t>(rank) * data.size(), data.size()), rank));
     }
 
-    std::vector<int>    dataReceived;
-    ReStore::block_id_t nextBlockId = static_cast<size_t>(myRankId()) * data.size();
+    const auto firstBlockIdOnThisRank = asserting_cast<size_t>(myRankId()) * data.size();
+    const auto numBlocksOnThisRank = data.size();
+    const auto lastBlockIdOnThisRank  = firstBlockIdOnThisRank + numBlocksOnThisRank - 1;
+    assert(firstBlockIdOnThisRank < lastBlockIdOnThisRank);
+    assert(numBlocksOnThisRank > 0);
+    assert(numBlocksOnThisRank == numDataPointsPerRank);
+    std::vector<int>    dataReceived(numBlocksOnThisRank);
+    ReStore::block_id_t maxBlockIdSeen = std::numeric_limits<ReStore::block_id_t>::min();
     store.pushBlocksCurrentRankIds(
-        requests, [&dataReceived, &nextBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
-            EXPECT_EQ(nextBlockId, blockId);
-            ++nextBlockId;
+        requests, [&dataReceived, &maxBlockIdSeen,
+                   firstBlockIdOnThisRank](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             ASSERT_EQ(sizeof(int), size);
-            dataReceived.emplace_back(*reinterpret_cast<const int*>(dataPtr));
+
+            const auto index = blockId - firstBlockIdOnThisRank;
+            ASSERT_LT(index, dataReceived.size());
+            dataReceived[index] = *reinterpret_cast<const int*>(dataPtr);
+
+            maxBlockIdSeen = std::max(maxBlockIdSeen, blockId);
         });
-    EXPECT_EQ(static_cast<size_t>(myRankId()) * data.size() + data.size(), nextBlockId);
+    EXPECT_EQ(lastBlockIdOnThisRank, maxBlockIdSeen);
 
     ASSERT_EQ(data.size(), dataReceived.size());
     for (size_t i = 0; i < data.size(); ++i) {

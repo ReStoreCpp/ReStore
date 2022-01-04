@@ -11,6 +11,7 @@ using namespace kmeans;
 
 // These tests are run on a single rank, we therefore cannot fulfil a replication level > 1.
 const uint16_t REPLICATION_LEVEL = 1;
+const uint64_t BLOCKS_PER_PERMUTATION_RANGE = 1;
 
 TEST(kMeansData, constructor) {
     // 0 dimensions does not make sense
@@ -198,9 +199,9 @@ TEST(kMeansAlgorithm, constructor) {
 
     // Constructing with no data points should fail
     ASSERT_THROW(
-        kMeansAlgorithm(generateRandomData<double>(0, 1), mpiContext, true, REPLICATION_LEVEL), std::invalid_argument);
+        kMeansAlgorithm(generateRandomData<double>(0, 1), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE), std::invalid_argument);
     ASSERT_THROW(
-        kMeansAlgorithm(generateRandomData<float>(0, 3), mpiContext, true, REPLICATION_LEVEL), std::invalid_argument);
+        kMeansAlgorithm(generateRandomData<float>(0, 3), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE), std::invalid_argument);
 
     { // Constructing with an invalid data object should fail
         auto data = kMeansData<float>(2);
@@ -208,7 +209,7 @@ TEST(kMeansAlgorithm, constructor) {
         data << 2.5f;
         ASSERT_FALSE(data.valid());
         ASSERT_THROW(
-            (kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext, true, REPLICATION_LEVEL)),
+            (kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)),
             std::invalid_argument);
     }
 
@@ -220,34 +221,37 @@ TEST(kMeansAlgorithm, constructor) {
         data << 2.5f;
         data << typename kMeansData<float>::FinalizeDataPoint();
         ASSERT_TRUE(data.valid());
-        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext, true, REPLICATION_LEVEL)));
+        data << 1.3f << 1.7f << typename kMeansData<float>::FinalizeDataPoint();
+        ASSERT_TRUE(data.valid());
+        ASSERT_GT(data.dataSize(), 0);
+        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)));
     }
 
     { // Constructing with a valid, non-empty data object should work
         auto data1 = generateRandomData<double>(100, 30);
-        ASSERT_NO_THROW((kMeansAlgorithm<double, MPIContext>(std::move(data1), mpiContext, true, REPLICATION_LEVEL)));
+        ASSERT_NO_THROW((kMeansAlgorithm<double, MPIContext>(std::move(data1), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)));
 
         auto data2 = kMeansData<double>(2, 2, 2);
-        ASSERT_NO_THROW((kMeansAlgorithm<double, MPIContext>(std::move(data2), mpiContext, true, REPLICATION_LEVEL)));
+        ASSERT_NO_THROW((kMeansAlgorithm<double, MPIContext>(std::move(data2), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)));
     }
 
     { // Length of input vector not evenly dividible by the number of dimensions should fail
         ASSERT_THROW(
-            (kMeansAlgorithm<float, MPIContext>(std::vector<float>{1, 2, 3}, 2, mpiContext, true, REPLICATION_LEVEL)),
+            (kMeansAlgorithm<float, MPIContext>(std::vector<float>{1, 2, 3}, 2, mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)),
             std::invalid_argument);
         ASSERT_THROW(
-            (kMeansAlgorithm<float, MPIContext>({1, 2, 3}, 2, mpiContext, true, REPLICATION_LEVEL)),
+            (kMeansAlgorithm<float, MPIContext>({1, 2, 3}, 2, mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)),
             std::invalid_argument);
     }
 
     { // When using fault tolerance, the replication level must be greater than 0
-        ASSERT_THROW((kMeansAlgorithm(std::vector<float>{1, 2, 3, 4}, 2, mpiContext, true, 0)), std::invalid_argument);
+        ASSERT_THROW((kMeansAlgorithm(std::vector<float>{1, 2, 3, 4}, 2, mpiContext, true, 0, BLOCKS_PER_PERMUTATION_RANGE)), std::invalid_argument);
     }
 
     { // Is fine
-        ASSERT_NO_THROW((kMeansAlgorithm(std::vector<float>{1, 2, 3, 4}, 2, mpiContext, true, REPLICATION_LEVEL)));
-        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>({1, 2, 3, 4}, 2, mpiContext, true, REPLICATION_LEVEL)));
-        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>({1, 2, 3, 4}, 2, mpiContext, false, 0)));
+        ASSERT_NO_THROW((kMeansAlgorithm(std::vector<float>{1, 2, 3, 4}, 2, mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)));
+        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>({1, 2, 3, 4}, 2, mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE)));
+        ASSERT_NO_THROW((kMeansAlgorithm<float, MPIContext>({1, 2, 3, 4}, 2, mpiContext, false, 0, BLOCKS_PER_PERMUTATION_RANGE)));
     }
 }
 
@@ -257,7 +261,7 @@ TEST(kMeansAlgorithm, pickCentersRandomly) {
     MPIContext mpiContext(MPI_COMM_WORLD);
 
     auto kmeansInstance =
-        kMeansAlgorithm<float, MPIContext>(generateRandomData<float>(100, 3), mpiContext, true, REPLICATION_LEVEL);
+        kMeansAlgorithm<float, MPIContext>(generateRandomData<float>(100, 3), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
     ASSERT_EQ(kmeansInstance.numCenters(), 0);
     ASSERT_EQ(kmeansInstance.numDataPoints(), 100);
     ASSERT_EQ(kmeansInstance.numDimensions(), 3);
@@ -300,7 +304,7 @@ TEST(kMeansAlgorithm, setCenters) {
     MPIContext mpiContext(MPI_COMM_WORLD);
 
     auto kmeansInstance =
-        kMeansAlgorithm<float, MPIContext>(generateRandomData<float>(100, 3), mpiContext, true, REPLICATION_LEVEL);
+        kMeansAlgorithm<float, MPIContext>(generateRandomData<float>(100, 3), mpiContext, true, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
     ASSERT_EQ(kmeansInstance.numCenters(), 0);
     ASSERT_EQ(kmeansInstance.numDataPoints(), 100);
     ASSERT_EQ(kmeansInstance.numDimensions(), 3);
@@ -331,7 +335,7 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
         {
             auto data = kMeansData<float>(5, 2, 0);
             auto kmeansInstance =
-                kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                kMeansAlgorithm<float, MPIContext>(std::move(data), mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
 
             kmeansInstance.setCenters(std::vector<float>{0, 0});
             kmeansInstance.assignPointsToCenters();
@@ -343,7 +347,7 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
         }
         {
             auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(
-                {1, 2, 3, 7, 8, 9}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                {1, 2, 3, 7, 8, 9}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({2, 8});
             kmeansInstance.assignPointsToCenters();
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 1, 1, 1));
@@ -358,7 +362,7 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
         {
             // auto kmeansInstance = kMeansAlgorithm<float, MPIContext>({0, 0.5f, 1, 1.1f, 2, 2, 6, 6, 7, 7, 9, 10}, 2);
             auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(
-                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 9, 10}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 9, 10}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({1, 1, 8, 8});
             kmeansInstance.assignPointsToCenters();
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 1, 1, 1));
@@ -367,7 +371,7 @@ TEST(kMeansAlgorithm, assignPointsToCenters) {
 
         { // A center not getting assigned to any points should not be a problem
             auto kmeansInstance =
-                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({0, 20});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 20));
             ASSERT_NO_THROW(kmeansInstance.assignPointsToCenters());
@@ -385,21 +389,22 @@ TEST(kMeansAlgorithm, updateCenters) {
     for (bool useFaultTolerance: {false, true}) {
         { // If the centers already match the data, nothing should change
             auto kmeansInstance =
-                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({0, 1});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 1));
             kmeansInstance.assignPointsToCenters();
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 1, 1));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(2, 2));
             kmeansInstance.updateCenters();
+            kmeansInstance.assignPointsToCenters();
+            ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(2, 2));
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 1));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 1, 1));
-            ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(2, 2));
         }
 
         { // If the centers already match the data, nothing should change
             auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(
-                {0, 0, 1, 1, 1, 1, 0, 0}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                {0, 0, 1, 1, 1, 1, 0, 0}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({0, 0, 1, 1});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 0, 1, 1));
             kmeansInstance.assignPointsToCenters();
@@ -409,7 +414,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
         { // If the centers are already at their optimal position, nothing should change
             auto kmeansInstance =
-                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({0.5});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5));
             kmeansInstance.assignPointsToCenters();
@@ -419,7 +424,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
         { // If the centers are already at their optimal position, nothing should change
             auto kmeansInstance =
-                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({0.5, 0.5});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5, 0.5));
             kmeansInstance.assignPointsToCenters();
@@ -429,7 +434,7 @@ TEST(kMeansAlgorithm, updateCenters) {
 
         { // Else, the centers should be updated
             auto kmeansInstance =
-                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({0, 0});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 0));
             kmeansInstance.assignPointsToCenters();
@@ -439,13 +444,14 @@ TEST(kMeansAlgorithm, updateCenters) {
 
         { // A center not getting assigned to any points should not be a problem
             auto kmeansInstance =
-                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                kMeansAlgorithm<float, MPIContext>({0, 0, 1, 1}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({0, 20});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0, 20));
             kmeansInstance.assignPointsToCenters();
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 0));
             kmeansInstance.updateCenters();
+            kmeansInstance.assignPointsToCenters();
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(0.5, 20));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0));
             ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 0));
@@ -461,7 +467,7 @@ TEST(kMeansAlgorithm, performIterations) {
     for (bool useFaultTolerance: {false, true}) {
         { // 0 iterations does nothing
             auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(
-                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({5, 5, 8, 8});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
             kmeansInstance.performIterations(0);
@@ -470,7 +476,7 @@ TEST(kMeansAlgorithm, performIterations) {
 
         { // single iteration
             auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(
-                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({5, 5, 8, 8});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
             kmeansInstance.performIterations(1);
@@ -479,7 +485,7 @@ TEST(kMeansAlgorithm, performIterations) {
 
         { // two iterations
             auto kmeansInstance = kMeansAlgorithm<float, MPIContext>(
-                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+                {0, 0, 1, 1, 2, 2, 6, 6, 7, 7, 8, 8}, 2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
             kmeansInstance.setCenters({5, 5, 8, 8});
             ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 5, 8, 8));
             kmeansInstance.performIterations(2);
@@ -495,16 +501,18 @@ TEST(kMeansAlgorithm, smallExample) {
 
     for (bool useFaultTolerance: {false, true}) {
         auto kmeansInstance = kMeansAlgorithm<double, MPIContext>(
-            {1, 1, 2, 10, 13, 18, 20, 21}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+            {1, 1, 2, 10, 13, 18, 20, 21}, 1, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
         kmeansInstance.setCenters({5, 17});
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(5, 17));
 
         kmeansInstance.performIterations(1);
+        kmeansInstance.assignPointsToCenters(); // We want to test the local assignment.
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1));
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 4));
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(3.5, 18));
 
         kmeansInstance.performIterations(1);
+        kmeansInstance.assignPointsToCenters(); // We want to test the local assignment.
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().assignedCenter, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1));
         ASSERT_THAT(kmeansInstance.pointToCenterAssignment().numPointsAssignedToCenter, ElementsAre(4, 4));
         ASSERT_THAT(kmeansInstance.centers(), ElementsAre(3.5, 18));
@@ -550,7 +558,7 @@ TEST(kMeansAlgorithm, slightlyLargerExample) {
              1.210,  0.872,  -0.003, -0.159, 1.926,  2.076,  2.127,  2.007,  -0.010, 0.234,  2.094,  1.938,  -0.183,
              -0.136, 1.989,  2.211,  -0.008, 0.033,  1.946,  1.911,  2.215,  1.822,  1.917,  1.968,  2.077,  2.110,
              2.190,  1.934,  1.009,  0.995,  0.042,  0.028,  1.977,  2.179,  1.018,  1.014},
-            2, mpiContext, useFaultTolerance, REPLICATION_LEVEL);
+            2, mpiContext, useFaultTolerance, REPLICATION_LEVEL, BLOCKS_PER_PERMUTATION_RANGE);
 
         kMeansInstance.setCenters({2.045, 1.987, 1.589, 0.764, -0.12, 0.43});
         kMeansInstance.performIterations(10);

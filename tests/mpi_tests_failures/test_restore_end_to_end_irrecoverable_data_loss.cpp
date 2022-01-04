@@ -29,7 +29,8 @@ using iter::range;
 TEST_F(ReStoreTestWithFailures, IrrecoverableDataLoss) {
     // Each rank submits different data. The replication level is set to 2. There are three rank failures. Therefore,
     // some data should be irrecoverably lost.
-    ReStore::ReStore<int> store(MPI_COMM_WORLD, 2, ReStore::OffsetMode::constant, sizeof(int));
+    const uint64_t blocksPerPermutationRange = 10;
+    ReStore::ReStore<int> store(MPI_COMM_WORLD, 2, ReStore::OffsetMode::constant, sizeof(int), blocksPerPermutationRange);
 
     ASSERT_EQ(4, numRanks());
 

@@ -232,6 +232,7 @@ TEST(BlockRetrievalTest, handleReceivedBlocks) {
             ASSERT_LT(index, allData.size());
             EXPECT_EQ(allData[index], *intData);
             ++index;
-        });
+        },
+        IdentityPermutation());
     EXPECT_EQ(allData.size(), index);
 }

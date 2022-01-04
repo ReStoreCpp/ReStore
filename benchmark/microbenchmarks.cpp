@@ -215,6 +215,7 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
     auto replicationLevel = throwing_cast<uint16_t>(state.range(1));
     auto bytesPerRank     = throwing_cast<size_t>(state.range(2));
     auto numRanksDataLoss = throwing_cast<size_t>(state.range(3));
+    auto blocksPerRangePermutation = throwing_cast<size_t>(state.range(4));
 
     assert(bytesPerRank % blockSize == 0);
     auto blocksPerRank = bytesPerRank / blockSize;
@@ -245,7 +246,7 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
     assert(data.size() == blocksPerRank);
 
     ReStore::ReStore<BlockType> store(
-        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize);
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize, blocksPerRangePermutation);
 
     unsigned counter = 0;
 
@@ -326,6 +327,7 @@ BENCHMARK(BM_pushBlocksSmallRange)  ///
         {2, 3, 4},                                      // replication level
         {MiB(1), MiB(16), MiB(32), MiB(64)},            //, MiB(128)} // bytes per rank
         {1, 2, 4, 8},                                   // Number of ranks from which to get the data
+        {1, 8, 128, KiB(1), MiB(1)},        // Blocks per permutation range
     });
 const auto MAX_DATA_LOSS_RANKS = 8;
 
