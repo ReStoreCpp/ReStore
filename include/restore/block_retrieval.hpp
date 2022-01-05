@@ -79,6 +79,55 @@ inline ReStoreMPI::original_rank_t getServingRank(
     return ranksWithBlockRange[servingIndex];
 }
 
+// Project the block ids from the user ids to the internal ids. This means that the length of the requested
+// block ranges change, too. If we are using the RangePermutation, we will still get some consecutive blocks
+// ids. E.g. the requested range [0,100) might get translated to [0,10), [80, 90), [20, 30), ...
+template <typename Permutation>
+std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>
+projectBlockRequestsFromUserToPermutedIDs(
+    std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> userBlockRanges,
+    Permutation                                                                       permutation) {
+    std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> internalBlockRanges;
+    for (auto& userBlockRange: userBlockRanges) {
+        const auto destinationRank = userBlockRange.second;
+
+        auto userBlockId       = userBlockRange.first.first;
+        auto lengthOfUserRange = userBlockRange.first.second;
+
+        for (;;) {
+            const auto internalBlockId       = permutation.f(userBlockId);
+            const auto lastIdOfInternalRange = permutation.lastIdOfRange(internalBlockId);
+
+            if (internalBlockId + lengthOfUserRange - 1 <= lastIdOfInternalRange) {
+                // The remainder of the user-requested range is completely contained in the internal range.
+                assert(lengthOfUserRange > 0);
+                internalBlockRanges.push_back({{internalBlockId, lengthOfUserRange}, destinationRank});
+                break;
+            } else {
+                // We have to split the user-requested range into into multiple internal ranges.
+                assert(lastIdOfInternalRange >= internalBlockId);
+                const auto consumedBlocks = lastIdOfInternalRange - internalBlockId + 1;
+                assert(consumedBlocks >= 1);
+                assert(consumedBlocks < lengthOfUserRange);
+
+                internalBlockRanges.push_back({{internalBlockId, consumedBlocks}, destinationRank});
+                lengthOfUserRange -= consumedBlocks;
+                userBlockId += consumedBlocks;
+            }
+        }
+    }
+    return internalBlockRanges;
+}
+
+template <>
+std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>
+projectBlockRequestsFromUserToPermutedIDs<IdentityPermutation>(
+    std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> userBlockRanges,
+    IdentityPermutation                                                               permutation) {
+    UNUSED(permutation);
+    return userBlockRanges;
+}
+
 // Takes block range requests with current ranks
 // Returns sendBlockRanges and recvBlockRanges with current ranks
 template <class MPIContext>

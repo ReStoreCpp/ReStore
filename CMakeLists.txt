@@ -63,6 +63,7 @@ option(${PROJECT_NAME}_BUILD_EXAMPLES "Build examples" OFF)
 # Other build options
 option(${PROJECT_NAME}_SIMULATE_FAILURES "Simulate node failues (for example when running unit test)." OFF)
 option(${PROJECT_NAME}_USE_FTMPI "Use a fault-tolerant MPI implementation" ON)
+option(${PROJECT_NAME}_ID_RANDOMIZATION "Use randomization of block IDs." ON)
 option(${PROJECT_NAME}_WARNINGS_ARE_ERRORS "Treat warnings as errors." OFF)
 
 # Output config
@@ -72,6 +73,7 @@ endif()
 
 message(STATUS "Using simulated failures: ${${PROJECT_NAME}_SIMULATE_FAILURES}")
 message(STATUS "Using a fault-tolerant MPI implementation: ${${PROJECT_NAME}_USE_FTMPI}")
+message(STATUS "Using block id randomization: ${${PROJECT_NAME}_ID_RANDOMIZATION}")
 
 # Extra options when building tests
 cmake_dependent_option("${PROJECT_NAME}_SYSTEM_GTEST" "Use googletest version installed on the system" OFF "${PROJECT_NAME}_BUILD_TESTS" OFF)
@@ -194,8 +196,13 @@ target_compile_options(
 if (${PROJECT_NAME}_SIMULATE_FAILURES) 
     target_compile_definitions(${PROJECT_NAME}_compile_requirements INTERFACE SIMULATE_FAILURES)
 endif()
+
 if (${PROJECT_NAME}_USE_FTMPI)
     target_compile_definitions(${PROJECT_NAME}_compile_requirements INTERFACE USE_FTMPI)
+endif()
+
+if (${PROJECT_NAME}_ID_RANDOMIZATION)
+    target_compile_definitions(${PROJECT_NAME}_compile_requirements INTERFACE ID_RANDOMIZATION)
 endif()
 
 ### Libraries ###

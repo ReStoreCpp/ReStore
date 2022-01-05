@@ -416,6 +416,11 @@ void writeMeasurementsToFile(
     resultPrinter.allResults("failureSimulatorSeed", options.failureSimulatorSeed());
     resultPrinter.allResults("clusterCenterSeed", options.clusterCenterSeed());
     resultPrinter.allResults("blocksPerPermutationRange", options.blocksPerPermutationRange());
+#ifdef ID_RANDOMIZATION
+    resultPrinter.allResults("idRandomization", true);
+#else
+    resultPrinter.allResults("idRandomization", false);
+#endif
 
     resultPrinter.thisResult("failureProbability", options.failureProbability());
     resultPrinter.thisResult("numSimulatedRankFailures", numFailures);

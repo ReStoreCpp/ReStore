@@ -131,12 +131,18 @@ class FeistelPseudoRandomPermutation {
     }
 
     uint64_t f(uint64_t n) const {
+        assert(n <= _max_value);
         // We use cycle walking to ensure, that the generated number is at most _max_value
-        return _cycle_walk(n, false);
+        const auto permuted_n = _cycle_walk(n, false);
+        assert(permuted_n <= _max_value);
+        return permuted_n;
     }
 
     uint64_t finv(uint64_t n) const {
-        return _cycle_walk(n, true);
+        assert(n <= _max_value);
+        const auto permuted_n = _cycle_walk(n, true);
+        assert(permuted_n <= _max_value);
+        return permuted_n;
     }
 
     private:
@@ -277,17 +283,27 @@ class FeistelPseudoRandomPermutation {
 
 class IdentityPermutation {
     public:
+    IdentityPermutation() {};
+
+    // Use IdentityPermutation as a replacement for FeistelPseudoRandomPermutation.
     static IdentityPermutation buildPermutation(uint64_t maxValueDummy = 0, uint64_t seedDummy = 0) {
         UNUSED(maxValueDummy);
         UNUSED(seedDummy);
         return IdentityPermutation();
     }
 
-    uint64_t f(uint64_t n) const {
+    // Use IdentityPermutation as a replacement for RangePermutation.
+    IdentityPermutation (uint64_t maxValueDummy, uint64_t lengthOfRangesDummy, uint64_t seedDummy) {
+        UNUSED(maxValueDummy);
+        UNUSED(lengthOfRangesDummy);
+        UNUSED(seedDummy);
+    }
+
+    inline uint64_t f(uint64_t n) const {
         return n;
     }
 
-    uint64_t finv(uint64_t n) const {
+    inline uint64_t finv(uint64_t n) const {
         return n;
     }
 };
@@ -296,10 +312,10 @@ template <typename Permutation = FeistelPseudoRandomPermutation>
 class RangePermutation {
     public:
     RangePermutation(uint64_t maxValue, uint64_t lengthOfRanges, uint64_t seed)
-        : _maxValue(maxValue),
-          _lengthOfRanges(lengthOfRanges),
-          _numRanges(RangePermutation::_computeNumRanges(maxValue, lengthOfRanges)),
-          _permutation(Permutation::buildPermutation(_numRanges - 1, seed)) {
+        : _max_value(maxValue),
+          _length_of_ranges(lengthOfRanges),
+          _num_ranges(RangePermutation::_computeNumRanges(maxValue, lengthOfRanges)),
+          _permutation(Permutation::buildPermutation(_num_ranges - 1, seed)) {
         assert(maxValue > 0);
         assert(lengthOfRanges > 0);
         assert(numRanges() > 0);
@@ -310,28 +326,34 @@ class RangePermutation {
     }
 
     inline uint64_t f(uint64_t n) const {
-        assert(_range(n) < _numRanges);
-        assert(_offset(n) < _lengthOfRanges);
-        return _permutation.f(_range(n)) * _lengthOfRanges + _offset(n);
+        assert(n <= _max_value);
+        assert(_range(n) < _num_ranges);
+        assert(_offset(n) < _length_of_ranges);
+        const auto permuted_n = _permutation.f(_range(n)) * _length_of_ranges + _offset(n);
+        assert(permuted_n <= maxValue());
+        return permuted_n;
     }
 
     inline uint64_t finv(uint64_t n) const {
-        assert(_range(n) < _numRanges);
-        assert(_offset(n) < _lengthOfRanges);
-        assert(_range(n) < _numRanges - 1 || _offset(n) < _elementsInLastRange());
-        return _permutation.finv(_range(n)) * _lengthOfRanges + _offset(n);
+        assert(n <= _max_value);
+        assert(_range(n) < _num_ranges);
+        assert(_offset(n) < _length_of_ranges);
+        assert(_range(n) < _num_ranges - 1 || _offset(n) < _elementsInLastRange());
+        const auto permuted_n = _permutation.finv(_range(n)) * _length_of_ranges + _offset(n);
+        assert(permuted_n <= maxValue());
+        return permuted_n;
     }
 
     inline uint64_t numRanges() const {
-        return _numRanges;
+        return _num_ranges;
     }
 
     inline uint64_t maxValue() const {
-        return _maxValue;
+        return _max_value;
     }
 
     inline uint64_t lengthOfRanges() const {
-        return _lengthOfRanges;
+        return _length_of_ranges;
     }
 
     // Given a block id, return the last id of the range \c blockId belongs to.
@@ -340,25 +362,25 @@ class RangePermutation {
 
     inline uint64_t lastIdOfRange(uint64_t blockId) const {
         const auto rangeId = _range(blockId);
-        if (rangeId == _numRanges - 1) {
-            return _maxValue;
+        if (rangeId == _num_ranges - 1) {
+            return _max_value;
         } else {
-            return rangeId * _lengthOfRanges + _lengthOfRanges - 1;
+            return rangeId * _length_of_ranges + _length_of_ranges - 1;
         }
     }
 
     private:
-    const uint64_t    _maxValue;
-    const uint64_t    _lengthOfRanges;
-    const uint64_t    _numRanges;
+    const uint64_t    _max_value;
+    const uint64_t    _length_of_ranges;
+    const uint64_t    _num_ranges;
     const Permutation _permutation;
 
     inline uint64_t _range(uint64_t n) const {
-        return n / _lengthOfRanges;
+        return n / _length_of_ranges;
     }
 
     inline uint64_t _offset(uint64_t n) const {
-        return n % _lengthOfRanges;
+        return n % _length_of_ranges;
     }
 
     inline static uint64_t _computeNumRanges(uint64_t maxValue, uint64_t lengthOfRanges) {
@@ -373,10 +395,10 @@ class RangePermutation {
     }
 
     inline uint64_t _elementsInLastRange() const {
-        if ((_maxValue + 1) % _lengthOfRanges == 0) {
-            return _lengthOfRanges;
+        if ((_max_value + 1) % _length_of_ranges == 0) {
+            return _length_of_ranges;
         } else {
-            return (_maxValue + 1) % _lengthOfRanges;
+            return (_max_value + 1) % _length_of_ranges;
         }
     }
 };
