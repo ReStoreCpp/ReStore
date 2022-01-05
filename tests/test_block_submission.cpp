@@ -66,7 +66,9 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
     using ReStoreMPI::current_rank_t;
     using ReStoreMPI::RecvMessage;
 
-    MPIContextMock    mpiContext;
+    NiceMock<MPIContextMock> mpiContext;
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(3));
+
     BlockDistribution blockDistribution(10, 100, 3, mpiContext);
 
     ReStore::BlockSubmissionCommunication<uint16_t, MPIContextMock> comm(

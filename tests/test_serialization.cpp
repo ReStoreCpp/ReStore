@@ -252,22 +252,40 @@ TEST(SerializedBlockStoreStream, InStream) {
     ReStore::SerializedBlockStoreStream stream2(buffers2, numRanks);
     stream2.setDestinationRanks(ranks);
 
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 0);
     stream2 << 0x1F1F_uint16;
+
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 0);
     auto handle1p0 = stream2.reserveBytesForWriting(0, sizeof(uint8_t));
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 1);
+
     auto handle1p3 = stream2.reserveBytesForWriting(3, sizeof(uint8_t));
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 2);
+
     stream2 << 0x0101_uint16;
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 2);
+
     auto handle2 = stream2.reserveBytesForWriting(3, sizeof(uint16_t));
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 3);
+
     stream2 << 0x2222_uint16;
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 3);
+
     stream2.writeToReservedBytes(handle1p0, 0xFF_uint8);
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 2);
+    
     stream2.writeToReservedBytes(handle1p3, 0xFF_uint8);
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 1);
+
     stream2.writeToReservedBytes(handle2, 0x3333_uint16);
+    EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 0);
 
-    ASSERT_EQ(stream2.bytesWritten(0), 7);
-    ASSERT_EQ(stream2.bytesWritten(3), 9);
+    EXPECT_EQ(stream2.bytesWritten(0), 7);
+    EXPECT_EQ(stream2.bytesWritten(3), 9);
 
-    ASSERT_THAT(
+    EXPECT_THAT(
         buffers2.at(0), ElementsAre(0x1F_byte, 0x1F_byte, 0xFF_byte, 0x01_byte, 0x01_byte, 0x22_byte, 0x22_byte));
-    ASSERT_THAT(
+    EXPECT_THAT(
         buffers2.at(3),
         ElementsAre(0x1F_byte, 0x1F_byte, 0xFF_byte, 0x01_byte, 0x01_byte, 0x33_byte, 0x33_byte, 0x22_byte, 0x22_byte));
 }

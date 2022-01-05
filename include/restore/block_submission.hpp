@@ -53,10 +53,12 @@ class BlockSubmissionCommunication {
                 throw std::runtime_error("Currently, only the RANGES mode is supported.");
             }
             assert(_currentRanges.size() == asserting_cast<size_t>(numRanks));
+            assert(numRanks > 0);
         }
 
         void writeId(IDType id, std::vector<ReStoreMPI::original_rank_t> ranks) {
-            for (auto rank: ranks) {
+            assert(!ranks.empty());
+            for (const auto rank: ranks) {
                 writeId(id, rank);
             }
         }
@@ -70,7 +72,7 @@ class BlockSubmissionCommunication {
             // Is this the first id?
             if (!rangeState) {
                 BlockIDRange range(id);
-                auto         positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
+                const auto   positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
                 rangeState.emplace(range, positionInStream);
             } else { // This is not the first id
                 // Is this a consecutive id range?
@@ -79,9 +81,9 @@ class BlockSubmissionCommunication {
                 } else { // Not a consecutive id
                     // close and write out previous range
                     serializeBlockIDRange(rangeState->positionInStream, rangeState->range);
-                    rangeState->range.first = rangeState->range.last = id;
 
                     // start a new range
+                    rangeState->range.first = rangeState->range.last = id;
                     rangeState->positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
                 }
             }
@@ -97,6 +99,7 @@ class BlockSubmissionCommunication {
                 }
             }
             finalized = true;
+            assert(_stream.numWritableStreamPositionsWithBytesLeft() == 0);
         }
 
         ~BlockIDSerialization() {
@@ -117,9 +120,9 @@ class BlockSubmissionCommunication {
         // Serialize a BlockIDRange
         void serializeBlockIDRange(WritableStreamPosition& positionInStream, BlockIDRange range) {
             assert(positionInStream.bytesLeft() == sizeof(decltype(range.first)) + sizeof(decltype(range.last)));
-            _stream.writeToReservedBytes(positionInStream, range.first);
+            _stream.writeToReservedBytes(positionInStream, range.first); // Advances positionInStream.
             assert(positionInStream.bytesLeft() == sizeof(decltype(range.first)));
-            _stream.writeToReservedBytes(positionInStream, range.last);
+            _stream.writeToReservedBytes(positionInStream, range.last); // Advances positionInStream.
             assert(positionInStream.bytesLeft() == 0);
         }
 
@@ -140,7 +143,10 @@ class BlockSubmissionCommunication {
             : _mode(mode),
               _dataStream(dataStream),
               _currentRange(std::nullopt),
-              _lastId(std::numeric_limits<IDType>::max()) {}
+              _lastId(std::numeric_limits<IDType>::max()) {
+            // We have to read at least one descriptor from the data stream.
+            assert(_dataStream.size() >= DESCRIPTOR_SIZE);
+        }
 
         BlockIDDeserialization()                              = delete;
         BlockIDDeserialization(BlockIDDeserialization&&)      = delete;
@@ -158,7 +164,7 @@ class BlockSubmissionCommunication {
 #if defined(__GNUC__) && !defined(__clang__)
     #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
-            if (_currentRange.has_value() && _lastId < _currentRange->last) {
+            if (_currentRange && _lastId < _currentRange->last) {
 #pragma GCC diagnostic pop
                 return std::make_pair(0, ++_lastId);
             } else {
@@ -224,6 +230,8 @@ class BlockSubmissionCommunication {
         SendBuffers sendBuffers;
         assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
         sendBuffers.resize(asserting_cast<size_t>(_mpiContext.getOriginalSize()));
+        assert(std::for_each(
+            sendBuffers.begin(), sendBuffers.end(), [](const std::vector<std::byte>& b) { return b.empty(); }));
 
         // Create the object which represents the store stream
         auto storeStream = SerializedBlockStoreStream(sendBuffers, _mpiContext.getOriginalSize());
@@ -234,56 +242,55 @@ class BlockSubmissionCommunication {
         BlockIDSerialization<block_id_t> blockIDSerializationManager(
             BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, storeStream, _mpiContext.getOriginalSize());
 
-        // Loop over the nextBlock generator to fetch all block we need to serialize
-        bool                                           doneSerializingBlocks = false;
-        std::optional<typename BlockDistr::BlockRange> currentRange          = std::nullopt;
+        // Loop over the nextBlock generator to fetch all blocks we need to serialize.
+        std::optional<typename BlockDistr::BlockRange> currentRange = std::nullopt;
         std::vector<ReStoreMPI::original_rank_t>       ranks;
-        do {
+        for (;;) {
             std::optional<NextBlock<BlockType>> next = nextBlock();
             if (!next.has_value()) {
-                doneSerializingBlocks = true;
-            } else {
-                block_id_t       blockId = next->blockId;
-                const BlockType& block   = next->block;
-                if (blockId >= _blockDistribution.numBlocks()) {
-                    throw std::runtime_error(
-                        "The block id (" + std::to_string(blockId) + ") is bigger than the number of blocks ("
-                        + std::to_string(_blockDistribution.numBlocks())
-                        + "). Have you passed the number of block *in total* (not only on this rank)?");
-                }
-
-                // Use a pseudorandom bijection to break patterns in the distribution of the block id's over the ranks.
-                blockId = blockIdPermuter.f(blockId);
-
-                // Determine which ranks will get this block; assume that no failures occurred
-                assert(_mpiContext.numFailuresSinceReset() == 0);
-                // Only recompute the destination ranks if they have changed
-                if (!currentRange || !(currentRange->contains(blockId))) {
-                    currentRange = _blockDistribution.rangeOfBlock(blockId);
-                    ranks        = _blockDistribution.ranksBlockRangeIsStoredOn(*currentRange);
-
-                    // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
-                    // operator and automatically copies the written bytes to every destination rank's send buffer.
-                    storeStream.setDestinationRanks(ranks);
-                }
-
-                // Write the block's id to the stream
-                blockIDSerializationManager.writeId(blockId, ranks);
-
-                // Call the user-defined serialization function to serialize the block to a flat byte stream
-                auto bytesWrittenBeforeSerialization = storeStream.bytesWritten(ranks[0]);
-                serializeFunc(block, storeStream);
-                assert(_offsetModeDescriptor.mode == OffsetMode::constant);
-                auto bytesWrittenDuringSerialization =
-                    storeStream.bytesWritten(ranks[0]) - bytesWrittenBeforeSerialization;
-                if (bytesWrittenDuringSerialization != _offsetModeDescriptor.constOffset) {
-                    throw std::runtime_error(
-                        "You wrote too many or too few bytes (" + std::to_string(bytesWrittenDuringSerialization)
-                        + ") during serialization of block " + std::to_string(blockId) + ". Is your constant offset ("
-                        + std::to_string(_offsetModeDescriptor.constOffset) + ") set correctly?");
-                }
+                break; // No more blocks, we are done serializing.
             }
-        } while (!doneSerializingBlocks);
+
+            block_id_t       blockId = next->blockId;
+            const BlockType& block   = next->block;
+            if (blockId >= _blockDistribution.numBlocks()) {
+                throw std::runtime_error(
+                    "The block id (" + std::to_string(blockId) + ") is bigger than the number of blocks ("
+                    + std::to_string(_blockDistribution.numBlocks())
+                    + "). Have you passed the number of block *in total* (not only on this rank)?");
+            }
+
+            // Use a pseudorandom bijection to break patterns in the distribution of the block id's over the ranks.
+            // blockId = blockIdPermuter.f(blockId);
+
+            // Determine which ranks will get this block; assume that no failures occurred
+            assert(_mpiContext.numFailuresSinceReset() == 0);
+            // Only recompute the destination ranks if they have changed
+            if (!currentRange || !(currentRange->contains(blockId))) {
+                currentRange = _blockDistribution.rangeOfBlock(blockId);
+                ranks        = _blockDistribution.ranksBlockRangeIsStoredOn(*currentRange);
+
+                // Create the proxy which the user defined serializer will write to. This proxy overloads the <<
+                // operator and automatically copies the written bytes to every destination rank's send buffer.
+                storeStream.setDestinationRanks(ranks);
+            }
+
+            // Write the block's id to the stream
+            assert(blockId < 1000000000);
+            blockIDSerializationManager.writeId(blockId, ranks);
+
+            // Call the user-defined serialization function to serialize the block to a flat byte stream
+            auto bytesWrittenBeforeSerialization = storeStream.bytesWritten(ranks[0]);
+            serializeFunc(block, storeStream);
+            assert(_offsetModeDescriptor.mode == OffsetMode::constant);
+            auto bytesWrittenDuringSerialization = storeStream.bytesWritten(ranks[0]) - bytesWrittenBeforeSerialization;
+            if (bytesWrittenDuringSerialization != _offsetModeDescriptor.constOffset) {
+                throw std::runtime_error(
+                    "You wrote too many or too few bytes (" + std::to_string(bytesWrittenDuringSerialization)
+                    + ") during serialization of block " + std::to_string(blockId) + ". Is your constant offset ("
+                    + std::to_string(_offsetModeDescriptor.constOffset) + ") set correctly?");
+            }
+        }
 
         // Write out the remaining open id ranges
         blockIDSerializationManager.finalize();
@@ -308,10 +315,7 @@ class BlockSubmissionCommunication {
             "handleBlockData has to be invocable as _(block_id_t, const std::byte*, size_t, current_rank_t)");
 
         assert(_offsetModeDescriptor.mode == OffsetMode::constant);
-
-        if (message.data.size() == 0) {
-            return;
-        }
+        assert(message.data.size() > 0);
 
         BlockIDDeserialization<block_id_t> blockIdDeserializer(
             BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, message.data);
@@ -338,6 +342,8 @@ class BlockSubmissionCommunication {
     void parseAllIncomingMessages(
         const std::vector<ReStoreMPI::RecvMessage>& messages, HandleBlockDataFunc handleBlockData) {
         for (auto&& message: messages) {
+            assert(message.data.size() > 0);
+            assert(message.srcRank < _mpiContext.getCurrentSize());
             parseIncomingMessage(message, handleBlockData);
         }
     }

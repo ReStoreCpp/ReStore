@@ -20,12 +20,13 @@ class SerializedBlockStoreStream {
 
     SerializedBlockStoreStream(std::vector<std::vector<std::byte>>& buffers, ReStoreMPI::original_rank_t numRanks)
         : _bytesWritten(0),
-          _buffers(buffers) {
+          _buffers(buffers),
+          _numWritableStreamPositionsWithBytesLeft(0) {
         if (numRanks <= 0) {
             throw std::runtime_error("numRanks might not be less than or equal to zero");
         }
         if (buffers.size() != asserting_cast<size_t>(numRanks)) {
-            throw std::runtime_error("There send buffers are not allocated.");
+            throw std::runtime_error("The send buffers are not allocated.");
         }
     }
 
@@ -39,11 +40,10 @@ class SerializedBlockStoreStream {
 
         for (auto rank: ranks) {
             assert(rank >= 0);
+            assert(asserting_cast<size_t>(rank) < _buffers.size());
             _outputBuffers.push_back(&(_buffers[asserting_cast<size_t>(rank)]));
         }
         assert(_outputBuffers.size() == ranks.size());
-
-        _outputBuffers.reserve(ranks.size());
     }
 
     // Keep the user from copying or moving our SerializedBlockStore object we pass to him.
@@ -79,7 +79,7 @@ class SerializedBlockStoreStream {
 
     // writeBytes()
     //
-    // Copy n bytes, starting at begin to the buffers.
+    // Copy n bytes to the buffers, starting at begin.
     inline void writeBytes(const std::byte* begin, size_t n) {
         for (auto buffer: _outputBuffers) {
             buffer->insert(buffer->end(), begin, begin + n);
@@ -100,10 +100,12 @@ class SerializedBlockStoreStream {
     struct WritableStreamPosition {
         public:
         size_t bytesLeft() const {
+            assert(written <= length);
             return length - written;
         }
 
         size_t currentPosition() const {
+            assert(written <= length);
             return index + written;
         }
 
@@ -112,9 +114,12 @@ class SerializedBlockStoreStream {
             : rank(_rank),
               index(_index),
               length(_length),
-              written(0) {}
+              written(0) {
+            assert(rank >= 0);
+        }
 
-        void writeBytes(const size_t numBytes) {
+        void advance(const size_t numBytes) {
+            assert(numBytes <= bytesLeft());
             written += numBytes;
         }
 
@@ -136,6 +141,7 @@ class SerializedBlockStoreStream {
 
         auto&                  buffer = _buffers[asserting_cast<size_t>(rank)];
         WritableStreamPosition position(rank, bytesWritten(rank), n);
+        _numWritableStreamPositionsWithBytesLeft++;
 
         // Write dummy data to the stream.
         buffer.resize(buffer.size() + n);
@@ -146,6 +152,7 @@ class SerializedBlockStoreStream {
 
     // Write to previously reserved bytes in the stream.
     void writeToReservedBytes(WritableStreamPosition& position, const std::byte* begin, size_t length = 0) {
+        assert(asserting_cast<size_t>(position.rank) < _buffers.size());
         auto& buffer       = _buffers[asserting_cast<size_t>(position.rank)];
         auto  bytesToWrite = length != 0 ? length : position.bytesLeft();
 
@@ -157,7 +164,11 @@ class SerializedBlockStoreStream {
             begin, begin + bytesToWrite,
             buffer.begin() + throwing_cast<std::vector<std::byte>::difference_type>(position.currentPosition()));
 
-        position.writeBytes(bytesToWrite);
+        position.advance(bytesToWrite);
+
+        if (position.bytesLeft() == 0) {
+            _numWritableStreamPositionsWithBytesLeft--;
+        }
     }
 
     template <class T>
@@ -169,10 +180,16 @@ class SerializedBlockStoreStream {
         writeToReservedBytes(position, src, sizeof(T));
     }
 
+    // Return the number of WritableStreamPosition objects that have bytes left to write.
+    size_t numWritableStreamPositionsWithBytesLeft() const {
+        return _numWritableStreamPositionsWithBytesLeft;
+    }
+
     private:
     size_t                               _bytesWritten;
     std::vector<std::vector<std::byte>*> _outputBuffers;
     std::vector<std::vector<std::byte>>& _buffers;
+    size_t                               _numWritableStreamPositionsWithBytesLeft;
 };
 
 template <typename MPIContext = ReStoreMPI::MPIContext>
