@@ -381,7 +381,7 @@ int main(int argc, char** argv) {
 
         std::string benchmark_out_string = std::string{"--benchmark_out="} + tmpFile;
         auto        benchmark_out =
-            std::unique_ptr<char>(reinterpret_cast<char*>(malloc(sizeof(char) * benchmark_out_string.length())));
+            std::unique_ptr<char>(reinterpret_cast<char*>(malloc(sizeof(char) * (benchmark_out_string.length() + 1))));
         strcpy(benchmark_out.get(), benchmark_out_string.c_str());
 
         expanded_argv.push_back(benchmark_out.get());
