@@ -356,7 +356,10 @@ class BlockSubmissionCommunication {
         std::vector<ReStoreMPI::SendMessage> sendMessages;
         for (ReStoreMPI::original_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
             auto& buffer = sendBuffers[asserting_cast<size_t>(rankId)];
-            sendMessages.emplace_back(ReStoreMPI::SendMessage{buffer.data(), (int)buffer.size(), rankId});
+            // Skip empty messages
+            if (buffer.size() > 0) {
+                sendMessages.emplace_back(ReStoreMPI::SendMessage{buffer.data(), (int)buffer.size(), rankId});
+            }
         }
 
         return _mpiContext.SparseAllToAll(sendMessages);
