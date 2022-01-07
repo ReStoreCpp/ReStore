@@ -128,31 +128,32 @@ readGraph(const std::vector<std::string>& graphs) {
 
             } else if (letter == 'e') {
                 hasReadEdgesFromFile = true;
-                node_t firstNum      = fileReader.getInt();
-                node_t secondNum     = fileReader.getInt();
-                assert(firstNum > 0);
-                assert(secondNum > 0);
-                --firstNum;
-                --secondNum;
-                if (numVertices == 0 || numEdges == 0) {
-                    if (myRank == 0)
-                        std::cout << "First edge before specifying number of vertices and edges. This is not supported!"
-                                  << std::endl;
-                    exit(1);
-                }
-                if (firstNum > numVertices) {
-                    if (myRank == 0) {
-                        std::cout << "Invalid vertex id " << firstNum << std::endl;
-                    }
-                    exit(1);
-                }
-                if (secondNum > numVertices) {
-                    if (myRank == 0) {
-                        std::cout << "Invalid vertex id " << secondNum << std::endl;
-                    }
-                    exit(1);
-                }
                 if (numEdgesRead >= lowerBound && numEdgesRead < upperBound) {
+                    node_t firstNum  = fileReader.getInt();
+                    node_t secondNum = fileReader.getInt();
+                    assert(firstNum > 0);
+                    assert(secondNum > 0);
+                    --firstNum;
+                    --secondNum;
+                    if (numVertices == 0 || numEdges == 0) {
+                        if (myRank == 0)
+                            std::cout
+                                << "First edge before specifying number of vertices and edges. This is not supported!"
+                                << std::endl;
+                        exit(1);
+                    }
+                    if (firstNum > numVertices) {
+                        if (myRank == 0) {
+                            std::cout << "Invalid vertex id " << firstNum << std::endl;
+                        }
+                        exit(1);
+                    }
+                    if (secondNum > numVertices) {
+                        if (myRank == 0) {
+                            std::cout << "Invalid vertex id " << secondNum << std::endl;
+                        }
+                        exit(1);
+                    }
                     ++outDegrees[static_cast<size_t>(firstNum)];
                     edges.emplace_back(firstNum, secondNum);
                 }
