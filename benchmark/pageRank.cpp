@@ -87,7 +87,8 @@ readGraph(const std::vector<std::string>& graphs) {
             if (!fileReader.isLetter()) {
                 fileReader.skipLine();
             }
-            char letter = fileReader.getLetter();
+            char letter               = fileReader.getLetter();
+            bool hasReadEdgesFromFile = false;
             if (letter == 'p') {
                 node_t    firstNum  = fileReader.getInt();
                 edge_id_t secondNum = fileReader.getuint64_t();
@@ -126,8 +127,9 @@ readGraph(const std::vector<std::string>& graphs) {
                 }
 
             } else if (letter == 'e') {
-                node_t firstNum  = fileReader.getInt();
-                node_t secondNum = fileReader.getInt();
+                hasReadEdgesFromFile = true;
+                node_t firstNum      = fileReader.getInt();
+                node_t secondNum     = fileReader.getInt();
                 assert(firstNum > 0);
                 assert(secondNum > 0);
                 --firstNum;
@@ -150,14 +152,30 @@ readGraph(const std::vector<std::string>& graphs) {
                     }
                     exit(1);
                 }
-                ++outDegrees[static_cast<size_t>(firstNum)];
                 if (numEdgesRead >= lowerBound && numEdgesRead < upperBound) {
+                    ++outDegrees[static_cast<size_t>(firstNum)];
                     edges.emplace_back(firstNum, secondNum);
                 }
                 ++numEdgesRead;
+            } else if (letter == 'f') {
+                if (hasReadEdgesFromFile) {
+                    std::cerr << "line with 'f' must occur before any edge in each file" << std::endl;
+                    exit(1);
+                }
+
+                edge_id_t numEdgesInThisFile = fileReader.getuint64_t();
+                if (numEdgesRead < upperBound && numEdgesRead + numEdgesInThisFile > lowerBound) {
+                    // This file contains edges that we have to read on this PE
+                } else {
+                    // This file doesn't contain any edges we need to read. Act like we have seen them and don't read
+                    // any further.
+                    numEdgesRead += numEdgesInThisFile;
+                    break;
+                }
+
             } else {
                 if (myRank == 0) {
-                    std::cout << "Unsupported type: " << letter << std::endl;
+                    std::cerr << "Unsupported type: " << letter << std::endl;
                 }
                 exit(1);
             }
@@ -166,12 +184,14 @@ readGraph(const std::vector<std::string>& graphs) {
     }
     if (numEdges != numEdgesRead) {
         if (myRank == 0) {
-            std::cout << "Expected " << numEdges << " edges but found " << numEdgesRead << std::endl;
+            std::cerr << "Expected " << numEdges << " edges but found " << numEdgesRead << std::endl;
         }
         exit(1);
     }
 
     assert(static_cast<edge_id_t>(edges.size()) == numEdgesPerRank + (myRank < numRanksWithMoreEdges));
+    // Get all degrees on all ranks (which we don't have because we skipped over all edges that don't belong to us)
+    MPI_Allreduce(MPI_IN_PLACE, outDegrees.data(), numVertices, MPI_INT, MPI_SUM, comm_);
     return std::make_tuple(numVertices, numEdges, lowerBound, edges, outDegrees, blockDistribution);
 }
 
