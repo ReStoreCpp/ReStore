@@ -1,0 +1,24 @@
+diff --git a/compile.sh b/compile.sh
+index 1215456..a6658e6 100755
+--- a/compile.sh
++++ b/compile.sh
+@@ -6,6 +6,6 @@ git submodule update --init --recursive
+ # Compile code
+ mkdir build
+ cd build
+-cmake -DCMAKE_C_COMPILER=gcc-7 -DCMAKE_CXX_COMPILER=g++-7 ../
++cmake -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ ../
+ make -j4
+ 
+diff --git a/include/io/generator_io.h b/include/io/generator_io.h
+index bf7420f..1209eec 100644
+--- a/include/io/generator_io.h
++++ b/include/io/generator_io.h
+@@ -167,6 +167,7 @@ class GeneratorIO {
+         fopen((config_.output_file + "_" + std::to_string(rank)).c_str(), "w+");
+ #ifndef OMIT_HEADER
+     fprintf(fout, "p %llu %lu\n", config_.n, total_num_edges);
++    fprintf(fout, "f %lu\n", edges_.size());
+ #endif
+     for (auto edge : edges_) {
+       fprintf(fout, "e %llu %llu\n", std::get<0>(edge) + 1, std::get<1>(edge) + 1);
