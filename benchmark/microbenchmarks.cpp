@@ -61,6 +61,12 @@ static void BM_submitBlocks(benchmark::State& state) {
         ReStore::ReStore<BlockType> store(
             MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize);
 
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
         // Start measurement
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -88,25 +94,6 @@ static void BM_submitBlocks(benchmark::State& state) {
         state.SetIterationTime(elapsedSeconds);
     }
 }
-
-template <typename N>
-auto constexpr KiB(N n) {
-    return n * 1024;
-}
-
-template <typename N>
-auto constexpr MiB(N n) {
-    return n * 1024 * KiB(1);
-}
-
-BENCHMARK(BM_submitBlocks)          ///
-    ->UseManualTime()               ///
-    ->Unit(benchmark::kMillisecond) ///
-    ->ArgsProduct({
-        {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
-        {1, 2, 3, 4},                                   // replication level
-        {MiB(1), MiB(16), MiB(32), MiB(64)}             //, MiB(128)} // bytes per rank
-    });
 
 static void BM_pushBlocksRedistribute(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
@@ -172,6 +159,12 @@ static void BM_pushBlocksRedistribute(benchmark::State& state) {
     for (auto _: state) {
         UNUSED(_);
 
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
         auto start = std::chrono::high_resolution_clock::now();
         store.pushBlocksCurrentRankIds(
             blockRanges, [&recvData, myStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
@@ -195,17 +188,6 @@ static void BM_pushBlocksRedistribute(benchmark::State& state) {
         state.SetIterationTime(elapsedSeconds);
     }
 }
-
-BENCHMARK(BM_pushBlocksRedistribute) ///
-    ->UseManualTime()                ///
-    ->Unit(benchmark::kMillisecond)  ///
-    ->ArgsProduct({
-        {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
-        {2, 3, 4},                                      // replication level
-        {MiB(1), MiB(16), MiB(32), MiB(64)}             //, MiB(128)} // bytes per rank
-    });
-const auto MAX_REPLICATION_LEVEL = 4;
-
 
 static void BM_pushBlocksSmallRange(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
@@ -327,17 +309,51 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
     }
 }
 
+template <typename N>
+auto constexpr KiB(N n) {
+    return n * 1024;
+}
+
+template <typename N>
+auto constexpr MiB(N n) {
+    return n * 1024 * KiB(1);
+}
+
+const auto MAX_DATA_LOSS_RANKS   = 8;
+const auto MAX_REPLICATION_LEVEL = 4;
+
+BENCHMARK(BM_submitBlocks)          ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->ArgsProduct({
+        // {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
+        // We experimentally determined 64 bytes to be a solid tradeoff between performacne and granularity.
+        {64},                               // block sizes
+        {1, 2, 3, 4},                       // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)} //, MiB(128)} // bytes per rank
+    });
+
+BENCHMARK(BM_pushBlocksRedistribute) ///
+    ->UseManualTime()                ///
+    ->Unit(benchmark::kMillisecond)  ///
+    ->ArgsProduct({
+        // {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
+        {64},                               // block sizes, see above.
+        {2, 3, 4},                          // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)} //, MiB(128)} // bytes per rank
+    });
+
 BENCHMARK(BM_pushBlocksSmallRange)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->ArgsProduct({
-        {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
-        {2, 3, 4},                                      // replication level
-        {MiB(1), MiB(16), MiB(32), MiB(64)},            //, MiB(128)} // bytes per rank
-        {1, 2, 4, 8},                                   // Number of ranks from which to get the data
-        {1, 8, 128, KiB(1)}                             // Blocks per permutation range
+        // {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
+        {64},                                // block sizes, see above
+        {2, 3, 4},                           // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)}, //, MiB(128)} // bytes per rank
+        {1, 2, 4, 8},                        // Number of ranks from which to get the data
+        {1, 8, 128, KiB(1)}                  // Blocks per permutation range
     });
-const auto MAX_DATA_LOSS_RANKS = 8;
 
 // This reporter does nothing.
 // We can use it to disable output from all but the root process
