@@ -87,8 +87,9 @@ readGraph(const std::vector<std::string>& graphs) {
             if (!fileReader.isLetter()) {
                 fileReader.skipLine();
             }
-            char letter               = fileReader.getLetter();
-            bool hasReadEdgesFromFile = false;
+            edge_id_t numEdgesInThisFile   = 0;
+            char      letter               = fileReader.getLetter();
+            bool      hasReadEdgesFromFile = false;
             if (letter == 'p') {
                 node_t    firstNum  = fileReader.getInt();
                 edge_id_t secondNum = fileReader.getuint64_t();
@@ -158,13 +159,23 @@ readGraph(const std::vector<std::string>& graphs) {
                     edges.emplace_back(firstNum, secondNum);
                 }
                 ++numEdgesRead;
+                numEdgesInThisFile = numEdgesInThisFile == 0 ? 0 : numEdgesInThisFile - 1;
+                if (numEdgesRead >= upperBound && numEdgesInThisFile > 0) {
+                    // We've read all the edges we need, so we can skip over this file
+                    // the 'numEdgesInThisFile > 0' makes sure this file had an 'f' line so we can keep track of the
+                    // number of edges in the input files. This isn't really necessary. It just gives me some piece of
+                    // mind that there is at least some check that the files include as many edges as the 'p' line
+                    // claims
+                    numEdgesRead += numEdgesInThisFile;
+                    break;
+                }
             } else if (letter == 'f') {
                 if (hasReadEdgesFromFile) {
                     std::cerr << "line with 'f' must occur before any edge in each file" << std::endl;
                     exit(1);
                 }
 
-                edge_id_t numEdgesInThisFile = fileReader.getuint64_t();
+                numEdgesInThisFile = fileReader.getuint64_t();
                 if (numEdgesRead < upperBound && numEdgesRead + numEdgesInThisFile > lowerBound) {
                     // This file contains edges that we have to read on this PE
                 } else {
