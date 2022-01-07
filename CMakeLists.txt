@@ -40,7 +40,7 @@ include(CTest)
 include(GNUInstallDirs)
 
 # Load (memory, adress, ...) sanitizer support
-find_package(Sanitizers)
+include(sanitizers)
 
 # Enable sorting targets (of external libraries) into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)

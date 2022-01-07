@@ -16,9 +16,6 @@
 [submodule "extern/backward-cpp"]
 	path = extern/backward-cpp
 	url = https://github.com/bombela/backward-cpp.git
-[submodule "extern/sanitizers-cmake"]
-	path = extern/sanitizers-cmake
-	url = https://github.com/arsenm/sanitizers-cmake.git
 [submodule "extern/xxHash"]
 	path = extern/xxHash
 	url = https://github.com/Cyan4973/xxHash.git
