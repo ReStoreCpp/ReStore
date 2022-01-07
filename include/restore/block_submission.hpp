@@ -188,7 +188,8 @@ class BlockSubmissionCommunication {
             auto last = *reinterpret_cast<const IDType*>(&(_dataStream[position]));
             assert(position + sizeof(BlockIDRange::last) == startOfDescriptor + DESCRIPTOR_SIZE);
 
-            if (!_currentRange.has_value()) {
+            assert(first <= last);
+            if (!_currentRange) {
                 _currentRange.emplace(first, last);
             } else {
                 _currentRange->first = first;
@@ -261,7 +262,7 @@ class BlockSubmissionCommunication {
             }
 
             // Use a pseudorandom bijection to break patterns in the distribution of the block id's over the ranks.
-            // blockId = blockIdPermuter.f(blockId);
+            blockId = blockIdPermuter.f(blockId);
 
             // Determine which ranks will get this block; assume that no failures occurred
             assert(_mpiContext.numFailuresSinceReset() == 0);
@@ -274,9 +275,10 @@ class BlockSubmissionCommunication {
                 // operator and automatically copies the written bytes to every destination rank's send buffer.
                 storeStream.setDestinationRanks(ranks);
             }
+            assert(!ranks.empty());
+            assert(currentRange);
 
             // Write the block's id to the stream
-            assert(blockId < 1000000000);
             blockIDSerializationManager.writeId(blockId, ranks);
 
             // Call the user-defined serialization function to serialize the block to a flat byte stream

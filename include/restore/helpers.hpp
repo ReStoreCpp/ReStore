@@ -16,8 +16,10 @@
 // Suppress compiler warnings about unused variables
 #define UNUSED(expr) (void)(expr)
 
-#ifdef BACKWARD_CXX11
 // Use the backward-cpp library to print a pretty backtrace
+
+#ifdef USE_BACKWARD
+    #include <backward.hpp>
 void print_stacktrace() {
     backward::StackTrace stacktrace;
     backward::Printer    printer;

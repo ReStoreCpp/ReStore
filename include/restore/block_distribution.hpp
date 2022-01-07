@@ -155,7 +155,7 @@ class BlockDistribution {
         }
 
         private:
-        size_t                   _id = std::numeric_limits<size_t>::max();
+        size_t                   _id                = std::numeric_limits<size_t>::max();
         const BlockDistribution* _blockDistribution = nullptr;
     };
 
@@ -211,8 +211,9 @@ class BlockDistribution {
     // Computes the block range the given block is in.
     BlockRange rangeOfBlock(block_id_t block) const {
         if (block >= _numBlocks) {
-            throw std::runtime_error("Block id " + std::to_string(block) +
-                " is greater than (or equal to) the number of blocks (" + std::to_string(_numBlocks) + ").");
+            throw std::runtime_error(
+                "Block id " + std::to_string(block) + " is greater than (or equal to) the number of blocks ("
+                + std::to_string(_numBlocks) + ").");
         }
         assert(_blocksPerRange > 0);
         assert(_blocksPerRange <= _numBlocks);
