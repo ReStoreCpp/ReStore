@@ -211,10 +211,10 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
 
     // Parse arguments
-    auto blockSize        = throwing_cast<size_t>(state.range(0));
-    auto replicationLevel = throwing_cast<uint16_t>(state.range(1));
-    auto bytesPerRank     = throwing_cast<size_t>(state.range(2));
-    auto numRanksDataLoss = throwing_cast<size_t>(state.range(3));
+    auto blockSize                 = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto numRanksDataLoss          = throwing_cast<size_t>(state.range(3));
     auto blocksPerRangePermutation = throwing_cast<size_t>(state.range(4));
 
     assert(bytesPerRank % blockSize == 0);
@@ -246,7 +246,8 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
     assert(data.size() == blocksPerRank);
 
     ReStore::ReStore<BlockType> store(
-        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize, blocksPerRangePermutation);
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize,
+        blocksPerRangePermutation);
 
     unsigned counter = 0;
 
@@ -282,6 +283,7 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
 
         assert(myStartBlock == std::numeric_limits<ReStore::block_id_t>::max());
 
+        // Build the data structure specifying which block to transfer to which rank.
         blockRanges.clear();
         ReStore::block_id_t startBlockId = dist(rng) * blocksPerRank;
         for (int rank: range(numRanks())) {
@@ -293,6 +295,12 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
             assert(startBlockId <= numBlocks);
         }
         assert(myStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
 
         auto start = std::chrono::high_resolution_clock::now();
         store.pushBlocksCurrentRankIds(
@@ -327,7 +335,7 @@ BENCHMARK(BM_pushBlocksSmallRange)  ///
         {2, 3, 4},                                      // replication level
         {MiB(1), MiB(16), MiB(32), MiB(64)},            //, MiB(128)} // bytes per rank
         {1, 2, 4, 8},                                   // Number of ranks from which to get the data
-        {1, 8, 128, KiB(1), MiB(1)},        // Blocks per permutation range
+        {1, 8, 128, KiB(1)}                             // Blocks per permutation range
     });
 const auto MAX_DATA_LOSS_RANKS = 8;
 
