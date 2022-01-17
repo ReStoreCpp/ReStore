@@ -108,9 +108,14 @@ restore_add_mpi_test(
 
 ## Multi-rank MPI tests
 restore_add_mpi_test(
-    mpi_tests_failures/test_restore_end_to_end_simple1.cpp TestRestore_EndToEnd_Simple1
+    mpi_tests_failures/test_restore_end_to_end_simple1_push_blocks.cpp TestRestore_EndToEnd_Simple1_PushBlocks
     4 "ReStore::ReStore;cppitertools"
 )
+
+restore_add_mpi_test(
+  mpi_tests_failures/test_restore_end_to_end_simple1_pull_blocks.cpp TestRestore_EndToEnd_Simple1_PullBlocks
+  4 "ReStore::ReStore;cppitertools"
+  )
 
 restore_add_mpi_test(
     mpi_tests_failures/test_restore_end_to_end_simple2.cpp TestRestore_EndToEnd_Simple2
