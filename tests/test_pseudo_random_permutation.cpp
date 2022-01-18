@@ -6,7 +6,6 @@
 #include "restore/helpers.hpp"
 #include "restore/pseudo_random_permutation.hpp"
 
-
 using namespace ::testing;
 
 // TEST(PseudoRandomPermutationTest, LCG) {
@@ -122,6 +121,36 @@ TEST(PseudoRandomPermutationTest, FeistelUnevenBitCount) {
     EXPECT_THAT(
         sequence,
         UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23));
+}
+
+TEST(PseudoRandomPermutationTest, Range201326592) {
+    // microbencharks reported a block id of 201326592 when using exactly 201326592 blocks.
+
+    const uint64_t maxValue              = 201326592 - 1;
+    const uint64_t seed           = 0;
+    const uint64_t lengthOfRanges = 1000;
+
+    auto permutation = RangePermutation<FeistelPseudoRandomPermutation>(maxValue, lengthOfRanges, seed);
+
+    ASSERT_EQ(permutation.numRanges(), maxValue / lengthOfRanges + 1);
+    ASSERT_EQ(permutation.lastIdOfRange(maxValue), maxValue);
+
+    // Apply permutation to every element in the test vector.
+    //for (size_t n = 201300000; n < maxValue; ++n) {
+    for (size_t n = maxValue - lengthOfRanges * 3; n <= maxValue; ++n) {
+        auto permutedN = permutation.f(n);
+        auto invertedN = permutation.finv(permutedN);
+
+        // Test that the permutation is invertible
+        ASSERT_EQ(n, permutation.finv(permutedN));
+        ASSERT_EQ(n, invertedN);
+
+        // And that we do not exceed the given range.
+        ASSERT_GE(permutedN, 0);
+        ASSERT_LE(permutedN, maxValue);
+        ASSERT_GE(invertedN, 0);
+        ASSERT_LE(invertedN, maxValue);
+    }
 }
 
 TEST(PseudoRandomPermutationTest, IdentityPermutation) {
@@ -265,7 +294,7 @@ TEST(PseudoRandomPermutationTest, RangePermutation) {
 
         // Apply permutation to every element in the test vector.
         for (size_t idx = 0; idx < numElements; ++idx) {
-            // Test that the permutation is invertible
+            // Test that the permutation is invertible.
             ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
 
             // Compute the permutation, to later check that each element only appears once.

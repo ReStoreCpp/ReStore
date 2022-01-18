@@ -283,7 +283,7 @@ class FeistelPseudoRandomPermutation {
 
 class IdentityPermutation {
     public:
-    IdentityPermutation() {};
+    IdentityPermutation(){};
 
     // Use IdentityPermutation as a replacement for FeistelPseudoRandomPermutation.
     static IdentityPermutation buildPermutation(uint64_t maxValueDummy = 0, uint64_t seedDummy = 0) {
@@ -293,7 +293,7 @@ class IdentityPermutation {
     }
 
     // Use IdentityPermutation as a replacement for RangePermutation.
-    IdentityPermutation (uint64_t maxValueDummy, uint64_t lengthOfRangesDummy, uint64_t seedDummy) {
+    IdentityPermutation(uint64_t maxValueDummy, uint64_t lengthOfRangesDummy, uint64_t seedDummy) {
         UNUSED(maxValueDummy);
         UNUSED(lengthOfRangesDummy);
         UNUSED(seedDummy);
@@ -308,14 +308,19 @@ class IdentityPermutation {
     }
 };
 
+// Permute the blocks id, such that lengthOfRanges consecutive block its get projected to consecutive blockIds.
+// E.g. the requested range [0,100) might get translated to [0,10), [80, 90), [20, 30), ...
+// If the maxValue is not a multiple of lengthOfRanges, the last few ids (<lengthOfRanges) will not be permuted.
+// This is easiest to implement and probably good enough.
 template <typename Permutation = FeistelPseudoRandomPermutation>
 class RangePermutation {
     public:
     RangePermutation(uint64_t maxValue, uint64_t lengthOfRanges, uint64_t seed)
         : _max_value(maxValue),
           _length_of_ranges(lengthOfRanges),
-          _num_ranges(RangePermutation::_computeNumRanges(maxValue, lengthOfRanges)),
-          _permutation(Permutation::buildPermutation(_num_ranges - 1, seed)) {
+          _num_ranges(_computeNumRanges(maxValue, lengthOfRanges)),
+          _last_range_not_full(_computeLastRangeNotFull(maxValue, lengthOfRanges)),
+          _permutation(Permutation::buildPermutation(_last_range_not_full ? _num_ranges - 2 : _num_ranges - 1, seed)) {
         assert(maxValue > 0);
         assert(lengthOfRanges > 0);
         assert(numRanges() > 0);
@@ -329,9 +334,14 @@ class RangePermutation {
         assert(n <= _max_value);
         assert(_range(n) < _num_ranges);
         assert(_offset(n) < _length_of_ranges);
-        const auto permuted_n = _permutation.f(_range(n)) * _length_of_ranges + _offset(n);
-        assert(permuted_n <= maxValue());
-        return permuted_n;
+
+        if (_is_in_not_full_range(n)) {
+            return n;
+        } else {
+            const auto permuted_n = _permutation.f(_range(n)) * _length_of_ranges + _offset(n);
+            assert(permuted_n <= maxValue());
+            return permuted_n;
+        }
     }
 
     inline uint64_t finv(uint64_t n) const {
@@ -339,9 +349,13 @@ class RangePermutation {
         assert(_range(n) < _num_ranges);
         assert(_offset(n) < _length_of_ranges);
         assert(_range(n) < _num_ranges - 1 || _offset(n) < _elementsInLastRange());
-        const auto permuted_n = _permutation.finv(_range(n)) * _length_of_ranges + _offset(n);
-        assert(permuted_n <= maxValue());
-        return permuted_n;
+        if (_is_in_not_full_range(n)) {
+            return n;
+        } else {
+            const auto permuted_n = _permutation.finv(_range(n)) * _length_of_ranges + _offset(n);
+            assert(permuted_n <= maxValue());
+            return permuted_n;
+        }
     }
 
     inline uint64_t numRanges() const {
@@ -372,15 +386,28 @@ class RangePermutation {
     private:
     const uint64_t    _max_value;
     const uint64_t    _length_of_ranges;
-    const uint64_t    _num_ranges;
+    uint64_t          _num_ranges;
+    bool              _last_range_not_full; // Does this permutation have a not-completely-full last range?
     const Permutation _permutation;
 
     inline uint64_t _range(uint64_t n) const {
-        return n / _length_of_ranges;
+        const auto range = n / _length_of_ranges;
+        assert(range < _num_ranges);
+        return range;
     }
 
     inline uint64_t _offset(uint64_t n) const {
         return n % _length_of_ranges;
+    }
+
+    // Returns true if the given block is in the last not completely full range (always the last, if existent).
+    // This range only exists, if the maxValue is not a multiple of lengthOfRanges.
+    inline bool _is_in_not_full_range(uint64_t blockId) const {
+        if (_last_range_not_full) {
+            return _range(blockId) == _num_ranges - 1;
+        } else {
+            return false;
+        }
     }
 
     inline static uint64_t _computeNumRanges(uint64_t maxValue, uint64_t lengthOfRanges) {
@@ -394,11 +421,19 @@ class RangePermutation {
         }
     }
 
-    inline uint64_t _elementsInLastRange() const {
-        if ((_max_value + 1) % _length_of_ranges == 0) {
-            return _length_of_ranges;
+    inline static bool _computeLastRangeNotFull(uint64_t maxValue, uint64_t lengthOfRanges) {
+        if ((maxValue + 1) % lengthOfRanges == 0) {
+            return false;
         } else {
+            return true;
+        }
+    }
+
+    inline uint64_t _elementsInLastRange() const {
+        if (_last_range_not_full) {
             return (_max_value + 1) % _length_of_ranges;
+        } else {
+            return _length_of_ranges;
         }
     }
 };
