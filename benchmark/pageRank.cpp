@@ -87,8 +87,9 @@ readGraph(const std::vector<std::string>& graphs) {
             if (!fileReader.isLetter()) {
                 fileReader.skipLine();
             }
-            char letter               = fileReader.getLetter();
-            bool hasReadEdgesFromFile = false;
+            edge_id_t numEdgesInThisFile   = 0;
+            char      letter               = fileReader.getLetter();
+            bool      hasReadEdgesFromFile = false;
             if (letter == 'p') {
                 node_t    firstNum  = fileReader.getInt();
                 edge_id_t secondNum = fileReader.getuint64_t();
@@ -128,42 +129,53 @@ readGraph(const std::vector<std::string>& graphs) {
 
             } else if (letter == 'e') {
                 hasReadEdgesFromFile = true;
-                node_t firstNum      = fileReader.getInt();
-                node_t secondNum     = fileReader.getInt();
-                assert(firstNum > 0);
-                assert(secondNum > 0);
-                --firstNum;
-                --secondNum;
-                if (numVertices == 0 || numEdges == 0) {
-                    if (myRank == 0)
-                        std::cout << "First edge before specifying number of vertices and edges. This is not supported!"
-                                  << std::endl;
-                    exit(1);
-                }
-                if (firstNum > numVertices) {
-                    if (myRank == 0) {
-                        std::cout << "Invalid vertex id " << firstNum << std::endl;
-                    }
-                    exit(1);
-                }
-                if (secondNum > numVertices) {
-                    if (myRank == 0) {
-                        std::cout << "Invalid vertex id " << secondNum << std::endl;
-                    }
-                    exit(1);
-                }
                 if (numEdgesRead >= lowerBound && numEdgesRead < upperBound) {
+                    node_t firstNum  = fileReader.getInt();
+                    node_t secondNum = fileReader.getInt();
+                    assert(firstNum > 0);
+                    assert(secondNum > 0);
+                    --firstNum;
+                    --secondNum;
+                    if (numVertices == 0 || numEdges == 0) {
+                        if (myRank == 0)
+                            std::cout
+                                << "First edge before specifying number of vertices and edges. This is not supported!"
+                                << std::endl;
+                        exit(1);
+                    }
+                    if (firstNum > numVertices) {
+                        if (myRank == 0) {
+                            std::cout << "Invalid vertex id " << firstNum << std::endl;
+                        }
+                        exit(1);
+                    }
+                    if (secondNum > numVertices) {
+                        if (myRank == 0) {
+                            std::cout << "Invalid vertex id " << secondNum << std::endl;
+                        }
+                        exit(1);
+                    }
                     ++outDegrees[static_cast<size_t>(firstNum)];
                     edges.emplace_back(firstNum, secondNum);
                 }
                 ++numEdgesRead;
+                numEdgesInThisFile = numEdgesInThisFile == 0 ? 0 : numEdgesInThisFile - 1;
+                if (numEdgesRead >= upperBound && numEdgesInThisFile > 0) {
+                    // We've read all the edges we need, so we can skip over this file
+                    // the 'numEdgesInThisFile > 0' makes sure this file had an 'f' line so we can keep track of the
+                    // number of edges in the input files. This isn't really necessary. It just gives me some piece of
+                    // mind that there is at least some check that the files include as many edges as the 'p' line
+                    // claims
+                    numEdgesRead += numEdgesInThisFile;
+                    break;
+                }
             } else if (letter == 'f') {
                 if (hasReadEdgesFromFile) {
                     std::cerr << "line with 'f' must occur before any edge in each file" << std::endl;
                     exit(1);
                 }
 
-                edge_id_t numEdgesInThisFile = fileReader.getuint64_t();
+                numEdgesInThisFile = fileReader.getuint64_t();
                 if (numEdgesRead < upperBound && numEdgesRead + numEdgesInThisFile > lowerBound) {
                     // This file contains edges that we have to read on this PE
                 } else {
