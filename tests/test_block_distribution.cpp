@@ -354,6 +354,11 @@ TEST(BlockDistributionTest, Basic) {
             ASSERT_FALSE(blockDistribution->isStoredOn(blockId, 9));
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(0, 3, 6));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(0, 3, 6));
+            }
         }
 
         // The blocks 70..79 should be on rank 7, 0 and 3 but not on any other ranks
@@ -370,6 +375,11 @@ TEST(BlockDistributionTest, Basic) {
             ASSERT_FALSE(blockDistribution->isStoredOn(blockId, 9));
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(7, 0, 3));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(7, 0, 3));
+            }
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
@@ -522,6 +532,11 @@ TEST(BlockDistributionTest, Advanced) {
             }
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(0, 6, 12));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(0, 6, 12));
+            }
         }
 
         // The blocks 77..80 should be on rank 19, 5 and 11 but not on any other ranks
@@ -535,6 +550,11 @@ TEST(BlockDistributionTest, Advanced) {
             }
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(19, 5, 11));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(19, 5, 11));
+            }
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
@@ -650,6 +670,11 @@ TEST(BlockDistributionTest, Basic_with_failures) {
             ASSERT_FALSE(blockDistribution->isStoredOn(blockId, 9));
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(0, 3, 6));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(0, 3, 6));
+            }
         }
 
         // The blocks 70..79 should be on rank 7, 0 and 3 but not on any other ranks
@@ -667,6 +692,11 @@ TEST(BlockDistributionTest, Basic_with_failures) {
             ASSERT_FALSE(blockDistribution->isStoredOn(blockId, 9));
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(7, 0, 3));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(7, 0, 3));
+            }
         }
 
         // The blocks 10..19 should be on ranks 1, 4 and 7. As rank 1 failed, they should only
@@ -684,6 +714,11 @@ TEST(BlockDistributionTest, Basic_with_failures) {
             ASSERT_FALSE(blockDistribution->isStoredOn(blockId, 9));
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(4, 7));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(4, 7));
+            }
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
@@ -798,6 +833,11 @@ TEST(BlockDistributionTest, Advanced_with_failure) {
             }
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(0, 6, 12));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(0, 6, 12));
+            }
         }
 
         // The blocks 77..80 should be on rank 19, 5 and 11 but not on any other ranks
@@ -812,6 +852,11 @@ TEST(BlockDistributionTest, Advanced_with_failure) {
             }
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(5, 11));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(5, 11));
+            }
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
@@ -934,6 +979,11 @@ TEST(BlockDistributionTest, Multiple_failures) {
             ASSERT_FALSE(blockDistribution->isStoredOn(blockId, 9));
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(7));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(7));
+            }
         }
 
         // The blocks 10..19 should be on ranks 1, 4 and 7. None of these ranks failed, this should still be true
@@ -950,6 +1000,11 @@ TEST(BlockDistributionTest, Multiple_failures) {
             ASSERT_FALSE(blockDistribution->isStoredOn(blockId, 9));
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(4, 7, 1));
+
+            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
+            for (uint64_t seed = 0; seed < 10; seed++) {
+                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(4, 7, 1));
+            }
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results

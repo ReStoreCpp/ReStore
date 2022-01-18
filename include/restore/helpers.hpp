@@ -12,6 +12,7 @@
 #include <type_traits>
 
 #include <mpi.h>
+#include <xxhash.h>
 
 // Suppress compiler warnings about unused variables
 #define UNUSED(expr) (void)(expr)
@@ -401,5 +402,11 @@ class ResultsCSVPrinter {
     bool _printHeaderWithNextResult;
     bool _startedPrinting = false;
 };
+
+template <class Data>
+inline XXH64_hash_t xxhash(Data n, XXH64_hash_t seed) {
+    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    return XXH64(&n, sizeof(Data), seed);
+}
 
 #endif // Include guard

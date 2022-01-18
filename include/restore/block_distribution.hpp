@@ -269,6 +269,62 @@ class BlockDistribution {
         return _mpiContext.getOnlyAlive(rankIds);
     }
 
+    // randomRankBlockRangeIsStoredOn()
+    //
+    // This is an a version of ranksBlockRangeIsStoredOn() which does not generate the whole vector of ranks but only
+    // a single rank. You can seed the random distribution with \c seed.
+    // If no alive rank is found on which the block range is stored, returns -1.
+    ReStoreMPI::original_rank_t
+    randomAliveRankBlockRangeIsStoredOn(const BlockRange& range, const uint64_t seed) const {
+        assert(range.start() < _numBlocks);
+        assert(range.start() + range.length() <= _numBlocks);
+        assert(range.id() < _numRanges);
+        assert(range.id() < _numRanks);
+        assert(range.id() <= static_cast<size_t>(std::numeric_limits<ReStoreMPI::original_rank_t>::max()));
+
+        const XXH64_hash_t baseSeed = 0xA807A1286AC9D67E;
+
+        // The range is located on the rank with the same id and on <replication level> - 1 further ranks, all <shift
+        // width> apart.
+        ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id());
+        assert(firstRank >= 0);
+
+        const auto hash = xxhash(seed, baseSeed);
+        uint64_t nthAliveRank = hash % _replicationLevel;
+        bool     secondRound  = false;
+        do {
+            uint64_t aliveRanksSeen = 0;
+            for (uint64_t replica = 0; replica < _replicationLevel; replica++) {
+                const auto rank = static_cast<ReStoreMPI::original_rank_t>(
+                    (static_cast<uint64_t>(firstRank) + _shiftWidth * replica) % _numRanks);
+                assert(rank >= 0);
+
+                if (_mpiContext.isAlive(rank)) {
+                    if (aliveRanksSeen == nthAliveRank) {
+                        return rank;
+                    }
+                    aliveRanksSeen++;
+                }
+            }
+
+            // No alive rank which stores this block range was found.
+            if (aliveRanksSeen == 0) {
+                assert(!secondRound); // In the second round, there is at least one alive rank.
+                return static_cast<ReStoreMPI::original_rank_t>(-1);
+            } else {
+                assert(!secondRound); // In the second round, we should always find the nthAliveRank.
+                // We found alive ranks but less than nthAliveRank. Redo the search with a random number between 0 and
+                // aliveRanksSeen.
+                nthAliveRank = hash % aliveRanksSeen;
+                assert(nthAliveRank < aliveRanksSeen);
+                aliveRanksSeen = 0;
+                secondRound    = true;
+            }
+        } while (secondRound);
+        assert(false);
+        return -2; // Silence compiler warning.
+    }
+
     // rangesStoredOnRank()
     //
     // Returns the block ranges residing on the given rank.

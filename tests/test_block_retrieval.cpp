@@ -129,7 +129,13 @@ void testSendRecvBlockRanges(int numDeadRanks) {
         .WillRepeatedly([numDeadRanks](ReStoreMPI::original_rank_t rank) noexcept { return rank - numDeadRanks; });
     EXPECT_CALL(mpiContext, getOriginalRank(_))
         .WillRepeatedly([numDeadRanks](ReStoreMPI::current_rank_t rank) noexcept { return rank + numDeadRanks; });
+    EXPECT_CALL(mpiContext, isAlive(_)).WillRepeatedly([deadRanks](ReStoreMPI::original_rank_t rank) noexcept {
+        return std::find(deadRanks.begin(), deadRanks.end(), rank) == deadRanks.end();
+    });
 
+    for (auto rank: deadRanks) {
+        ASSERT_FALSE(mpiContext.isAlive(rank));
+    }
     ASSERT_EQ(mpiContext.getMyCurrentRank(), mpiContext.getCurrentRank(mySimulatedOriginalRank));
     ASSERT_EQ(mpiContext.getMyOriginalRank(), mpiContext.getOriginalRank(mySimulatedCurrentRank));
 

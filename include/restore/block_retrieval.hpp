@@ -66,17 +66,14 @@ inline ReStoreMPI::original_rank_t getServingRank(
     if (_blockDistribution->isStoredOn(blockRange, receivingRank)) {
         return receivingRank;
     }
-    auto ranksWithBlockRange = _blockDistribution->ranksBlockRangeIsStoredOn(blockRange);
-    std::sort(ranksWithBlockRange.begin(), ranksWithBlockRange.end());
-    if (ranksWithBlockRange.empty()) {
+
+    // Select a random alive rank to serve this block range; use same PE for all requests of a PE for a given BlockRange.
+    auto servingRank = _blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, asserting_cast<uint64_t>(receivingRank));
+
+    if (servingRank == -1) {
         throw UnrecoverableDataLossException();
     }
-
-    // Use same PE for all requests of a PE for a given BlockRange
-    auto blockRangeReceiverPair = std::make_pair(blockRange.id(), asserting_cast<size_t>(receivingRank));
-    // TODO Think about seed
-    auto servingIndex = XXH64(&blockRangeReceiverPair, sizeof(blockRangeReceiverPair), 42) % ranksWithBlockRange.size();
-    return ranksWithBlockRange[servingIndex];
+    return servingRank;
 }
 
 // Project the block ids from the user ids to the internal ids. This means that the length of the requested
