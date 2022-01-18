@@ -28,9 +28,10 @@ using iter::range;
 
 static void BM_submitBlocks(benchmark::State& state) {
     // Parse arguments
-    auto blockSize        = throwing_cast<size_t>(state.range(0));
-    auto replicationLevel = throwing_cast<uint16_t>(state.range(1));
-    auto bytesPerRank     = throwing_cast<size_t>(state.range(2));
+    auto blockSize                 = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
 
     assert(bytesPerRank % blockSize == 0);
     size_t blocksPerRank = bytesPerRank / blockSize;
@@ -38,28 +39,28 @@ static void BM_submitBlocks(benchmark::State& state) {
     using ElementType = uint8_t;
     using BlockType   = std::vector<ElementType>;
 
+    auto rankId    = asserting_cast<uint64_t>(myRankId());
+    auto numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / blockSize;
+
+    // Generate the data to be stored in the ReStore.
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(blockSize);
+        for (uint64_t increment: range(0ul, blockSize)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == blockSize);
+    }
+    assert(data.size() == blocksPerRank);
+
     // Measurement
     for (auto _: state) {
         UNUSED(_);
 
-        // Setup
-        auto rankId    = asserting_cast<uint64_t>(myRankId());
-        auto numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / blockSize;
-
-        std::vector<BlockType> data;
-        for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
-            data.emplace_back();
-            data.back().reserve(blockSize);
-            for (uint64_t increment: range(0ul, blockSize)) {
-                data.back().push_back(
-                    static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
-            }
-            assert(data.back().size() == blockSize);
-        }
-        assert(data.size() == blocksPerRank);
-
         ReStore::ReStore<BlockType> store(
-            MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize);
+            MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize,
+            blocksPerPermutationRange);
 
         // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
         // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
@@ -259,6 +260,10 @@ static void BM_pushBlocksSmallRange(benchmark::State& state) {
         0, asserting_cast<unsigned long>(numRanks()) - numRanksDataLoss);
 
     std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(blockSize));
+    assert(recvData.size() == recvBlocksPerRank);
+    assert(std::all_of(
+        recvData.begin(), recvData.end(), [blockSize](const BlockType& block) { return block.size() == blockSize; }));
+
     // Measurement
     for (auto _: state) {
         UNUSED(_);
