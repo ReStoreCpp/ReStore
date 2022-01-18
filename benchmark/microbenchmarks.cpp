@@ -270,7 +270,6 @@ static void BM_pullBlocksSmallRange(benchmark::State& state) {
         ReStore::block_id_t startBlockId = dist(rng) * blocksPerRank;
         myStartBlock = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(myRankId());
         blockRanges.emplace_back(myStartBlock, recvBlocksPerRank);
-        myStartBlock = startBlockId;
         assert(myStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
 
         // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
