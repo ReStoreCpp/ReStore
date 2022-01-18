@@ -20,7 +20,7 @@ using namespace ::testing;
 
 using iter::range;
 
-TEST(ReStoreTest, EndToEnd_Simple2) {
+TEST(ReStoreTest, EndToEnd_Simple2_PushBlocks) {
     // Each rank submits different data. The replication level is set to 3. There is no rank failure.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
     const int             numDataPointsPerRank = 2;
@@ -52,7 +52,7 @@ TEST(ReStoreTest, EndToEnd_Simple2) {
     }
 
     const auto firstBlockIdOnThisRank = asserting_cast<size_t>(myRankId()) * data.size();
-    const auto numBlocksOnThisRank = data.size();
+    const auto numBlocksOnThisRank    = data.size();
     const auto lastBlockIdOnThisRank  = firstBlockIdOnThisRank + numBlocksOnThisRank - 1;
     assert(firstBlockIdOnThisRank < lastBlockIdOnThisRank);
     assert(numBlocksOnThisRank > 0);
