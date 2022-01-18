@@ -189,6 +189,212 @@ static void BM_pushBlocksRedistribute(benchmark::State& state) {
     }
 }
 
+static void BM_pullBlocksSmallRange(benchmark::State& state) {
+    // Each rank submits different data. The replication level is set to 3.
+
+    // Parse arguments
+    auto blockSize                 = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto numRanksDataLoss          = throwing_cast<size_t>(state.range(3));
+    auto blocksPerRangePermutation = throwing_cast<size_t>(state.range(4));
+
+    assert(bytesPerRank % blockSize == 0);
+    auto blocksPerRank = bytesPerRank / blockSize;
+
+    auto recvBlocksPerRank = blocksPerRank * numRanksDataLoss / asserting_cast<size_t>(numRanks());
+
+    if (recvBlocksPerRank == 0) {
+        state.SkipWithError("Parameters set such that no one receives anything!");
+        return;
+    }
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    // Setup
+    uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
+    size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / blockSize;
+
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(blockSize);
+        for (uint64_t increment: range(0ul, blockSize)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == blockSize);
+    }
+    assert(data.size() == blocksPerRank);
+
+    ReStore::ReStore<BlockType> store(
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize,
+        blocksPerRangePermutation);
+
+    unsigned counter = 0;
+
+    store.submitBlocks(
+        [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
+            stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
+        },
+        [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
+            auto ret = data.size() == counter
+                           ? std::nullopt
+                           : std::make_optional(ReStore::NextBlock<BlockType>(
+                               {counter + static_cast<size_t>(myRankId()) * data.size(), data[counter]}));
+            counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair
+                       // is bound before or after the increment.
+            return ret;
+        },
+        numBlocks);
+    assert(counter == data.size() + 1);
+
+    std::vector<std::pair<ReStore::block_id_t, size_t>> blockRanges;
+    blockRanges.reserve(asserting_cast<size_t>(numRanks()));
+    ReStore::block_id_t myStartBlock = std::numeric_limits<ReStore::block_id_t>::max();
+
+    // Use a random Range of numRanksDataLoss PEs whose data we redistribute
+    std::mt19937                                             rng(42);
+    std::uniform_int_distribution<std::mt19937::result_type> dist(
+        0, asserting_cast<unsigned long>(numRanks()) - numRanksDataLoss);
+
+    std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(blockSize));
+    // Measurement
+    for (auto _: state) {
+        UNUSED(_);
+
+        assert(myStartBlock == std::numeric_limits<ReStore::block_id_t>::max());
+
+        // Build the data structure specifying which block to transfer to which rank.
+        blockRanges.clear();
+        ReStore::block_id_t startBlockId = dist(rng) * blocksPerRank;
+        myStartBlock = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(myRankId());
+        blockRanges.emplace_back(myStartBlock, recvBlocksPerRank);
+        myStartBlock = startBlockId;
+        assert(myStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        store.pullBlocks(
+            blockRanges, [&recvData, myStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
+                assert(blockId >= myStartBlock);
+                auto index = blockId - myStartBlock;
+                assert(index < recvData.size());
+                // assert(recvData[index].size() == 0);
+                recvData[index].clear();
+                recvData[index].insert(
+                    recvData[index].end(), reinterpret_cast<const ElementType*>(buffer),
+                    reinterpret_cast<const ElementType*>(buffer + size));
+            });
+        benchmark::DoNotOptimize(recvData.data());
+        benchmark::ClobberMemory();
+        assert(std::all_of(recvData.begin(), recvData.end(), [blockSize](const BlockType& block) {
+            return block.size() == blockSize;
+        }));
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+        myStartBlock = std::numeric_limits<ReStore::block_id_t>::max();
+    }
+}
+
+static void BM_pullBlocksRedistribute(benchmark::State& state) {
+    // Each rank submits different data. The replication level is set to 3.
+
+    // Parse arguments
+    auto blockSize        = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank     = throwing_cast<size_t>(state.range(2));
+
+    assert(bytesPerRank % blockSize == 0);
+    auto blocksPerRank = bytesPerRank / blockSize;
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    // Setup
+    uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
+    size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / blockSize;
+
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(blockSize);
+        for (uint64_t increment: range(0ul, blockSize)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == blockSize);
+    }
+    assert(data.size() == blocksPerRank);
+
+    ReStore::ReStore<BlockType> store(
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * blockSize);
+
+    unsigned counter = 0;
+
+    store.submitBlocks(
+        [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
+            stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
+        },
+        [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
+            auto ret = data.size() == counter
+                           ? std::nullopt
+                           : std::make_optional(ReStore::NextBlock<BlockType>(
+                               {counter + static_cast<size_t>(myRankId()) * data.size(), data[counter]}));
+            counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair
+                       // is bound before or after the increment.
+            return ret;
+        },
+        numBlocks);
+    assert(counter == data.size() + 1);
+
+    std::vector<std::pair<ReStore::block_id_t, size_t>> blockRanges;
+    // Get data that was originally on the next rank
+    int                 nextRank     = (myRankId() + 1) % numRanks();
+    ReStore::block_id_t myStartBlock = static_cast<size_t>(nextRank) * blocksPerRank;
+    blockRanges.emplace_back(std::make_pair(myStartBlock, blocksPerRank));
+
+    std::vector<BlockType> recvData(blocksPerRank, BlockType(blockSize));
+    // Measurement
+    for (auto _: state) {
+        UNUSED(_);
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        store.pullBlocks(
+            blockRanges, [&recvData, myStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
+                assert(blockId >= myStartBlock);
+                auto index = blockId - myStartBlock;
+                assert(index < recvData.size());
+                // assert(recvData[index].size() == 0);
+                recvData[index].clear();
+                recvData[index].insert(
+                    recvData[index].end(), reinterpret_cast<const ElementType*>(buffer),
+                    reinterpret_cast<const ElementType*>(buffer + size));
+            });
+        benchmark::DoNotOptimize(recvData.data());
+        benchmark::ClobberMemory();
+        assert(std::all_of(recvData.begin(), recvData.end(), [blockSize](const BlockType& block) {
+            return block.size() == blockSize;
+        }));
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+    }
+}
+
 static void BM_pushBlocksSmallRange(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
 
@@ -344,6 +550,28 @@ BENCHMARK(BM_pushBlocksRedistribute) ///
     });
 
 BENCHMARK(BM_pushBlocksSmallRange)  ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->ArgsProduct({
+        // {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
+        {64},                                // block sizes, see above
+        {2, 3, 4},                           // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)}, //, MiB(128)} // bytes per rank
+        {1, 2, 4, 8},                        // Number of ranks from which to get the data
+        {1, 8, 128, KiB(1)}                  // Blocks per permutation range
+    });
+
+BENCHMARK(BM_pullBlocksRedistribute) ///
+    ->UseManualTime()                ///
+    ->Unit(benchmark::kMillisecond)  ///
+    ->ArgsProduct({
+        // {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
+        {64},                               // block sizes, see above.
+        {2, 3, 4},                          // replication level
+        {MiB(1), MiB(16), MiB(32), MiB(64)} //, MiB(128)} // bytes per rank
+    });
+
+BENCHMARK(BM_pullBlocksSmallRange)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->ArgsProduct({
