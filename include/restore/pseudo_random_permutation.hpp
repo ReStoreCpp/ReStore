@@ -338,7 +338,7 @@ class RangePermutation {
         if (_is_in_not_full_range(n)) {
             return n;
         } else {
-            const auto permuted_n = _permutation.f(_range(n)) * _length_of_ranges + _offset(n);
+            const auto permuted_n = _cached_f(_range(n)) * _length_of_ranges + _offset(n);
             assert(permuted_n <= maxValue());
             return permuted_n;
         }
@@ -352,7 +352,7 @@ class RangePermutation {
         if (_is_in_not_full_range(n)) {
             return n;
         } else {
-            const auto permuted_n = _permutation.finv(_range(n)) * _length_of_ranges + _offset(n);
+            const auto permuted_n = _cached_finv(_range(n)) * _length_of_ranges + _offset(n);
             assert(permuted_n <= maxValue());
             return permuted_n;
         }
@@ -384,11 +384,33 @@ class RangePermutation {
     }
 
     private:
-    const uint64_t    _max_value;
-    const uint64_t    _length_of_ranges;
-    uint64_t          _num_ranges;
+    struct cache_entry {
+        uint64_t range;
+        uint64_t f;
+    };
+
+    const uint64_t                     _max_value;
+    const uint64_t                     _length_of_ranges;
+    uint64_t                           _num_ranges;
+    mutable std::optional<cache_entry> f_cache;
+    mutable std::optional<cache_entry> finv_cache;
+
     bool              _last_range_not_full; // Does this permutation have a not-completely-full last range?
     const Permutation _permutation;
+
+    inline uint64_t _cached_f(uint64_t rangeId) const {
+        if (!f_cache || rangeId != f_cache->range) {
+            f_cache = {rangeId, _permutation.f(rangeId)};
+        }
+        return f_cache->f;
+    }
+
+    inline uint64_t _cached_finv(uint64_t rangeId) const {
+        if (!finv_cache || rangeId != finv_cache->range) {
+            finv_cache = {rangeId, _permutation.finv(rangeId)};
+        }
+        return finv_cache->f;
+    }
 
     inline uint64_t _range(uint64_t n) const {
         const auto range = n / _length_of_ranges;
