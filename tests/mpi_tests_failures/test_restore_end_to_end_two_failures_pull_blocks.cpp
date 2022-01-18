@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "mpi_helpers.hpp"
 #include "range.hpp"
 #include <gmock/gmock.h>
 #include <gtest-mpi-listener.hpp>
@@ -22,7 +23,7 @@ using namespace ::testing;
 
 using iter::range;
 
-TEST_F(ReStoreTestWithFailures, TwoFailures) {
+TEST_F(ReStoreTestWithFailures, TwoFailures_PullBlocks) {
     // Each rank submits different data. The replication level is set to 3. There are two rank failures.
     ReStore::ReStore<int> store(MPI_COMM_WORLD, 3, ReStore::OffsetMode::constant, sizeof(int));
 
@@ -59,16 +60,20 @@ TEST_F(ReStoreTestWithFailures, TwoFailures) {
 
     store.updateComm(newComm);
 
-    size_t              numBlocksPerRank       = numBlocks / static_cast<size_t>(numRanks(newComm));
-    size_t              numRanksWithMoreBlocks = numBlocks % static_cast<size_t>(numRanks(newComm));
-    ReStore::block_id_t currentBlock           = 0;
-    std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
-    for (int rank = 0; rank < numRanks(newComm); ++rank) {
-        const size_t numBlockForThisRank = numBlocksPerRank + (static_cast<size_t>(rank) < numRanksWithMoreBlocks);
-        requests.emplace_back(std::make_pair(std::make_pair(currentBlock, numBlockForThisRank), rank));
-        currentBlock += numBlockForThisRank;
-    }
-    EXPECT_EQ(numBlocks, currentBlock);
+    size_t numBlocksPerRank       = numBlocks / static_cast<size_t>(numRanks(newComm));
+    size_t numRanksWithMoreBlocks = numBlocks % static_cast<size_t>(numRanks(newComm));
+
+    std::vector<std::pair<ReStore::block_id_t, size_t>> requests;
+    const size_t                                        numBlockForThisRank =
+        numBlocksPerRank + (static_cast<size_t>(myRankId(newComm)) < numRanksWithMoreBlocks);
+    const ReStore::block_id_t myStartingBlock =
+        numBlocksPerRank * static_cast<size_t>(myRankId(newComm))
+        + std::min(static_cast<size_t>(myRankId(newComm)), numRanksWithMoreBlocks);
+    assert(numBlockForThisRank < numBlocks);
+    assert(myStartingBlock < numBlocks);
+    assert(myStartingBlock + numBlockForThisRank <= numBlocks);
+    requests.emplace_back(std::make_pair(myStartingBlock, numBlockForThisRank));
+
 
     ReStore::block_id_t numBlocksToReceive =
         numBlocksPerRank + (static_cast<size_t>(myRankId(newComm)) < numRanksWithMoreBlocks);
@@ -77,7 +82,7 @@ TEST_F(ReStoreTestWithFailures, TwoFailures) {
                                        + std::min(numRanksWithMoreBlocks, static_cast<size_t>(myRankId(newComm)));
     ReStore::block_id_t numBlocksReceived = 0;
     EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
-    store.pushBlocksCurrentRankIds(
+    store.pullBlocks(
         requests, [&dataReceived, &numBlocksReceived,
                    firstBlockId](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
             ASSERT_GE(blockId, firstBlockId);

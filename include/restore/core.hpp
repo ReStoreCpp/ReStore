@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -217,12 +218,85 @@ class ReStore {
         std::vector<std::pair<block_id_t, size_t>> blockRanges, HandleSerializedBlockFunction handleSerializedBlock,
         bool canBeParallelized = false // not supported yet
     ) {
-        // TODO implement
-        throw std::runtime_error("Not implemented.");
-        UNUSED(blockRanges);
-        UNUSED(handleSerializedBlock);
         UNUSED(canBeParallelized);
-        // HandleSerializedBlockFunction void(SerializedBlockOutStream, size_t lengthOfStreamInBytes, block_id_t)
+
+        // Transform to format used by functions already implemented for pushBlocks
+        std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> blockRangesWithReceiver;
+        std::transform(
+            blockRanges.begin(), blockRanges.end(), std::back_inserter(blockRangesWithReceiver),
+            [&](const std::pair<block_id_t, size_t> blockRangeWithoutReceiver) {
+                return std::make_pair(blockRangeWithoutReceiver, _mpiContext.getMyCurrentRank());
+            });
+
+        // Project the block ids from the user ids to the internal ids. This means that the length of the requested
+        // block ranges change, too. If we are using the RangePermutation, we will still get some consecutive blocks
+        // ids. E.g. the requested range [0,100) might get translated to [0,10), [80, 90), [20, 30), ...
+        assert(_blockIdPermuter);
+        const auto internalBlockRanges =
+            projectBlockRequestsFromUserToPermutedIDs(blockRangesWithReceiver, *_blockIdPermuter);
+
+        const auto [sendBlockRangesLocalRequests, recvBlockRanges] =
+            getSendRecvBlockRanges(internalBlockRanges, _blockDistribution.get(), _mpiContext);
+
+
+        auto sortByRankAndBegin = [](const block_range_request_t& lhs, const block_range_request_t& rhs) {
+            bool ranksLess   = lhs.second < rhs.second;
+            bool ranksEqual  = lhs.second == rhs.second;
+            bool blockIdLess = lhs.first.first < rhs.first.first;
+            return ranksLess || (ranksEqual && blockIdLess);
+        };
+
+        assert(std::is_sorted(recvBlockRanges.begin(), recvBlockRanges.end(), sortByRankAndBegin));
+
+
+        using request_t = std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>;
+        std::vector<std::vector<request_t>>  sendData;
+        std::vector<ReStoreMPI::SendMessage> sendMessagesRequests;
+        int                                  currentRank = MPI_UNDEFINED;
+        for (const auto& request: recvBlockRanges) {
+            if (currentRank != request.second) {
+                assert(currentRank < request.second);
+                if (currentRank != MPI_UNDEFINED) {
+                    assert(sendData.size() > 0);
+                    sendMessagesRequests.emplace_back(
+                        reinterpret_cast<std::byte*>(sendData.back().data()),
+                        sendData.back().size() * sizeof(request_t), currentRank);
+                }
+                sendData.emplace_back();
+                currentRank = request.second;
+            }
+            sendData.back().emplace_back(std::make_pair(request.first, _mpiContext.getMyCurrentRank()));
+        }
+        if (!recvBlockRanges.empty()) {
+            assert(currentRank != MPI_UNDEFINED);
+            assert(sendData.size() > 0);
+            sendMessagesRequests.emplace_back(
+                reinterpret_cast<std::byte*>(sendData.back().data()), sendData.back().size() * sizeof(request_t),
+                currentRank);
+        }
+
+        auto recvMessagesRequests = _mpiContext.SparseAllToAll(sendMessagesRequests);
+        // Not sure if needed. Used to avoid issues with overlapping sparse all to all calls
+        ReStoreMPI::successOrThrowMpiCall([&]() { return MPI_Barrier(_mpiContext.getComm()); });
+
+        std::vector<request_t> sendBlockRanges;
+
+        for (const auto& receivedRequestMessage: recvMessagesRequests) {
+            auto castedDataPtr           = reinterpret_cast<const request_t*>(receivedRequestMessage.data.data());
+            auto castedPastTheEndDataPtr = reinterpret_cast<const request_t*>(
+                receivedRequestMessage.data.data() + receivedRequestMessage.data.size());
+            sendBlockRanges.insert(sendBlockRanges.end(), castedDataPtr, castedPastTheEndDataPtr);
+        }
+
+        std::sort(sendBlockRanges.begin(), sendBlockRanges.end(), sortByRankAndBegin);
+
+
+        const auto recvMessages = sparseAllToAll(sendBlockRanges, _offsetMode, _mpiContext, _serializedBlocks.get());
+
+        // Parse the received messages and call the user provided deserialization function.
+        assert(_blockIdPermuter);
+        handleReceivedBlocks(
+            recvMessages, recvBlockRanges, _offsetMode, _constOffset, handleSerializedBlock, *_blockIdPermuter);
     }
 
     using block_range_external_t = std::pair<block_id_t, size_t>;

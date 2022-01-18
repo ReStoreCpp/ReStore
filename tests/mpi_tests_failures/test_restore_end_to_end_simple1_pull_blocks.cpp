@@ -21,7 +21,7 @@ using namespace ::testing;
 
 using iter::range;
 
-TEST(ReStoreTest, EndToEnd_Simple1) {
+TEST(ReStoreTest, EndToEnd_Simple1_PullBlocks) {
     // The most basic test case. Each rank submits exactly the same data. The replication level is set to one. There is
     // no rank failure.
 
@@ -51,15 +51,13 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
 
     // No failure
     {
-        std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
-        for (int rank = 0; rank < numRanks(); ++rank) {
-            requests.emplace_back(std::make_pair(std::make_pair(0, data.size()), rank));
-        }
+        std::vector<std::pair<ReStore::block_id_t, size_t>> requests;
+        requests.emplace_back(std::make_pair(0, data.size()));
 
         std::vector<int> dataReceived(data.size());
         std::fill(dataReceived.begin(), dataReceived.end(), -1);
         ReStore::block_id_t numBlocksReceived = 0;
-        store.pushBlocksCurrentRankIds(
+        store.pullBlocks(
             requests,
             [&dataReceived, &numBlocksReceived](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
                 ASSERT_EQ(sizeof(int), size);
@@ -78,17 +76,14 @@ TEST(ReStoreTest, EndToEnd_Simple1) {
     }
 
     {
-        std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>> requests;
-        for (int rank = 0; rank < numRanks(); ++rank) {
-            requests.emplace_back(
-                std::make_pair(std::make_pair(static_cast<size_t>(rank) * data.size(), data.size()), rank));
-        }
+        std::vector<std::pair<ReStore::block_id_t, size_t>> requests;
+        requests.emplace_back(std::make_pair(static_cast<size_t>(myRankId()) * data.size(), data.size()));
 
         std::vector<int> dataReceived(data.size());
         std::fill(dataReceived.begin(), dataReceived.end(), -1);
         ReStore::block_id_t numBlocksReceived      = 0;
         const auto          thisRanksBlockIdOffset = data.size() * static_cast<size_t>(myRankId());
-        store.pushBlocksCurrentRankIds(
+        store.pullBlocks(
             requests, [&dataReceived, &numBlocksReceived,
                        thisRanksBlockIdOffset](const std::byte* dataPtr, size_t size, ReStore::block_id_t blockId) {
                 const auto idxDataReceived = blockId - thisRanksBlockIdOffset;
