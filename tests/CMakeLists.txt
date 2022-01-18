@@ -118,9 +118,14 @@ restore_add_mpi_test(
   )
 
 restore_add_mpi_test(
-    mpi_tests_failures/test_restore_end_to_end_simple2.cpp TestRestore_EndToEnd_Simple2
+    mpi_tests_failures/test_restore_end_to_end_simple2_push_blocks.cpp TestRestore_EndToEnd_Simple2_PushBlocks
     4 "ReStore::ReStore;cppitertools"
 )
+
+restore_add_mpi_test(
+  mpi_tests_failures/test_restore_end_to_end_simple2_pull_blocks.cpp TestRestore_EndToEnd_Simple2_PullBlocks
+  4 "ReStore::ReStore;cppitertools"
+  )
 
 restore_add_mpi_test(
     mpi_tests_failures/test_restore_end_to_end_single_failure.cpp TestRestore_EndToEnd_SingleFailure
@@ -128,9 +133,14 @@ restore_add_mpi_test(
 )
 
 restore_add_mpi_test(
-    mpi_tests_failures/test_restore_end_to_end_two_failures.cpp TestRestore_EndToEnd_TwoFailures
+    mpi_tests_failures/test_restore_end_to_end_two_failures_push_blocks.cpp TestRestore_EndToEnd_TwoFailures_PushBlocks
     4 "ReStore::ReStore;cppitertools"
 )
+
+restore_add_mpi_test(
+  mpi_tests_failures/test_restore_end_to_end_two_failures_pull_blocks.cpp TestRestore_EndToEnd_TwoFailures_PullBlocks
+  4 "ReStore::ReStore;cppitertools"
+  )
 
 restore_add_mpi_test(
     mpi_tests_failures/test_restore_end_to_end_complex_data_type.cpp TestRestore_EndToEnd_ComplextDataType
