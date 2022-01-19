@@ -339,7 +339,6 @@ static void BM_pullBlocksSmallRange(benchmark::State& state) {
     auto blocksPerRank = bytesPerRank / bytesPerBlock;
 
     const auto numRankFailures = static_cast<uint64_t>(std::ceil(fractionOfRanksThatFail * numRanks()));
-    std::cerr << "num rank failures: " << numRankFailures << std::endl;
     auto recvBlocksPerRank = blocksPerRank * numRankFailures / asserting_cast<size_t>(numRanks());
 
     if (recvBlocksPerRank == 0) {
