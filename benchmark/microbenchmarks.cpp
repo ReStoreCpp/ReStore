@@ -338,8 +338,8 @@ static void BM_pullBlocksSmallRange(benchmark::State& state) {
     assert(bytesPerRank % bytesPerBlock == 0);
     auto blocksPerRank = bytesPerRank / bytesPerBlock;
 
-    const auto numRankFailures = static_cast<uint64_t>(std::ceil(fractionOfRanksThatFail * numRanks()));
-    auto recvBlocksPerRank = blocksPerRank * numRankFailures / asserting_cast<size_t>(numRanks());
+    const auto numRankFailures   = static_cast<uint64_t>(std::ceil(fractionOfRanksThatFail * numRanks()));
+    auto       recvBlocksPerRank = blocksPerRank * numRankFailures / asserting_cast<size_t>(numRanks());
 
     if (recvBlocksPerRank == 0) {
         state.SkipWithError("Parameters set such that no one receives anything!");
@@ -550,18 +550,33 @@ const auto MAX_DATA_LOSS_RANKS   = 8;
 const auto MAX_REPLICATION_LEVEL = 4;
 
 static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
-    const int64_t bytesPerBlock          = 64;
-    const int64_t replicationLevel       = 4;
-    const int64_t bytesPerRank           = MiB(16);
-    const int64_t promilleOfRankFailures = 10;
+    const int64_t bytesPerBlock             = 64;
+    const int64_t replicationLevel          = 4;
+    const int64_t bytesPerRank              = MiB(16);
+    const int64_t promilleOfRankFailures    = 10;
+    const int64_t blocksPerPermutationRange = 64;
 
-    std::vector<int64_t> blocksPerPermutationRange_values = {1,     2,     4,     8,      16,     32,     64,
-                                                             128,   256,   512,   1024,   2048,   4096,   8192,
-                                                             16384, 32768, 65536, 131072, 262144, 524288, 1048576};
+    std::vector<int64_t> blocksPerPermutationRange_values = {
+        1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
 
-    for (auto blocksPerPermutationRange: blocksPerPermutationRange_values) {
+    for (auto b: blocksPerPermutationRange_values) {
         benchmark->Args(
-            {bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
+            {bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
+    }
+
+    // Replication level
+    for (int64_t k: {1, 2, 3, 4, 5, 6}) {
+        benchmark->Args({bytesPerBlock, k, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
+    }
+
+    // amount of data per rank
+    for (int64_t n: {KiB(16), KiB(64), KiB(256), MiB(1), MiB(4), MiB(16), MiB(64)}) {
+        benchmark->Args({bytesPerBlock, replicationLevel, n, blocksPerPermutationRange, promilleOfRankFailures});
+    }
+
+    // failure rate of PEs
+    for (int64_t f: {5, 10, 20, 30, 40, 50}) {
+        benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, f});
     }
 }
 
