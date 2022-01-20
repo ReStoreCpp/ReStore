@@ -1001,10 +1001,20 @@ TEST(BlockDistributionTest, Multiple_failures) {
 
             ASSERT_THAT(blockDistribution->ranksBlockIsStoredOn(blockId), UnorderedElementsAre(4, 7, 1));
 
-            const auto blockRange = blockDistribution->rangeOfBlock(blockId);
-            for (uint64_t seed = 0; seed < 10; seed++) {
-                ASSERT_THAT(blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed), AnyOf(4, 7, 1));
+            const auto            blockRange = blockDistribution->rangeOfBlock(blockId);
+            std::vector<uint64_t> ranks(10, 0);
+            assert(ranks.size() == 10);
+            assert(ranks[4] == 0);
+            assert(ranks[1] == 0);
+            assert(ranks[7] == 0);
+            for (uint64_t seed = 0; seed < 1000; seed++) {
+                const auto servingRank = blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, seed);
+                ASSERT_THAT(servingRank, AnyOf(4, 7, 1));
+                ranks[asserting_cast<size_t>(servingRank)]++;
             }
+            EXPECT_GT(ranks[4], 200);
+            EXPECT_GT(ranks[7], 200);
+            EXPECT_GT(ranks[1], 200);
         }
 
         // ranksBlockIsStored() and isStoredOn() yield consistent results
