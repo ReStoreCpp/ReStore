@@ -26,7 +26,7 @@ TEST(ReStoreTest, EndToEnd_ProxyBlockType) {
 
     using BlockProxy = int*;
 
-    ReStore::ReStore<BlockProxy> store(MPI_COMM_WORLD, 1, ReStore::OffsetMode::constant, sizeof(int) * NUM_DIMENSIONS);
+    ReStore::ReStore<BlockProxy> store(MPI_COMM_WORLD, 1, ReStore::OffsetMode::constant, sizeof(int) * NUM_DIMENSIONS, 1);
     std::vector<int>             data{100, 101, 102, 200, 201, 202, 300, 301, 302, 400, 401, 402};
     assert(data.size() % NUM_DIMENSIONS == 0);
     const size_t numDataPointsLocal = data.size() / NUM_DIMENSIONS;
