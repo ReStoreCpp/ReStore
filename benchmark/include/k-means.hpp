@@ -555,13 +555,13 @@ class kMeansAlgorithm {
                 // Until we commit to this new data distribution, calling the follwing function twice will return the
                 // same data.
                 TIME_NEXT_SECTION("rebalance-after-failure");
-                auto newBlocksPerRank =
-                    _loadBalancer.getNewBlocksAfterFailureForPushBlocks(_mpiContext.getRanksDiedSinceLastCall());
+                auto newBlocks = _loadBalancer.getNewBlocksAfterFailureForPullBlocks(
+                    _mpiContext.getRanksDiedSinceLastCall(), _mpiContext.getMyOriginalRank());
 
                 // ReStore the input data that resided on the failed ranks.
                 TIME_NEXT_SECTION("restore-data");
                 auto numElementsBeforeRestore = _data.numDataPoints();
-                _reStoreWrapper->restoreDataAppendPushBlocks(_data.dataVector(), newBlocksPerRank);
+                _reStoreWrapper->restoreDataAppendPullBlocks(_data.dataVector(), newBlocks);
 
                 TIME_NEXT_SECTION("reassign-points-after-failure");
                 // If we got new data points, assign them to the cluster centers.
