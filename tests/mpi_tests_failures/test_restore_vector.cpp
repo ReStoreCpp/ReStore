@@ -62,7 +62,7 @@ TEST_F(ReStoreVectorTest, ArgumentChecking) {
     }
 }
 
-TEST_F(ReStoreVectorTest, EndToEndPushBlocks) {
+TEST_F(ReStoreVectorTest, EndToEnd) {
     auto           myRank                = myRankId();
     const size_t   blockSize             = 2;
     const MPI_Comm mpiComm               = MPI_COMM_WORLD;
@@ -100,8 +100,11 @@ TEST_F(ReStoreVectorTest, EndToEndPushBlocks) {
     // Submit the data into the ReStore
     const uint64_t blocksPerPermutationRange = 2;
     const int      paddingValue              = -1;
-    auto store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange, paddingValue);
-    auto numBlocksInternal = store.submitData(vec);
+    auto store1 = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange, paddingValue);
+    auto store2 = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange, paddingValue);
+    auto numBlocksInternal = store1.submitData(vec);
+    ASSERT_EQ(numBlocksInternal, numBlocksPerRank);
+    numBlocksInternal = store2.submitData(vec);
     ASSERT_EQ(numBlocksInternal, numBlocksPerRank);
 
     // Simulate the failure of ranks 1 and 3.
@@ -117,13 +120,13 @@ TEST_F(ReStoreVectorTest, EndToEndPushBlocks) {
     ASSERT_NE(myRank, 3);
 
     // Update the communicator of the ReStore and fetch the missing data.
-    store.updateComm(newComm);
+    store1.updateComm(newComm);
 
     ReStoreVector<int>::BlockRangeRequestToRestoreList newBlocksPerRank;
     newBlocksPerRank.push_back(std::make_pair(std::make_pair(5, 5), 0));
     newBlocksPerRank.push_back(std::make_pair(std::make_pair(15, 5), 2));
 
-    store.restoreDataAppendPushBlocks(vec, newBlocksPerRank);
+    store1.restoreDataAppendPushBlocks(vec, newBlocksPerRank);
 
     // Check if we have the right data
     if (myRank == 0) {
@@ -135,64 +138,9 @@ TEST_F(ReStoreVectorTest, EndToEndPushBlocks) {
     } else {
         throw std::runtime_error("This test was designed with 4 ranks in mind.");
     }
-}
-
-TEST_F(ReStoreVectorTest, EndToEndPullBlocks) {
-    auto           myRank                = myRankId();
-    const size_t   blockSize             = 2;
-    const MPI_Comm mpiComm               = MPI_COMM_WORLD;
-    const uint16_t replicationLevel      = 3;
-    const int      numBlocksPerRank      = 5;
-    const int      numElementsOnThisRank = blockSize * numBlocksPerRank - (myRankId() >= 2);
-    int            startingElement       = -1;
-    switch (myRank) {
-        case 0:
-            startingElement = 0;
-            break;
-        case 1:
-            startingElement = 10;
-            break;
-        case 2:
-            startingElement = 20;
-            break;
-        case 3:
-            startingElement = 29;
-            break;
-        default:
-            FAIL();
-    }
-
-    // Build input data
-    // Rank 0:  0,  1, ...  9
-    // Rank 1: 10, 11, ... 19
-    // Rank 2: 20, 21, ... 28
-    // Rank 3: 19, 20, ... 37
-    std::vector<int> vec;
-    for (int elementCount = 0; elementCount < numElementsOnThisRank; elementCount++) {
-        vec.push_back(elementCount + startingElement);
-    }
-
-    // Submit the data into the ReStore
-    const uint64_t blocksPerPermutationRange = 2;
-    const int      paddingValue              = -1;
-    auto store = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange, paddingValue);
-    auto numBlocksInternal = store.submitData(vec);
-    ASSERT_EQ(numBlocksInternal, numBlocksPerRank);
-
-    // Simulate the failure of ranks 1 and 3.
-    EXIT_IF_FAILED(!_rankFailureManager.everyoneStillRunning());
-    auto newComm = _rankFailureManager.failRanks({1, 3});
-    EXIT_IF_FAILED(_rankFailureManager.iFailed());
-
-    ASSERT_NE(myRankId(), 1);
-    ASSERT_NE(myRankId(), 3);
-    ASSERT_EQ(numRanks(newComm), 2);
-    myRank = myRankId(newComm);
-    ASSERT_NE(myRank, 2);
-    ASSERT_NE(myRank, 3);
 
     // Update the communicator of the ReStore and fetch the missing data.
-    store.updateComm(newComm);
+    store2.updateComm(newComm);
 
     ReStoreVector<int>::BlockRangeToRestoreList newBlocks;
     if (myRank == 0) {
@@ -201,7 +149,7 @@ TEST_F(ReStoreVectorTest, EndToEndPullBlocks) {
         newBlocks.push_back(std::make_pair(15, 5));
     }
 
-    store.restoreDataAppendPullBlocks(vec, newBlocks);
+    store2.restoreDataAppendPullBlocks(vec, newBlocks);
 
     // Check if we have the right data
     if (myRank == 0) {
