@@ -12,10 +12,14 @@ namespace ReStore {
 template <class data_t>
 class ReStoreVector {
     public:
-    using BlockRangeToRestore     = std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>;
-    using BlockRangeToRestoreList = std::vector<BlockRangeToRestore>;
+    using BlockRangeToRestore            = std::pair<block_id_t, size_t>;
+    using BlockRangeRequestToRestore     = std::pair<BlockRangeToRestore, ReStoreMPI::original_rank_t>;
+    using BlockRangeRequestToRestoreList = std::vector<BlockRangeRequestToRestore>;
+    using BlockRangeToRestoreList        = std::vector<BlockRangeToRestore>;
 
-    ReStoreVector(size_t blockSize, MPI_Comm comm, uint16_t replicationLevel, uint64_t blocksPerPermutationRange, data_t paddingValue = data_t())
+    ReStoreVector(
+        size_t blockSize, MPI_Comm comm, uint16_t replicationLevel, uint64_t blocksPerPermutationRange,
+        data_t paddingValue = data_t())
         : _nativeBlockSize(blockSize),
           _reStore(comm, replicationLevel, OffsetMode::constant, _bytesPerBlock(), blocksPerPermutationRange),
           _mpiContext(comm),
@@ -102,7 +106,8 @@ class ReStoreVector {
         _reStore.updateComm(comm);
     }
 
-    void restoreDataAppend(std::vector<data_t>& data, const BlockRangeToRestoreList& newBlocksPerOriginalRank) {
+    void restoreDataAppendPushBlocks(
+        std::vector<data_t>& data, const BlockRangeRequestToRestoreList& newBlocksPerOriginalRank) {
         // How many new blocks is this rank getting?
         size_t numBlocksForMe = 0;
         auto   myOriginalRank = _mpiContext.getMyOriginalRank();
@@ -136,6 +141,38 @@ class ReStoreVector {
         // After removing padded values, we have to adjust the size
         data.resize(asserting_cast<size_t>(reinterpret_cast<data_t*>(nextBlockPtr) - data.data()));
     }
+
+    void restoreDataAppendPullBlocks(std::vector<data_t>& data, const BlockRangeToRestoreList& newBlocks) {
+        // How many new blocks is this rank getting?
+        size_t numBlocksForMe = 0;
+        for (auto range: newBlocks) {
+            numBlocksForMe += range.second;
+        }
+
+        // Reserve the appropriate amount of space for the current plus the new elements in the data vector.
+        auto sizeBeforeExpansion = data.size();
+        data.resize(data.size() + numBlocksForMe * _nativeBlockSize);
+
+        // Append the new blocks to the data vector
+        auto nextBlockPtr = reinterpret_cast<std::byte*>(data.data() + sizeBeforeExpansion);
+        _reStore.pullBlocks(
+            newBlocks, [this, &nextBlockPtr](const std::byte* dataPtr, size_t dataSize, block_id_t blockId) {
+                UNUSED(blockId);
+                assert(_bytesPerBlock() == dataSize);
+                UNUSED(this);
+                std::copy(dataPtr, dataPtr + dataSize, nextBlockPtr);
+                nextBlockPtr += dataSize;
+                if (_isPadded) {
+                    // Remove all padded values
+                    while (*reinterpret_cast<data_t*>(nextBlockPtr - sizeof(data_t)) == _paddingValue) {
+                        nextBlockPtr -= sizeof(data_t);
+                    }
+                }
+            });
+        // After removing padded values, we have to adjust the size
+        data.resize(asserting_cast<size_t>(reinterpret_cast<data_t*>(nextBlockPtr) - data.data()));
+    }
+
 
     std::vector<ReStoreMPI::original_rank_t> getRanksDiedSinceLastCall() {
         return _reStore.getRanksDiedSinceLastCall();
