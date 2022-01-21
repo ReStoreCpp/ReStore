@@ -92,19 +92,21 @@ TEST_F(ReStoreVectorTest, EndToEnd) {
     // Rank 1: 10, 11, ... 19
     // Rank 2: 20, 21, ... 28
     // Rank 3: 19, 20, ... 37
-    std::vector<int> vec;
+    std::vector<int> vec1;
     for (int elementCount = 0; elementCount < numElementsOnThisRank; elementCount++) {
-        vec.push_back(elementCount + startingElement);
+        vec1.push_back(elementCount + startingElement);
     }
+
+    std::vector<int> vec2 = vec1;
 
     // Submit the data into the ReStore
     const uint64_t blocksPerPermutationRange = 2;
     const int      paddingValue              = -1;
     auto store1 = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange, paddingValue);
     auto store2 = ReStoreVector<int>(blockSize, mpiComm, replicationLevel, blocksPerPermutationRange, paddingValue);
-    auto numBlocksInternal = store1.submitData(vec);
+    auto numBlocksInternal = store1.submitData(vec1);
     ASSERT_EQ(numBlocksInternal, numBlocksPerRank);
-    numBlocksInternal = store2.submitData(vec);
+    numBlocksInternal = store2.submitData(vec2);
     ASSERT_EQ(numBlocksInternal, numBlocksPerRank);
 
     // Simulate the failure of ranks 1 and 3.
@@ -126,15 +128,15 @@ TEST_F(ReStoreVectorTest, EndToEnd) {
     newBlocksPerRank.push_back(std::make_pair(std::make_pair(5, 5), 0));
     newBlocksPerRank.push_back(std::make_pair(std::make_pair(15, 5), 2));
 
-    store1.restoreDataAppendPushBlocks(vec, newBlocksPerRank);
+    store1.restoreDataAppendPushBlocks(vec1, newBlocksPerRank);
 
     // Check if we have the right data
     if (myRank == 0) {
-        ASSERT_EQ(vec.size(), 20);
-        EXPECT_THAT(vec, UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19));
+        ASSERT_EQ(vec1.size(), 20);
+        EXPECT_THAT(vec1, UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19));
     } else if (myRank == 1) {
-        ASSERT_EQ(vec.size(), 18);
-        EXPECT_THAT(vec, UnorderedElementsAre(20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37));
+        ASSERT_EQ(vec1.size(), 18);
+        EXPECT_THAT(vec1, UnorderedElementsAre(20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37));
     } else {
         throw std::runtime_error("This test was designed with 4 ranks in mind.");
     }
@@ -149,15 +151,15 @@ TEST_F(ReStoreVectorTest, EndToEnd) {
         newBlocks.push_back(std::make_pair(15, 5));
     }
 
-    store2.restoreDataAppendPullBlocks(vec, newBlocks);
+    store2.restoreDataAppendPullBlocks(vec2, newBlocks);
 
     // Check if we have the right data
     if (myRank == 0) {
-        ASSERT_EQ(vec.size(), 20);
-        EXPECT_THAT(vec, UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19));
+        ASSERT_EQ(vec2.size(), 20);
+        EXPECT_THAT(vec2, UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19));
     } else if (myRank == 1) {
-        ASSERT_EQ(vec.size(), 18);
-        EXPECT_THAT(vec, UnorderedElementsAre(20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37));
+        ASSERT_EQ(vec2.size(), 18);
+        EXPECT_THAT(vec2, UnorderedElementsAre(20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37));
     } else {
         throw std::runtime_error("This test was designed with 4 ranks in mind.");
     }
