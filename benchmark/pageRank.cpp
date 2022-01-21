@@ -321,7 +321,7 @@ void recoverFromFailure(
     UNUSED(numEdges);
 
     auto diedRanks = reStoreVectorHelper.getRanksDiedSinceLastCall();
-    auto requests  = loadBalancer.getNewBlocksAfterFailure(diedRanks);
+    auto requests  = loadBalancer.getNewBlocksAfterFailureForPushBlocks(diedRanks);
     reStoreVectorHelper.restoreDataAppend(edges, requests);
     // Barrier to check that everyone successfully recovered. In a final production implementation we would have to
     // recover from this as well
