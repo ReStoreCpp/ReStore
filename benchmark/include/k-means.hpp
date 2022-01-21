@@ -561,7 +561,7 @@ class kMeansAlgorithm {
                 // ReStore the input data that resided on the failed ranks.
                 TIME_NEXT_SECTION("restore-data");
                 auto numElementsBeforeRestore = _data.numDataPoints();
-                _reStoreWrapper->restoreDataAppend(_data.dataVector(), newBlocksPerRank);
+                _reStoreWrapper->restoreDataAppendPushBlocks(_data.dataVector(), newBlocksPerRank);
 
                 TIME_NEXT_SECTION("reassign-points-after-failure");
                 // If we got new data points, assign them to the cluster centers.
