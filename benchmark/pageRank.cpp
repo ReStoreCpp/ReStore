@@ -314,15 +314,15 @@ bool ft_barrier() {
 
 void recoverFromFailure(
     const edge_id_t numEdges, std::vector<edge_t>& edges, ReStore::ReStoreVector<edge_t>& reStoreVectorHelper,
-    ReStore::EqualLoadBalancer& loadBalancer, int& myRank, int& numRanks) {
+    ReStore::EqualLoadBalancer& loadBalancer, int& myRank, int& numRanks, ReStoreMPI::original_rank_t myOriginalRank) {
     MPI_Comm_rank(comm_, &myRank);
     MPI_Comm_size(comm_, &numRanks);
     reStoreVectorHelper.updateComm(comm_);
     UNUSED(numEdges);
 
     auto diedRanks = reStoreVectorHelper.getRanksDiedSinceLastCall();
-    auto requests  = loadBalancer.getNewBlocksAfterFailureForPushBlocks(diedRanks);
-    reStoreVectorHelper.restoreDataAppendPushBlocks(edges, requests);
+    auto requests  = loadBalancer.getNewBlocksAfterFailureForPullBlocks(diedRanks, myOriginalRank);
+    reStoreVectorHelper.restoreDataAppendPullBlocks(edges, requests);
     // Barrier to check that everyone successfully recovered. In a final production implementation we would have to
     // recover from this as well
     if (!ft_barrier()) {
@@ -345,6 +345,7 @@ std::vector<double> pageRank(
     int numRanks;
     MPI_Comm_rank(comm_, &myRank);
     MPI_Comm_size(comm_, &numRanks);
+    int const           myOriginalRank = myRank;
     std::vector<double> prevPageRanks(static_cast<size_t>(numVertices), 0);
     std::vector<double> currPageRanks(static_cast<size_t>(numVertices), 1 / (double)numVertices);
     std::vector<double> tempPageRanks(static_cast<size_t>(numVertices), 0);
@@ -400,7 +401,8 @@ std::vector<double> pageRank(
                 }
                 TIME_PUSH_AND_START("Recovery");
                 assert(reStoreVectorHelper.has_value());
-                recoverFromFailure(numEdges, edges, reStoreVectorHelper.value(), loadBalancer, myRank, numRanks);
+                recoverFromFailure(
+                    numEdges, edges, reStoreVectorHelper.value(), loadBalancer, myRank, numRanks, myOriginalRank);
                 TIME_POP("Recovery");
                 updatedEdges = true;
                 anotherPass  = true;
