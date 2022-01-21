@@ -3,13 +3,12 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <unordered_set>
 #include <vector>
 
-#include "restore/common.hpp"
-#include "restore/mpi_context.hpp"
 #include "restore/block_retrieval.hpp"
 #include "restore/helpers.hpp"
 
@@ -26,7 +25,7 @@ class EqualLoadBalancer {
     }
 
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>
-    getNewBlocksAfterFailure(const std::vector<ReStoreMPI::original_rank_t>& diedRanks) {
+    getNewBlocksAfterFailureForPushBlocks(const std::vector<ReStoreMPI::original_rank_t>& diedRanks) {
         _previousReturnedBlockRanges.clear();
         _previousDiedRanks.clear();
         for (const auto diedRank: diedRanks) {
@@ -106,6 +105,21 @@ class EqualLoadBalancer {
         }
         _previousReturnedBlockRanges = requests;
         return requests;
+    }
+
+
+    std::vector<std::pair<block_id_t, size_t>> getNewBlocksAfterFailureForPullBlocks(
+        const std::vector<ReStoreMPI::original_rank_t>& diedRanks, ReStoreMPI::original_rank_t myRank) {
+        auto resultPushBlocks = getNewBlocksAfterFailureForPushBlocks(diedRanks);
+        auto it = std::remove_if(resultPushBlocks.begin(), resultPushBlocks.end(), [myRank](auto request) {
+            return request.second != myRank;
+        });
+        resultPushBlocks.erase(it, resultPushBlocks.end());
+        std::vector<std::pair<block_id_t, size_t>> resultPullBlocks;
+        std::transform(
+            resultPushBlocks.begin(), resultPushBlocks.end(), std::back_inserter(resultPullBlocks),
+            [](auto pushRequest) { return pushRequest.first; });
+        return resultPullBlocks;
     }
 
     void commitToPreviousCall() {
