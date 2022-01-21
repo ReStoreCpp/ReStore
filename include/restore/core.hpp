@@ -147,10 +147,7 @@ class ReStore {
 
         // Initialize the block id permuter.
         const auto largestBlockId = totalNumberOfBlocks - 1;
-        const auto lengthOfRanges = std::max(
-            1ul,
-            totalNumberOfBlocks / asserting_cast<size_t>(_mpiContext.getCurrentSize()) / _blocksPerPermutationRange);
-        _blockIdPermuter.emplace(largestBlockId, lengthOfRanges, _randomPermutationSeed);
+        _blockIdPermuter.emplace(largestBlockId, _blocksPerPermutationRange, _randomPermutationSeed);
         assert(_blockIdPermuter);
 
         try { // Ranks failures might be detected during this block
