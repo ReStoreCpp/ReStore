@@ -3,12 +3,15 @@
 #include <chrono>
 #include <cppitertools/range.hpp>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <mpi.h>
 #include <random>
 #include <restore/common.hpp>
+#include <string>
 #include <utility>
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -536,6 +539,83 @@ static void BM_pullBlocksRedistribute(benchmark::State& state) {
 }
 
 
+static void BM_DiskRedistribute(benchmark::State& state) {
+    // Each rank submits different data. The replication level is set to 3.
+
+    // Parse arguments
+    auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
+    auto fractionOfRanksThatFail   = static_cast<double>(state.range(4)) / 1000.;
+    UNUSED(replicationLevel);
+    UNUSED(blocksPerPermutationRange);
+    UNUSED(fractionOfRanksThatFail);
+
+    assert(bytesPerRank % bytesPerBlock == 0);
+    auto blocksPerRank = bytesPerRank / bytesPerBlock;
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    // Setup
+    uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
+    size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
+
+    std::string filePrefix      = "checkpoint_";
+    std::string fileNametoWrite = filePrefix + std::to_string(rankId);
+    std::string fileNameToRead  = filePrefix + std::to_string(rankId + 1);
+
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(bytesPerBlock);
+        for (uint64_t increment: range(0ul, bytesPerBlock)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == bytesPerBlock);
+    }
+    assert(data.size() == blocksPerRank);
+
+    std::ofstream outFileStream(fileNametoWrite, std::ios::binary);
+
+    for (const auto& block: data) {
+        assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+        outFileStream.write((const char*)block.data(), asserting_cast<long>(numBlocks * sizeof(ElementType)));
+    }
+    outFileStream.close();
+
+    std::vector<BlockType> recvData(blocksPerRank, BlockType(bytesPerBlock));
+    // Measurement
+    for (auto _: state) {
+        UNUSED(_);
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        auto          start = std::chrono::high_resolution_clock::now();
+        std::ifstream inFileStream(fileNameToRead, std::ios::binary);
+        for (auto& block: recvData) {
+            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+            inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+        }
+        inFileStream.close();
+        benchmark::DoNotOptimize(recvData.data());
+        benchmark::ClobberMemory();
+        assert(std::all_of(recvData.begin(), recvData.end(), [bytesPerBlock](const BlockType& block) {
+            return block.size() == bytesPerBlock;
+        }));
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+    }
+    std::remove(fileNametoWrite.c_str());
+}
+
 template <typename N>
 auto constexpr KiB(N n) {
     return n * 1024;
@@ -560,8 +640,7 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
         1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
 
     for (auto b: blocksPerPermutationRange_values) {
-        benchmark->Args(
-            {bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
+        benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
     }
 
     // Replication level
@@ -604,6 +683,11 @@ BENCHMARK(BM_pullBlocksRedistribute) ///
     ->Apply(benchmarkArguments);
 
 BENCHMARK(BM_pullBlocksSmallRange)  ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->Apply(benchmarkArguments);
+
+BENCHMARK(BM_DiskRedistribute)      ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Apply(benchmarkArguments);
