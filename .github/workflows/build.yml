@@ -16,8 +16,8 @@ jobs:
     strategy:
       matrix:
         compiler:
-          - { name: Clang-simulated, cc: clang, cxx: clang++, failure-simulation: ON}
-          - { name: GNU-real, cc: gcc-10, cxx: g++-10, failure-simulation: OFF}
+          - { name: Clang-simulated, cc: clang, cxx: clang++, failure-simulation: ON, id-randomization: OFF}
+          - { name: GNU-real, cc: gcc-10, cxx: g++-10, failure-simulation: OFF, id-randomization: ON}
         build-mode: [Debug, Release]
     timeout-minutes: 60
     steps:
@@ -35,7 +35,7 @@ jobs:
     - name: mkdir
       run: mkdir build && cd build
     - name: cmake
-      run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-mode }} -DReStore_SIMULATE_FAILURES=${{ matrix.compiler.failure-simulation }} -DWARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }}
+      run: cd build && PATH="$HOME/ulfm/bin:$PATH"; CPATH="$HOME/ulfm/src:$CPATH"; LD_LIBRARY_PATH="$HOME/ulfm/lib:$LD_LIBRARY_PATH"; MPI_ROOT="$HOME/ulfm"; cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-mode }} -DReStore_ID_RANDOMIZATION=${{ matrix.compiler.id-randomization }} -DReStore_SIMULATE_FAILURES=${{ matrix.compiler.failure-simulation }} -DWARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }}
     - name: make
       run: cd build && make -j all
     - name: Setup Python
