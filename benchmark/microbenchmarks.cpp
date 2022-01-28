@@ -157,8 +157,8 @@ static void BM_submitBlocks(benchmark::State& state) {
 //     std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, int>> blockRanges;
 //     for (int rank: range(numRanks())) {
 //         // Get data that was originally on the next rank
-//         int                 nextRank   = (rank + 1) % numRanks();
-//         ReStore::block_id_t startBlock = static_cast<size_t>(nextRank) * blocksPerRank;
+//         int                 rankToLoadFrom   = (rank + 49) % numRanks();
+//         ReStore::block_id_t startBlock = static_cast<size_t>(rankToLoadFrom) * blocksPerRank;
 //         blockRanges.emplace_back(std::make_pair(startBlock, blocksPerRank), rank);
 //     }
 //     auto myStartBlock = static_cast<size_t>((myRankId() + 1) % numRanks()) * blocksPerRank;
@@ -499,8 +499,8 @@ static void BM_pullBlocksRedistribute(benchmark::State& state) {
 
     std::vector<std::pair<ReStore::block_id_t, size_t>> blockRanges;
     // Get data that was originally on the next rank
-    int                 nextRank     = (myRankId() + 1) % numRanks();
-    ReStore::block_id_t myStartBlock = static_cast<size_t>(nextRank) * blocksPerRank;
+    int                 rankToLoadFrom = (myRankId() + 1) % numRanks();
+    ReStore::block_id_t myStartBlock   = static_cast<size_t>(rankToLoadFrom) * blocksPerRank;
     blockRanges.emplace_back(std::make_pair(myStartBlock, blocksPerRank));
 
     std::vector<BlockType> recvData(blocksPerRank, BlockType(bytesPerBlock));
@@ -564,7 +564,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 
     std::string filePrefix      = "checkpoint_";
     std::string fileNametoWrite = filePrefix + std::to_string(rankId);
-    std::string fileNameToRead  = filePrefix + std::to_string(rankId + 1);
+    std::string fileNameToRead  = filePrefix + std::to_string(rankId + 49);
 
     std::vector<BlockType> data;
     for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
