@@ -355,8 +355,9 @@ class BlockSubmissionCommunication {
     // A wrapper around a SparseAllToAll. Transmits the sendBuffers' content and receives data addressed to us.
     // Sending no data is fine, you may still retrieve data.
     std::vector<ReStoreMPI::RecvMessage> exchangeData(const SendBuffers& sendBuffers) {
+#ifndef ID_RANDOMIZATION
         std::vector<ReStoreMPI::SendMessage> sendMessages;
-        for (ReStoreMPI::original_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
+        for (ReStoreMPI::current_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
             auto& buffer = sendBuffers[asserting_cast<size_t>(rankId)];
             // Skip empty messages
             if (buffer.size() > 0) {
@@ -365,6 +366,51 @@ class BlockSubmissionCommunication {
         }
 
         return _mpiContext.SparseAllToAll(sendMessages);
+#else
+        assert(sendBuffers.size() == asserting_cast<size_t>(_mpiContext.getCurrentSize()));
+        std::vector<std::byte> sendData;
+        std::vector<int>       sendCounts(sendBuffers.size());
+        std::vector<int>       sendDispls(sendBuffers.size());
+        size_t                 numBytesToSend = 0;
+        for (ReStoreMPI::current_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
+            const auto rankIdAsSizeT = asserting_cast<size_t>(rankId);
+            auto&      buffer        = sendBuffers[rankIdAsSizeT];
+            numBytesToSend += buffer.size();
+            sendCounts[rankIdAsSizeT] = asserting_cast<int>(buffer.size());
+            sendDispls[rankIdAsSizeT] = rankId == 0 ? 0 : sendDispls[rankIdAsSizeT - 1] + sendCounts[rankIdAsSizeT - 1];
+        }
+        sendData.reserve(numBytesToSend);
+        for (ReStoreMPI::current_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
+            const auto rankIdAsSizeT = asserting_cast<size_t>(rankId);
+            auto&      buffer        = sendBuffers[rankIdAsSizeT];
+            assert(sendCounts[rankIdAsSizeT] == asserting_cast<int>(buffer.size()));
+            assert(sendDispls[rankIdAsSizeT] == asserting_cast<int>(sendData.size()));
+            sendData.insert(sendData.end(), buffer.begin(), buffer.end());
+        }
+
+        std::vector<int> recvCounts(sendBuffers.size());
+        _mpiContext.alltoall(sendCounts, recvCounts, 1);
+        std::vector<int> recvDispls(sendBuffers.size());
+        std::exclusive_scan(recvCounts.begin(), recvCounts.end(), recvDispls.begin(), 0);
+
+
+        std::vector<std::byte> recvData(asserting_cast<size_t>(recvDispls.back() + recvCounts.back()));
+        _mpiContext.alltoallv(sendData, sendCounts, sendDispls, recvData, recvCounts, recvDispls);
+
+        std::vector<ReStoreMPI::RecvMessage> result;
+        result.reserve(sendBuffers.size());
+        for (ReStoreMPI::current_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
+            const auto rankIdAsSizeT = asserting_cast<size_t>(rankId);
+            const auto displ         = recvDispls[rankIdAsSizeT];
+            const auto count         = recvCounts[rankIdAsSizeT];
+            if (count > 0) {
+                result.emplace_back(
+                    std::vector<std::byte>(recvData.begin() + displ, recvData.begin() + displ + count), rankId);
+            }
+        }
+
+        return result;
+#endif
     }
 
     private:

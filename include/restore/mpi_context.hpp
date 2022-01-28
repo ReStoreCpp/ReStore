@@ -2,7 +2,6 @@
 #define MPI_CONTEXT_H
 
 #include <algorithm>
-#include <stdint.h>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -451,6 +450,23 @@ class MPIContext {
         });
 
         return receiveBuffer;
+    }
+
+    void alltoallv(
+        const std::vector<std::byte>& sendData, const std::vector<int>& sendCounts, const std::vector<int>& sendDispls,
+        std::vector<std::byte>& recvData, const std::vector<int>& recvCounts,
+        const std::vector<int>& recvDispls) const {
+        ReStoreMPI::successOrThrowMpiCall([&]() {
+            MPI_Alltoallv(
+                sendData.data(), sendCounts.data(), sendDispls.data(), MPI_BYTE, recvData.data(), recvCounts.data(),
+                recvDispls.data(), MPI_BYTE, _comm);
+        });
+    }
+
+
+    void alltoall(const std::vector<int>& sendData, std::vector<int>& recvData, int count) const {
+        ReStoreMPI::successOrThrowMpiCall(
+            [&]() { MPI_Alltoall(sendData.data(), count, MPI_INT, recvData.data(), count, MPI_INT, _comm); });
     }
 
     //// ! Untested
