@@ -457,7 +457,7 @@ class MPIContext {
         std::vector<std::byte>& recvData, const std::vector<int>& recvCounts,
         const std::vector<int>& recvDispls) const {
         ReStoreMPI::successOrThrowMpiCall([&]() {
-            MPI_Alltoallv(
+            return MPI_Alltoallv(
                 sendData.data(), sendCounts.data(), sendDispls.data(), MPI_BYTE, recvData.data(), recvCounts.data(),
                 recvDispls.data(), MPI_BYTE, _comm);
         });
@@ -466,7 +466,7 @@ class MPIContext {
 
     void alltoall(const std::vector<int>& sendData, std::vector<int>& recvData, int count) const {
         ReStoreMPI::successOrThrowMpiCall(
-            [&]() { MPI_Alltoall(sendData.data(), count, MPI_INT, recvData.data(), count, MPI_INT, _comm); });
+            [&]() { return MPI_Alltoall(sendData.data(), count, MPI_INT, recvData.data(), count, MPI_INT, _comm); });
     }
 
     //// ! Untested
