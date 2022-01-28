@@ -24,9 +24,9 @@ TEST(BlockSubmissionTest, exchangeData) {
     using SendBuffers = ReStore::BlockSubmissionCommunication<std::byte>::SendBuffers;
 
     std::vector<RecvMessage> dummyReceive;
-    SendBuffers              emptySendBuffers;
 
     {
+        SendBuffers       emptySendBuffers(10);
         MPIContextMock    mpiContext;
         BlockDistribution blockDistribution(10, 100, 3, mpiContext);
 
@@ -35,7 +35,15 @@ TEST(BlockSubmissionTest, exchangeData) {
             ReStore::OffsetModeDescriptor{ReStore::OffsetMode::constant, sizeof(uint8_t)});
 
         std::vector<SendMessage> expectedSendMessages{{}};
+#ifndef ID_RANDOMIZATION
         EXPECT_CALL(mpiContext, SparseAllToAll(Eq(expectedSendMessages))).WillOnce(Return(dummyReceive));
+#else
+        EXPECT_CALL(mpiContext, getCurrentSize()).WillOnce(Return(10));
+        EXPECT_CALL(
+            mpiContext, alltoall(
+                            UnorderedElementsAre(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                            UnorderedElementsAre(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 1));
+#endif
         ASSERT_NO_THROW(comm.exchangeData(emptySendBuffers));
     }
 
@@ -47,15 +55,22 @@ TEST(BlockSubmissionTest, exchangeData) {
             mpiContext, blockDistribution,
             ReStore::OffsetModeDescriptor{ReStore::OffsetMode::constant, sizeof(uint8_t)});
 
-        SendBuffers sendBuffers;
-        sendBuffers.resize(2);
+        SendBuffers sendBuffers(10);
         sendBuffers[0] = {0_byte, 1_byte, 2_byte, 3_byte};
         sendBuffers[1] = {4_byte, 5_byte, 6_byte, 7_byte};
 
         std::vector<SendMessage> expectedSendMessages{{sendBuffers[0].data(), 4, 0}, {sendBuffers[1].data(), 4, 1}};
 
+#ifndef ID_RANDOMIZATION
         EXPECT_CALL(mpiContext, SparseAllToAll(UnorderedElementsAreArray(expectedSendMessages)))
             .WillOnce(Return(dummyReceive));
+#else
+        EXPECT_CALL(mpiContext, getCurrentSize()).WillOnce(Return(10));
+        EXPECT_CALL(
+            mpiContext, alltoall(
+                            UnorderedElementsAre(4, 4, 0, 0, 0, 0, 0, 0, 0, 0),
+                            UnorderedElementsAre(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 1));
+#endif
         EXPECT_EQ(comm.exchangeData(sendBuffers), dummyReceive);
     }
 }

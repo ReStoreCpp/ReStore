@@ -6,6 +6,7 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <mpi.h>
 
 #include "restore/mpi_context.hpp"
 
@@ -22,6 +23,12 @@ class MPIContextMock {
     MOCK_METHOD(current_rank_t, getMyCurrentRank, (), (const));
     MOCK_METHOD(original_rank_t, getOriginalSize, (), (const));
     MOCK_METHOD(original_rank_t, getCurrentSize, (), (const));
+    MOCK_METHOD(void, alltoall, (std::vector<int>&, std::vector<int>&, int), (const));
+    MOCK_METHOD(
+        void, alltoallv,
+        (std::vector<std::byte>&, std::vector<int>&, std::vector<int>&, std::vector<std::byte>&, std::vector<int>&,
+         std::vector<int>&),
+        (const));
     MOCK_METHOD(bool, isAlive, (const original_rank_t), (const));
     MOCK_METHOD(std::vector<original_rank_t>, getOnlyAlive, (const std::vector<original_rank_t>&), (const));
     MOCK_METHOD(ReStoreMPI::original_rank_t, numFailuresSinceReset, (), (const));
