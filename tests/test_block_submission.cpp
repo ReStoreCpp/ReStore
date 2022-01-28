@@ -35,7 +35,7 @@ TEST(BlockSubmissionTest, exchangeData) {
             ReStore::OffsetModeDescriptor{ReStore::OffsetMode::constant, sizeof(uint8_t)});
 
         std::vector<SendMessage> expectedSendMessages{{}};
-#ifndef ID_RANDOMIZATION
+#ifndef DENSE_ALL_TO_ALL_IN_SUBMIT_BLOCKS
         EXPECT_CALL(mpiContext, SparseAllToAll(Eq(expectedSendMessages))).WillOnce(Return(dummyReceive));
 #else
         EXPECT_CALL(mpiContext, getCurrentSize()).WillOnce(Return(10));
@@ -61,7 +61,7 @@ TEST(BlockSubmissionTest, exchangeData) {
 
         std::vector<SendMessage> expectedSendMessages{{sendBuffers[0].data(), 4, 0}, {sendBuffers[1].data(), 4, 1}};
 
-#ifndef ID_RANDOMIZATION
+#ifndef DENSE_ALL_TO_ALL_IN_SUBMIT_BLOCKS
         EXPECT_CALL(mpiContext, SparseAllToAll(UnorderedElementsAreArray(expectedSendMessages)))
             .WillOnce(Return(dummyReceive));
 #else

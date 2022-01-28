@@ -203,6 +203,7 @@ endif()
 
 if (${PROJECT_NAME}_ID_RANDOMIZATION)
     target_compile_definitions(${PROJECT_NAME}_compile_requirements INTERFACE ID_RANDOMIZATION)
+    target_compile_definitions(${PROJECT_NAME}_compile_requirements INTERFACE DENSE_ALL_TO_ALL_IN_SUBMIT_BLOCKS)
 endif()
 
 ### Libraries ###

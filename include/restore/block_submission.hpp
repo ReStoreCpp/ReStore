@@ -355,7 +355,7 @@ class BlockSubmissionCommunication {
     // A wrapper around a SparseAllToAll. Transmits the sendBuffers' content and receives data addressed to us.
     // Sending no data is fine, you may still retrieve data.
     std::vector<ReStoreMPI::RecvMessage> exchangeData(const SendBuffers& sendBuffers) {
-#ifndef ID_RANDOMIZATION
+#ifndef DENSE_ALL_TO_ALL_IN_SUBMIT_BLOCKS
         std::vector<ReStoreMPI::SendMessage> sendMessages;
         for (ReStoreMPI::current_rank_t rankId = 0; asserting_cast<size_t>(rankId) < sendBuffers.size(); rankId++) {
             auto& buffer = sendBuffers[asserting_cast<size_t>(rankId)];
