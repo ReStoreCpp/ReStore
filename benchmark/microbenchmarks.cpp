@@ -590,6 +590,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         std::ofstream outFileStream(fileNametoWrite, std::ios::binary | std::ios::out | std::ios::app);
 
         auto writeBlock = blocksPerRank * rankId;
+        UNUSED(writeBlock);
 
         for (const auto& block: data) {
             assert(block.size() * sizeof(ElementType) == bytesPerBlock);
@@ -730,6 +731,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         ReStore::block_id_t startBlockId = dist(rng) * blocksPerRank;
         writeStartBlock   = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(rankToWriteFor);
         auto myStartBlock = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(myRankId());
+        UNUSED(myStartBlock);
         blockRanges.emplace_back(writeStartBlock, recvBlocksPerRank);
         assert(writeStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
 
