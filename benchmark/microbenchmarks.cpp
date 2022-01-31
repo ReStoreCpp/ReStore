@@ -562,7 +562,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     // Setup
     uint64_t rankId = asserting_cast<uint64_t>(myRankId());
 
-    std::string filePrefix      = "checkpoint_";
+    std::string filePrefix      = "checkpoint_redistribute_";
     std::string fileNametoWrite = filePrefix + std::to_string(rankId);
     auto        readRank        = (rankId + 49) % asserting_cast<uint64_t>(numRanks());
     std::string fileNameToRead  = filePrefix + std::to_string(readRank);
@@ -712,7 +712,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
 
     std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(bytesPerBlock));
 
-    std::string                filePrefix      = "checkpoint";
+    std::string                filePrefix      = "checkpoint_smallRange_";
     ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
     std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
     std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
@@ -816,30 +816,30 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     std::vector<int64_t> blocksPerPermutationRange_values = {
         1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
 
-    for (auto b: blocksPerPermutationRange_values) {
-        benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
-    }
+    // for (auto b: blocksPerPermutationRange_values) {
+    //     benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
+    // }
 
-    // Replication level
-    for (int64_t k: {1, 2, 3, 4, 5, 6}) {
-        benchmark->Args({bytesPerBlock, k, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
-    }
+    // // Replication level
+    // for (int64_t k: {1, 2, 3, 4, 5, 6}) {
+    //     benchmark->Args({bytesPerBlock, k, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
+    // }
 
-    // amount of data per rank
-    for (int64_t n: {KiB(16), KiB(64), KiB(256), MiB(1), MiB(4), MiB(16), MiB(64)}) {
-        benchmark->Args({bytesPerBlock, replicationLevel, n, blocksPerPermutationRange, promilleOfRankFailures});
-    }
+    // // amount of data per rank
+    // for (int64_t n: {KiB(16), KiB(64), KiB(256), MiB(1), MiB(4), MiB(16), MiB(64)}) {
+    //     benchmark->Args({bytesPerBlock, replicationLevel, n, blocksPerPermutationRange, promilleOfRankFailures});
+    // }
 
     // failure rate of PEs
-    for (int64_t f: {5, 10, 20, 30, 40, 50}) {
+    for (int64_t f: {5}) {
         benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, f});
     }
 }
 
-BENCHMARK(BM_submitBlocks)          ///
-    ->UseManualTime()               ///
-    ->Unit(benchmark::kMillisecond) ///
-    ->Apply(benchmarkArguments);
+// BENCHMARK(BM_submitBlocks)          ///
+//     ->UseManualTime()               ///
+//     ->Unit(benchmark::kMillisecond) ///
+//     ->Apply(benchmarkArguments);
 
 // BENCHMARK(BM_pushBlocksSmallRange)  ///
 //     ->UseManualTime()               ///
@@ -854,15 +854,15 @@ BENCHMARK(BM_submitBlocks)          ///
 //     });
 //
 
-BENCHMARK(BM_pullBlocksRedistribute) ///
-    ->UseManualTime()                ///
-    ->Unit(benchmark::kMillisecond)  ///
-    ->Apply(benchmarkArguments);
+// BENCHMARK(BM_pullBlocksRedistribute) ///
+//     ->UseManualTime()                ///
+//     ->Unit(benchmark::kMillisecond)  ///
+//     ->Apply(benchmarkArguments);
 
-BENCHMARK(BM_pullBlocksSmallRange)  ///
-    ->UseManualTime()               ///
-    ->Unit(benchmark::kMillisecond) ///
-    ->Apply(benchmarkArguments);
+// BENCHMARK(BM_pullBlocksSmallRange)  ///
+//     ->UseManualTime()               ///
+//     ->Unit(benchmark::kMillisecond) ///
+//     ->Apply(benchmarkArguments);
 
 BENCHMARK(BM_DiskRedistribute)      ///
     ->UseManualTime()               ///
