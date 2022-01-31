@@ -624,6 +624,151 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     std::remove(fileNametoWrite.c_str());
 }
 
+
+static void BM_DiskSmallRange(benchmark::State& state) {
+    // Each rank submits different data. The replication level is set to 3.
+
+    // Parse arguments
+    auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
+    auto fractionOfRanksThatFail   = static_cast<double>(state.range(4)) / 1000.;
+
+    assert(bytesPerRank % bytesPerBlock == 0);
+    auto blocksPerRank = bytesPerRank / bytesPerBlock;
+
+    const auto numRankFailures   = static_cast<uint64_t>(std::ceil(fractionOfRanksThatFail * numRanks()));
+    auto       recvBlocksPerRank = blocksPerRank * numRankFailures / asserting_cast<size_t>(numRanks());
+
+    if (recvBlocksPerRank == 0) {
+        state.SkipWithError("Parameters set such that no one receives anything!");
+        return;
+    }
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    // Setup
+    uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
+    size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
+
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(bytesPerBlock);
+        for (uint64_t increment: range(0ul, bytesPerBlock)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == bytesPerBlock);
+    }
+    assert(data.size() == blocksPerRank);
+
+    ReStore::ReStore<BlockType> store(
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * bytesPerBlock,
+        blocksPerPermutationRange);
+
+    unsigned counter = 0;
+
+    store.submitBlocks(
+        [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
+            stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
+        },
+        [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
+            auto ret = data.size() == counter
+                           ? std::nullopt
+                           : std::make_optional(ReStore::NextBlock<BlockType>(
+                               {counter + static_cast<size_t>(myRankId()) * data.size(), data[counter]}));
+            counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair
+                       // is bound before or after the increment.
+            return ret;
+        },
+        numBlocks);
+    assert(counter == data.size() + 1);
+
+    std::vector<std::pair<ReStore::block_id_t, size_t>> blockRanges;
+    blockRanges.reserve(asserting_cast<size_t>(numRanks()));
+    ReStore::block_id_t writeStartBlock = std::numeric_limits<ReStore::block_id_t>::max();
+
+    // Use a random Range of numRankFailures PEs whose data we redistribute
+    std::mt19937                                             rng(42);
+    std::uniform_int_distribution<std::mt19937::result_type> dist(
+        0, asserting_cast<unsigned long>(numRanks()) - numRankFailures);
+
+    std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(bytesPerBlock));
+
+    std::string                filePrefix      = "checkpoint";
+    ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
+    std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
+    std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
+
+    // make sure the File doesn't exist already from a previous run
+    std::remove(fileNameToWrite.c_str());
+    // Measurement
+    for (auto _: state) {
+        UNUSED(_);
+
+        assert(writeStartBlock == std::numeric_limits<ReStore::block_id_t>::max());
+
+        // Build the data structure specifying which block to transfer to which rank.
+        blockRanges.clear();
+        ReStore::block_id_t startBlockId = dist(rng) * blocksPerRank;
+        writeStartBlock = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(rankToWriteFor);
+        blockRanges.emplace_back(writeStartBlock, recvBlocksPerRank);
+        assert(writeStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
+
+        store.pullBlocks(
+            blockRanges,
+            [&recvData, writeStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
+                assert(blockId >= writeStartBlock);
+                auto index = blockId - writeStartBlock;
+                assert(index < recvData.size());
+                // assert(recvData[index].size() == 0);
+                recvData[index].clear();
+                recvData[index].insert(
+                    recvData[index].end(), reinterpret_cast<const ElementType*>(buffer),
+                    reinterpret_cast<const ElementType*>(buffer + size));
+            });
+
+        std::ofstream outFileStream(fileNameToWrite, std::ios::binary | std::ios::out | std::ios::app);
+
+        for (const auto& block: recvData) {
+            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+            outFileStream.write((const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+            assert(outFileStream.good());
+        }
+        outFileStream.close();
+
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        auto          start = std::chrono::high_resolution_clock::now();
+        std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
+        for (auto& block: recvData) {
+            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+            inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+            assert(inFileStream.good());
+        }
+        assert(inFileStream.peek() == std::char_traits<char>::eof());
+        inFileStream.close();
+        benchmark::DoNotOptimize(recvData.data());
+        benchmark::ClobberMemory();
+        assert(std::all_of(recvData.begin(), recvData.end(), [bytesPerBlock](const BlockType& block) {
+            return block.size() == bytesPerBlock;
+        }));
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+        writeStartBlock = std::numeric_limits<ReStore::block_id_t>::max();
+        std::remove(fileNameToWrite.c_str());
+    }
+}
+
 template <typename N>
 auto constexpr KiB(N n) {
     return n * 1024;
@@ -696,6 +841,11 @@ BENCHMARK(BM_pullBlocksSmallRange)  ///
     ->Apply(benchmarkArguments);
 
 BENCHMARK(BM_DiskRedistribute)      ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->Apply(benchmarkArguments);
+
+BENCHMARK(BM_DiskSmallRange)        ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Apply(benchmarkArguments);
