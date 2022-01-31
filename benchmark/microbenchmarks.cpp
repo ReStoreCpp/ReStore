@@ -1,3 +1,4 @@
+#include "restore/mpi_context.hpp"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -559,12 +560,11 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     using BlockType   = std::vector<ElementType>;
 
     // Setup
-    uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
-    size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
+    uint64_t rankId = asserting_cast<uint64_t>(myRankId());
 
     std::string filePrefix      = "checkpoint_";
     std::string fileNametoWrite = filePrefix + std::to_string(rankId);
-    std::string fileNameToRead  = filePrefix + std::to_string(rankId + 49);
+    std::string fileNameToRead  = filePrefix + std::to_string((rankId + 49) % asserting_cast<uint64_t>(numRanks()));
 
     std::vector<BlockType> data;
     for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
@@ -577,11 +577,15 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     }
     assert(data.size() == blocksPerRank);
 
-    std::ofstream outFileStream(fileNametoWrite, std::ios::binary);
+    // make sure the File doesn't exist already from a previous run
+    std::remove(fileNametoWrite.c_str());
+
+    std::ofstream outFileStream(fileNametoWrite, std::ios::binary | std::ios::out | std::ios::app);
 
     for (const auto& block: data) {
         assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-        outFileStream.write((const char*)block.data(), asserting_cast<long>(numBlocks * sizeof(ElementType)));
+        outFileStream.write((const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+        assert(outFileStream.good());
     }
     outFileStream.close();
 
@@ -597,11 +601,15 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         MPI_Barrier(MPI_COMM_WORLD);
 
         auto          start = std::chrono::high_resolution_clock::now();
-        std::ifstream inFileStream(fileNameToRead, std::ios::binary);
+        std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
         for (auto& block: recvData) {
             assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+            assert(!inFileStream.eof());
             inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+            assert(!inFileStream.fail());
+            assert(inFileStream.good());
         }
+        assert(inFileStream.peek() == std::char_traits<char>::eof());
         inFileStream.close();
         benchmark::DoNotOptimize(recvData.data());
         benchmark::ClobberMemory();
