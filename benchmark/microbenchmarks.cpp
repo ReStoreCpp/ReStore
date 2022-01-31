@@ -816,22 +816,22 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     std::vector<int64_t> blocksPerPermutationRange_values = {
         1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
 
-    // for (auto b: blocksPerPermutationRange_values) {
-    //     benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
-    // }
+    for (auto b: blocksPerPermutationRange_values) {
+        benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
+    }
 
-    // // Replication level
-    // for (int64_t k: {1, 2, 3, 4, 5, 6}) {
-    //     benchmark->Args({bytesPerBlock, k, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
-    // }
+    // Replication level
+    for (int64_t k: {1, 2, 3, 4, 5, 6}) {
+        benchmark->Args({bytesPerBlock, k, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
+    }
 
-    // // amount of data per rank
-    // for (int64_t n: {KiB(16), KiB(64), KiB(256), MiB(1), MiB(4), MiB(16), MiB(64)}) {
-    //     benchmark->Args({bytesPerBlock, replicationLevel, n, blocksPerPermutationRange, promilleOfRankFailures});
-    // }
+    // amount of data per rank
+    for (int64_t n: {KiB(16), KiB(64), KiB(256), MiB(1), MiB(4), MiB(16), MiB(64)}) {
+        benchmark->Args({bytesPerBlock, replicationLevel, n, blocksPerPermutationRange, promilleOfRankFailures});
+    }
 
     // failure rate of PEs
-    for (int64_t f: {5}) {
+    for (int64_t f: {5, 10, 20, 30, 40, 50}) {
         benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, f});
     }
 }
@@ -911,9 +911,9 @@ int main(int argc, char** argv) {
         // We have to disable the display AND file reporter.
         NullReporter null;
 
-        // googlebenchmark will check if the benchmark_out parameter is set even when we prove a NullReporter. It does
-        // this using the google flags libary. We can therefore specify the benchmark_out parameter on the command line
-        // or using an environment variable.
+        // googlebenchmark will check if the benchmark_out parameter is set even when we prove a NullReporter. It
+        // does this using the google flags libary. We can therefore specify the benchmark_out parameter on the
+        // command line or using an environment variable.
         std::vector<char*> expanded_argv;
         for (int idx = 0; idx < argc; idx++) {
             expanded_argv.push_back(argv[idx]);
