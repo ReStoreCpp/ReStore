@@ -836,10 +836,10 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     }
 }
 
-// BENCHMARK(BM_submitBlocks)          ///
-//     ->UseManualTime()               ///
-//     ->Unit(benchmark::kMillisecond) ///
-//     ->Apply(benchmarkArguments);
+BENCHMARK(BM_submitBlocks)          ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->Apply(benchmarkArguments);
 
 // BENCHMARK(BM_pushBlocksSmallRange)  ///
 //     ->UseManualTime()               ///
@@ -854,15 +854,15 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
 //     });
 //
 
-// BENCHMARK(BM_pullBlocksRedistribute) ///
-//     ->UseManualTime()                ///
-//     ->Unit(benchmark::kMillisecond)  ///
-//     ->Apply(benchmarkArguments);
+BENCHMARK(BM_pullBlocksRedistribute) ///
+    ->UseManualTime()                ///
+    ->Unit(benchmark::kMillisecond)  ///
+    ->Apply(benchmarkArguments);
 
-// BENCHMARK(BM_pullBlocksSmallRange)  ///
-//     ->UseManualTime()               ///
-//     ->Unit(benchmark::kMillisecond) ///
-//     ->Apply(benchmarkArguments);
+BENCHMARK(BM_pullBlocksSmallRange)  ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->Apply(benchmarkArguments);
 
 BENCHMARK(BM_DiskRedistribute)      ///
     ->UseManualTime()               ///
