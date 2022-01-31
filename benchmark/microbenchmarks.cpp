@@ -564,7 +564,8 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 
     std::string filePrefix      = "checkpoint_";
     std::string fileNametoWrite = filePrefix + std::to_string(rankId);
-    std::string fileNameToRead  = filePrefix + std::to_string((rankId + 49) % asserting_cast<uint64_t>(numRanks()));
+    auto        readRank        = (rankId + 49) % asserting_cast<uint64_t>(numRanks());
+    std::string fileNameToRead  = filePrefix + std::to_string(readRank);
 
     std::vector<BlockType> data;
     for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
@@ -582,8 +583,11 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 
     std::ofstream outFileStream(fileNametoWrite, std::ios::binary | std::ios::out | std::ios::app);
 
+    auto writeBlock = blocksPerRank * rankId;
+
     for (const auto& block: data) {
         assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+        assert(block[0] == static_cast<ElementType>((writeBlock++) % std::numeric_limits<uint8_t>::max()));
         outFileStream.write((const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
         assert(outFileStream.good());
     }
@@ -600,12 +604,14 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         // round.
         MPI_Barrier(MPI_COMM_WORLD);
 
-        auto          start = std::chrono::high_resolution_clock::now();
+        auto          readBlock = blocksPerRank * readRank;
+        auto          start     = std::chrono::high_resolution_clock::now();
         std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
         for (auto& block: recvData) {
             assert(block.size() * sizeof(ElementType) == bytesPerBlock);
             assert(!inFileStream.eof());
             inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+            assert(block[0] == static_cast<ElementType>((readBlock++) % std::numeric_limits<uint8_t>::max()));
             assert(!inFileStream.fail());
             assert(inFileStream.good());
         }
@@ -713,7 +719,8 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         // Build the data structure specifying which block to transfer to which rank.
         blockRanges.clear();
         ReStore::block_id_t startBlockId = dist(rng) * blocksPerRank;
-        writeStartBlock = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(rankToWriteFor);
+        writeStartBlock   = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(rankToWriteFor);
+        auto myStartBlock = startBlockId + recvBlocksPerRank * asserting_cast<ReStore::block_id_t>(myRankId());
         blockRanges.emplace_back(writeStartBlock, recvBlocksPerRank);
         assert(writeStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
 
@@ -735,6 +742,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         for (const auto& block: recvData) {
             assert(block.size() * sizeof(ElementType) == bytesPerBlock);
             outFileStream.write((const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+            assert(block[0] == static_cast<ElementType>((writeStartBlock++) % std::numeric_limits<uint8_t>::max()));
             assert(outFileStream.good());
         }
         outFileStream.close();
@@ -751,6 +759,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         for (auto& block: recvData) {
             assert(block.size() * sizeof(ElementType) == bytesPerBlock);
             inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+            assert(block[0] == static_cast<ElementType>((myStartBlock++) % std::numeric_limits<uint8_t>::max()));
             assert(inFileStream.good());
         }
         assert(inFileStream.peek() == std::char_traits<char>::eof());
