@@ -598,14 +598,22 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     for (auto _: state) {
         UNUSED(_);
 
+        auto readBlock = blocksPerRank * readRank;
+        UNUSED(readBlock);
+        // std::for_each(
+        //     recvData.begin(), recvData.end(), [](auto& block) { std::fill(block.begin(), block.end(), 255); });
+        // assert(std::all_of(recvData.begin(), recvData.end(), [](const BlockType& block) {
+        //     return std::all_of(
+        //         block.begin(), block.end(), [](const ElementType& blockElement) { return blockElement == 255; });
+        // }));
+
+
         // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
         // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
         // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
         // round.
         MPI_Barrier(MPI_COMM_WORLD);
-
-        auto          readBlock = blocksPerRank * readRank;
-        auto          start     = std::chrono::high_resolution_clock::now();
+        auto          start = std::chrono::high_resolution_clock::now();
         std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
         for (auto& block: recvData) {
             assert(block.size() * sizeof(ElementType) == bytesPerBlock);
@@ -748,12 +756,18 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         outFileStream.close();
 
 
+        // std::for_each(
+        //     recvData.begin(), recvData.end(), [](auto& block) { std::fill(block.begin(), block.end(), 255); });
+        // assert(std::all_of(recvData.begin(), recvData.end(), [](const BlockType& block) {
+        //     return std::all_of(
+        //         block.begin(), block.end(), [](const ElementType& blockElement) { return blockElement == 255; });
+        // }));
+
         // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
         // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
         // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
         // round.
         MPI_Barrier(MPI_COMM_WORLD);
-
         auto          start = std::chrono::high_resolution_clock::now();
         std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
         for (auto& block: recvData) {
