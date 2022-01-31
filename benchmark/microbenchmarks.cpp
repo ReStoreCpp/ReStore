@@ -578,25 +578,26 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     }
     assert(data.size() == blocksPerRank);
 
-    // make sure the File doesn't exist already from a previous run
-    std::remove(fileNametoWrite.c_str());
-
-    std::ofstream outFileStream(fileNametoWrite, std::ios::binary | std::ios::out | std::ios::app);
-
-    auto writeBlock = blocksPerRank * rankId;
-
-    for (const auto& block: data) {
-        assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-        assert(block[0] == static_cast<ElementType>((writeBlock++) % std::numeric_limits<uint8_t>::max()));
-        outFileStream.write((const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
-        assert(outFileStream.good());
-    }
-    outFileStream.close();
 
     std::vector<BlockType> recvData(blocksPerRank, BlockType(bytesPerBlock));
     // Measurement
     for (auto _: state) {
         UNUSED(_);
+
+        // make sure the File doesn't exist already from a previous run
+        std::remove(fileNametoWrite.c_str());
+
+        std::ofstream outFileStream(fileNametoWrite, std::ios::binary | std::ios::out | std::ios::app);
+
+        auto writeBlock = blocksPerRank * rankId;
+
+        for (const auto& block: data) {
+            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+            assert(block[0] == static_cast<ElementType>((writeBlock++) % std::numeric_limits<uint8_t>::max()));
+            outFileStream.write((const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+            assert(outFileStream.good());
+        }
+        outFileStream.close();
 
         auto readBlock = blocksPerRank * readRank;
         UNUSED(readBlock);
