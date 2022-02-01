@@ -808,6 +808,8 @@ auto constexpr MiB(N n) {
 const auto MAX_DATA_LOSS_RANKS   = 8;
 const auto MAX_REPLICATION_LEVEL = 4;
 
+template <
+    bool sweepBlocksPerPermutationRange, bool sweepReplicationLevel, bool sweepDataPerRank, bool sweepFailureRateOfPEs>
 static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     const int64_t bytesPerBlock             = 64;
     const int64_t replicationLevel          = 4;
@@ -815,66 +817,66 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     const int64_t promilleOfRankFailures    = 10;
     const int64_t blocksPerPermutationRange = 64;
 
-    std::vector<int64_t> blocksPerPermutationRange_values = {
-        1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
+    if (sweepBlocksPerPermutationRange) {
+        std::vector<int64_t> blocksPerPermutationRange_values = {
+            1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
 
-    for (auto b: blocksPerPermutationRange_values) {
-        benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
+        for (auto b: blocksPerPermutationRange_values) {
+            benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
+        }
     }
 
     // Replication level
-    for (int64_t k: {1, 2, 3, 4, 5, 6}) {
-        benchmark->Args({bytesPerBlock, k, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
+    if (sweepReplicationLevel) {
+        for (int64_t k: {1, 2, 3, 4, 5, 6}) {
+            benchmark->Args({bytesPerBlock, k, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
+        }
     }
 
     // amount of data per rank
-    for (int64_t n: {KiB(16), KiB(64), KiB(256), MiB(1), MiB(4), MiB(16), MiB(64)}) {
-        benchmark->Args({bytesPerBlock, replicationLevel, n, blocksPerPermutationRange, promilleOfRankFailures});
+    if (sweepDataPerRank) {
+        for (int64_t n: {KiB(16), KiB(64), KiB(256), MiB(1), MiB(4), MiB(16), MiB(64)}) {
+            benchmark->Args({bytesPerBlock, replicationLevel, n, blocksPerPermutationRange, promilleOfRankFailures});
+        }
     }
 
     // failure rate of PEs
-    for (int64_t f: {5, 10, 20, 30, 40, 50}) {
-        benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, f});
+    if (sweepFailureRateOfPEs) {
+        for (int64_t f: {5, 10, 20, 30, 40, 50}) {
+            benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, f});
+        }
     }
 }
 
 BENCHMARK(BM_submitBlocks)          ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
-    ->Apply(benchmarkArguments);
-
-// BENCHMARK(BM_pushBlocksSmallRange)  ///
-//     ->UseManualTime()               ///
-//     ->Unit(benchmark::kMillisecond) ///
-//     ->ArgsProduct({
-//         // {8, 16, 32, 64, 128, 256, 512, KiB(1), MiB(1)}, // block sizes
-//         {64},                                // block sizes, see above
-//         {2, 3, 4},                           // replication level
-//         {MiB(1), MiB(16), MiB(32), MiB(64)}, //, MiB(128)} // bytes per rank
-//         {1, 2, 4, 8},                        // Number of ranks from which to get the data
-//         {1, 8, 128, KiB(1)}                  // Blocks per permutation range
-//     });
-//
+    ->Apply(benchmarkArguments<false, true, true, true>);
 
 BENCHMARK(BM_pullBlocksRedistribute) ///
     ->UseManualTime()                ///
     ->Unit(benchmark::kMillisecond)  ///
-    ->Apply(benchmarkArguments);
+    ->Apply(benchmarkArguments<false, true, true, true>);
 
 BENCHMARK(BM_pullBlocksSmallRange)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
-    ->Apply(benchmarkArguments);
+    ->Apply(benchmarkArguments<false, true, true, true>);
 
+#ifdef ID_RANDOMIZATION
 BENCHMARK(BM_DiskRedistribute)      ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
-    ->Apply(benchmarkArguments);
+    ->Apply(benchmarkArguments<false, false, true, true>);
 
 BENCHMARK(BM_DiskSmallRange)        ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
-    ->Apply(benchmarkArguments);
+    ->Apply(benchmarkArguments<false, false, true, true>);
+#else
+UNUSED(BM_DiskRedistribute);
+UNUSED(BM_DiskSmallRange);
+#endif
 
 // This reporter does nothing.
 // We can use it to disable output from all but the root process
