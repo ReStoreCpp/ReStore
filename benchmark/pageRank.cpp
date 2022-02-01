@@ -556,6 +556,7 @@ int main(int argc, char** argv) {
     auto end              = MPI_Wtime();
     auto graphReadingTime = end - start;
 
+    MPI_Barrier(comm_);
     TIME_NEXT_SECTION("Init");
     auto restoreVectorHelper =
         enableFT ? std::make_optional<ReStore::ReStoreVector<edge_t>>(
