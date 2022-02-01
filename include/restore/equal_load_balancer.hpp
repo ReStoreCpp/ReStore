@@ -29,9 +29,8 @@ class EqualLoadBalancer {
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>
     getNewBlocksAfterFailureForPushBlocks(const std::vector<ReStoreMPI::original_rank_t>& diedRanks) {
         _previousReturnedBlockRanges.clear();
-        _previousDiedRanks.clear();
+        _previousDiedRanksVector = diedRanks;
         for (const auto diedRank: diedRanks) {
-            _previousDiedRanks.insert(diedRank);
             assert(_ranksBitVector[asserting_cast<size_t>(diedRank)] == true);
             _ranksBitVector[asserting_cast<size_t>(diedRank)] = false;
             --numAliveRanks;
@@ -135,7 +134,7 @@ class EqualLoadBalancer {
 
     void commitToPreviousCall() {
         // remove ranks from rank set
-        for (const auto diedRank: _previousDiedRanks) {
+        for (const auto diedRank: _previousDiedRanksVector) {
             assert(_ranksBitVector[asserting_cast<size_t>(diedRank)] == true);
             _ranksBitVector[asserting_cast<size_t>(diedRank)] = false;
             --numAliveRanks;
@@ -150,7 +149,7 @@ class EqualLoadBalancer {
         _blockRanges.insert(
             _blockRanges.end(), _previousReturnedBlockRanges.begin(), _previousReturnedBlockRanges.end());
 
-        _previousDiedRanks.clear();
+        _previousDiedRanksVector.clear();
         _previousReturnedBlockRanges.clear();
     }
 
@@ -160,7 +159,7 @@ class EqualLoadBalancer {
     size_t                                                                             numAliveRanks;
 
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>> _previousReturnedBlockRanges;
-    std::unordered_set<ReStoreMPI::original_rank_t>                                    _previousDiedRanks;
+    std::vector<ReStoreMPI::original_rank_t>                                           _previousDiedRanksVector;
 };
 } // namespace ReStore
 #endif // EQUAL_LOAD_BALANCER_H
