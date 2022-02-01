@@ -47,7 +47,7 @@ class ReStore {
     //      when using look-up-table offset mode and greater than 0 when using consOffset mode.
     ReStore(
         MPI_Comm mpiCommunicator, uint16_t replicationLevel, OffsetMode offsetMode, size_t constOffset = 0,
-        uint64_t blocksPerPermutationRange = 1000, uint64_t randomPermutationSeed = 0)
+        uint64_t blocksPerPermutationRange = 4096, uint64_t randomPermutationSeed = 0)
         : _replicationLevel(replicationLevel),
           _offsetMode(offsetMode),
           _constOffset(constOffset),

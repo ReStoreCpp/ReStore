@@ -815,7 +815,7 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     const int64_t replicationLevel          = 4;
     const int64_t bytesPerRank              = MiB(16);
     const int64_t promilleOfRankFailures    = 10;
-    const int64_t blocksPerPermutationRange = 64;
+    const int64_t blocksPerPermutationRange = 4096;
 
     if (sweepBlocksPerPermutationRange) {
         std::vector<int64_t> blocksPerPermutationRange_values = {
