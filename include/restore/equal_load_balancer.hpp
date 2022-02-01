@@ -18,10 +18,12 @@ class EqualLoadBalancer {
     EqualLoadBalancer(
         const std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>& blockRanges,
         const ReStoreMPI::original_rank_t                                                         numRanksOriginal)
-        : _blockRanges(blockRanges) {
-        for (int rank = 0; rank < numRanksOriginal; ++rank) {
-            _ranks.emplace(rank);
-        }
+        : _blockRanges(blockRanges),
+          _ranksBitVector(asserting_cast<size_t>(numRanksOriginal), true),
+          numAliveRanks(asserting_cast<size_t>(numRanksOriginal)) {
+        assert(_ranksBitVector.size() == numAliveRanks);
+        assert(
+            asserting_cast<size_t>(std::count(_ranksBitVector.begin(), _ranksBitVector.end(), true)) == numAliveRanks);
     }
 
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>
@@ -30,7 +32,9 @@ class EqualLoadBalancer {
         _previousDiedRanks.clear();
         for (const auto diedRank: diedRanks) {
             _previousDiedRanks.insert(diedRank);
-            _ranks.erase(diedRank);
+            assert(_ranksBitVector[asserting_cast<size_t>(diedRank)] == true);
+            _ranksBitVector[asserting_cast<size_t>(diedRank)] = false;
+            --numAliveRanks;
         }
 
 
@@ -57,51 +61,58 @@ class EqualLoadBalancer {
             }
         }
 
+        assert(
+            asserting_cast<size_t>(std::count(_ranksBitVector.begin(), _ranksBitVector.end(), true)) == numAliveRanks);
         // figure out how many blocks each alive PE should get
-        block_id_t numBlocksPerRank       = numBlocks / _ranks.size();
-        int        numRanksWithMoreBlocks = asserting_cast<int>(numBlocks % _ranks.size());
+        block_id_t numBlocksPerRank       = numBlocks / numAliveRanks;
+        int        numRanksWithMoreBlocks = asserting_cast<int>(numBlocks % numAliveRanks);
 
         using request_t = std::pair<block_range_external_t, ReStoreMPI::current_rank_t>;
         std::vector<request_t>      requests;
         ReStoreMPI::original_rank_t rankCounter                   = 0;
         size_t                      blockRangeIndexIndex          = 0;
         size_t                      numBlocksUsedFromCurrentRange = 0;
-        for (const auto rank: _ranks) {
-            const block_id_t lowerBound = numBlocksPerRank * asserting_cast<block_id_t>(rankCounter)
-                                          + asserting_cast<block_id_t>(std::min(rankCounter, numRanksWithMoreBlocks));
-            const block_id_t upperBound =
-                numBlocksPerRank * asserting_cast<block_id_t>(rankCounter + 1)
-                + asserting_cast<block_id_t>(std::min(rankCounter + 1, numRanksWithMoreBlocks));
-            const block_id_t numBlocksForThisRank      = upperBound - lowerBound;
-            size_t           numBlocksRemainingForRank = numBlocksForThisRank;
+        for (int rank = 0; asserting_cast<size_t>(rank) < _ranksBitVector.size(); ++rank)
+            if (_ranksBitVector[asserting_cast<size_t>(rank)]) {
+                const block_id_t lowerBound =
+                    numBlocksPerRank * asserting_cast<block_id_t>(rankCounter)
+                    + asserting_cast<block_id_t>(std::min(rankCounter, numRanksWithMoreBlocks));
+                const block_id_t upperBound =
+                    numBlocksPerRank * asserting_cast<block_id_t>(rankCounter + 1)
+                    + asserting_cast<block_id_t>(std::min(rankCounter + 1, numRanksWithMoreBlocks));
+                const block_id_t numBlocksForThisRank      = upperBound - lowerBound;
+                size_t           numBlocksRemainingForRank = numBlocksForThisRank;
 
-            while (numBlocksRemainingForRank > 0) {
-                blockRangeIndex = blockRangeIndices[blockRangeIndexIndex];
-                auto blockRange = _blockRanges[blockRangeIndex];
-                assert(std::find(diedRanks.begin(), diedRanks.end(), blockRange.second) != diedRanks.end());
-                size_t numBlocksRemainingInBlockRange = blockRange.first.second - numBlocksUsedFromCurrentRange;
-                size_t numBlocksTakenFromRange = std::min(numBlocksRemainingInBlockRange, numBlocksRemainingForRank);
+                while (numBlocksRemainingForRank > 0) {
+                    blockRangeIndex = blockRangeIndices[blockRangeIndexIndex];
+                    auto blockRange = _blockRanges[blockRangeIndex];
+                    assert(std::find(diedRanks.begin(), diedRanks.end(), blockRange.second) != diedRanks.end());
+                    size_t numBlocksRemainingInBlockRange = blockRange.first.second - numBlocksUsedFromCurrentRange;
+                    size_t numBlocksTakenFromRange =
+                        std::min(numBlocksRemainingInBlockRange, numBlocksRemainingForRank);
 
-                auto startBlock = blockRange.first.first + numBlocksUsedFromCurrentRange;
-                requests.emplace_back(std::make_pair(
-                    std::make_pair(
-                        asserting_cast<block_id_t>(startBlock), asserting_cast<size_t>(numBlocksTakenFromRange)),
-                    rank));
+                    auto startBlock = blockRange.first.first + numBlocksUsedFromCurrentRange;
+                    requests.emplace_back(std::make_pair(
+                        std::make_pair(
+                            asserting_cast<block_id_t>(startBlock), asserting_cast<size_t>(numBlocksTakenFromRange)),
+                        rank));
 
-                numBlocksRemainingForRank -= numBlocksTakenFromRange;
-                numBlocksUsedFromCurrentRange += numBlocksTakenFromRange;
-                assert(numBlocksUsedFromCurrentRange <= blockRange.first.second);
-                if (numBlocksUsedFromCurrentRange == blockRange.first.second) {
-                    ++blockRangeIndexIndex;
-                    numBlocksUsedFromCurrentRange = 0;
+                    numBlocksRemainingForRank -= numBlocksTakenFromRange;
+                    numBlocksUsedFromCurrentRange += numBlocksTakenFromRange;
+                    assert(numBlocksUsedFromCurrentRange <= blockRange.first.second);
+                    if (numBlocksUsedFromCurrentRange == blockRange.first.second) {
+                        ++blockRangeIndexIndex;
+                        numBlocksUsedFromCurrentRange = 0;
+                    }
                 }
+                ++rankCounter;
             }
-            ++rankCounter;
-        }
 
         // Re-insert ranks as the user has not committed to the change yet
         for (const auto diedRank: diedRanks) {
-            _ranks.insert(diedRank);
+            assert(_ranksBitVector[asserting_cast<size_t>(diedRank)] == false);
+            _ranksBitVector[asserting_cast<size_t>(diedRank)] = true;
+            ++numAliveRanks;
         }
         _previousReturnedBlockRanges = requests;
         return requests;
@@ -125,12 +136,14 @@ class EqualLoadBalancer {
     void commitToPreviousCall() {
         // remove ranks from rank set
         for (const auto diedRank: _previousDiedRanks) {
-            _ranks.erase(diedRank);
+            assert(_ranksBitVector[asserting_cast<size_t>(diedRank)] == true);
+            _ranksBitVector[asserting_cast<size_t>(diedRank)] = false;
+            --numAliveRanks;
         }
 
         // Remove old block ranges
         auto it = std::remove_if(_blockRanges.begin(), _blockRanges.end(), [this](auto blockRange) {
-            return _ranks.find(blockRange.second) == _ranks.end();
+            return _ranksBitVector[asserting_cast<size_t>(blockRange.second)] == false;
         });
         _blockRanges.erase(it, _blockRanges.end());
         // Our suggestion is taken so we update the current block ranges
@@ -143,7 +156,8 @@ class EqualLoadBalancer {
 
     private:
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>> _blockRanges;
-    std::unordered_set<ReStoreMPI::original_rank_t>                                    _ranks;
+    std::vector<bool>                                                                  _ranksBitVector;
+    size_t                                                                             numAliveRanks;
 
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>> _previousReturnedBlockRanges;
     std::unordered_set<ReStoreMPI::original_rank_t>                                    _previousDiedRanks;
