@@ -24,14 +24,26 @@ def test(nodesWithScores, doFT):
     resultsStarted = False
     checkedCSV = False
     mpiResult = []
+    numRanksPosition = -1
+    numRanksFailedPosition = -1
     for line in mpiOutput.splitlines():
-        if "RESULTS" not in line and not resultsStarted and not "numRanks" in line:
+        print(line)
+        if "RESULTS" not in line and not resultsStarted and "numRanks" in line:
             words = line.split(",")
-            assert(int(words[0]) == 4)
+            for i in range(len(words)):
+                if words[i] == "numRanks":
+                    numRanksPosition = i
+                if words[i] == "numRanksFailed":
+                    numRanksFailedPosition = i
+        if "RESULTS" not in line and not resultsStarted and not "numRanks" in line:
+            assert(numRanksPosition >= 0)
+            assert(numRanksFailedPosition >= 0)
+            words = line.split(",")
+            assert(int(words[numRanksPosition]) == 4)
             if doFT:
-                assert(int(words[5]) >= 1)
+                assert(int(words[numRanksFailedPosition]) >= 1)
             else:
-                assert(int(words[5]) == 0)
+                assert(int(words[numRanksFailedPosition]) == 0)
             checkedCSV = True
         if "RESULTS" in line:
             resultsStarted = True
