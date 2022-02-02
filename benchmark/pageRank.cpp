@@ -55,9 +55,10 @@ struct edge_t {
 };
 const edge_t invalid_edge = edge_t(invalid_node, invalid_node);
 
-auto comm_    = MPI_COMM_WORLD;
-bool amIDead  = false;
-bool enableFT = true;
+auto comm_            = MPI_COMM_WORLD;
+bool amIDead          = false;
+bool enableFT         = true;
+bool simulateFailures = true;
 
 using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>>;
 
@@ -339,7 +340,7 @@ std::vector<double> pageRank(
     const node_t numVertices, const edge_id_t numEdges, std::vector<edge_t>& edges,
     const std::vector<node_t>& nodeDegrees, const double dampening, const int numIterations,
     std::optional<ReStore::ReStoreVector<edge_t>>& reStoreVectorHelper, ReStore::EqualLoadBalancer& loadBalancer,
-    ProbabilisticFailureSimulator& failureSimulator) {
+    std::optional<ProbabilisticFailureSimulator>& failureSimulator) {
     UNUSED(numEdges);
     int myRank;
     int numRanks;
@@ -359,7 +360,10 @@ std::vector<double> pageRank(
         bool   anotherPass  = false;
 
         ranksToKill.clear();
-        failureSimulator.maybeFailRanks(numRanks, ranksToKill);
+        if (simulateFailures) {
+            assert(failureSimulator.has_value());
+            failureSimulator->maybeFailRanks(numRanks, ranksToKill);
+        }
 
         do {
             bool isRecomputation = anotherPass;
@@ -541,11 +545,15 @@ int main(int argc, char** argv) {
 
     const auto seed            = options["seed"].as<unsigned long>();
     const auto percentFailures = options["percentFailures"].as<double>();
+    simulateFailures           = percentFailures > 0.0;
 
     double failureProbability =
         getFailureProbabilityForExpectedNumberOfFailures(numIterations, numRanks, percentFailures);
 
-    auto failureSimulator = ProbabilisticFailureSimulator(seed, failureProbability);
+    std::optional<ProbabilisticFailureSimulator> failureSimulator = std::nullopt;
+    if (simulateFailures) {
+        failureSimulator.emplace(seed, failureProbability);
+    }
 
     auto start = MPI_Wtime();
     // TIME_NEXT_SECTION("Read graph");

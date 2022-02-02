@@ -10,20 +10,23 @@ class ProbabilisticFailureSimulator {
     ProbabilisticFailureSimulator(const unsigned long seed, const double failureProbability)
         : gen(seed),
           dist(failureProbability),
-          prob(failureProbability) {}
+          prob(failureProbability) {
+        assert(prob > 0.0);
+        assert(prob < 1.0);
+    }
 
     void changeFailureProbability(const double probability) {
         dist = std::geometric_distribution<>(probability);
         prob = probability;
+        assert(prob > 0.0);
+        assert(prob < 1.0);
     }
 
     // Fails every rank with the given failureProbability
     void maybeFailRanks(int numRanks, std::unordered_set<int>& outVec) {
-        assert(prob >= 0.0);
-        assert(prob <= 1.0);
+        assert(prob > 0.0);
+        assert(prob < 1.0);
 
-        if (prob == 0)
-            return;
         int pos = 0;
         while (pos < numRanks) {
             // Each rank follows a Bernoulli distribution where success indicated that this rank failed. Insted of
