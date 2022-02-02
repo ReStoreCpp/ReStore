@@ -8,6 +8,53 @@ import subprocess
 
 import math
 
+def test(nodesWithScores, doFT):
+    execCommand = [mpirun, "-np", "4", "--oversubscribe", executable]
+    args = ["-p", "-s", "-f", "3", "-n", "100", "--seed", "4"]
+    if doFT:
+        args.extend(["--percentFailures", "0.25", "--enable-ft=true"])
+    else:
+        args.extend(["--percentFailures", "0.00", "--enable-ft=false"])
+
+    fullCommand = execCommand + inputPaths + args
+    print(" ".join(fullCommand))
+    mpiOutput = subprocess.check_output(fullCommand)
+    mpiOutput = mpiOutput.decode('UTF-8')
+
+    resultsStarted = False
+    checkedCSV = False
+    mpiResult = []
+    for line in mpiOutput.splitlines():
+        if "RESULTS" not in line and not resultsStarted and not "numRanks" in line:
+            words = line.split(",")
+            assert(int(words[0]) == 4)
+            if doFT:
+                assert(int(words[5]) >= 1)
+            else:
+                assert(int(words[5]) == 0)
+            checkedCSV = True
+        if "RESULTS" in line:
+            resultsStarted = True
+        elif resultsStarted:
+            words = line.split(" ")
+            nodeId = int(words[0])
+            nodeScore = float(words[1])
+            mpiResult.append((nodeId, nodeScore))
+
+    assert(checkedCSV)
+
+    networkitScores = nodesWithScores
+    networkitScores.sort(key=lambda nodeScore: nodeScore[1], reverse=True)
+    networkitScores = networkitScores[:20]
+
+    for networkitResult, mpiResult in zip(networkitScores, mpiResult):
+        networkitNode = networkitResult[0]
+        mpiNode = mpiResult[0]
+        assert(networkitNode == mpiNode)
+        networkitScore = networkitResult[1]
+        mpiScore = mpiResult[1]
+        assert(math.isclose(networkitScore, mpiScore, rel_tol=1e-5))
+    print("SUCCESS")
 
 parser = argparse.ArgumentParser(description="Calculate PageRank scores using NetworKit")
 parser.add_argument('inputPaths', nargs='+')
@@ -70,41 +117,5 @@ if printOutput:
         print(str(nodesWithScores[i]))
 
 if doTest:
-    execCommand = [mpirun, "-np", "4", "--oversubscribe", executable]
-    args = ["-p", "-s", "-f", "3", "--percentFailures", "0.25", "-n", "100", "--seed", "4"]
-    fullCommand = execCommand + inputPaths + args
-    print(" ".join(fullCommand))
-    mpiOutput = subprocess.check_output(fullCommand)
-    mpiOutput = mpiOutput.decode('UTF-8')
-
-    resultsStarted = False
-    checkedCSV = False
-    mpiResult = []
-    for line in mpiOutput.splitlines():
-        if "RESULTS" not in line and not resultsStarted and not "numRanks" in line:
-            words = line.split(",")
-            assert(int(words[0]) == 4)
-            assert(int(words[5]) >= 1)
-            checkedCSV = True
-        if "RESULTS" in line:
-            resultsStarted = True
-        elif resultsStarted:
-            words = line.split(" ")
-            nodeId = int(words[0])
-            nodeScore = float(words[1])
-            mpiResult.append((nodeId, nodeScore))
-
-    assert(checkedCSV)
-
-    networkitScores = nodesWithScores
-    networkitScores.sort(key=lambda nodeScore: nodeScore[1], reverse=True)
-    networkitScores = networkitScores[:20]
-
-    for networkitResult, mpiResult in zip(networkitScores, mpiResult):
-        networkitNode = networkitResult[0]
-        mpiNode = mpiResult[0]
-        assert(networkitNode == mpiNode)
-        networkitScore = networkitResult[1]
-        mpiScore = mpiResult[1]
-        assert(math.isclose(networkitScore, mpiScore, rel_tol=1e-5))
-    print("SUCCESS")
+    test(nodesWithScores, True)
+    test(nodesWithScores, False)
