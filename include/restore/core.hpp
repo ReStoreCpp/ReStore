@@ -147,7 +147,8 @@ class ReStore {
 
         // Initialize the block id permuter.
         const auto largestBlockId = totalNumberOfBlocks - 1;
-        _blockIdPermuter.emplace(largestBlockId, _blocksPerPermutationRange, _randomPermutationSeed);
+        const auto blocksPerPermutationRange = std::min(_blocksPerPermutationRange, largestBlockId);
+        _blockIdPermuter.emplace(largestBlockId, blocksPerPermutationRange, _randomPermutationSeed);
         assert(_blockIdPermuter);
 
         try { // Ranks failures might be detected during this block
