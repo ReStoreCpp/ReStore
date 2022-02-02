@@ -989,7 +989,6 @@ BENCHMARK(BM_pullBlocksSingleRank)  ///
     ->Unit(benchmark::kMillisecond) ///
     ->Apply(benchmarkArguments<false, false, false, false>);
 
-#ifdef ID_RANDOMIZATION
 BENCHMARK(BM_DiskRedistribute)      ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
@@ -999,7 +998,6 @@ BENCHMARK(BM_DiskSmallRange)        ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Apply(benchmarkArguments<false, false, true, true>);
-#endif
 
 // This reporter does nothing.
 // We can use it to disable output from all but the root process
