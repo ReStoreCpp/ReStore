@@ -994,9 +994,6 @@ BENCHMARK(BM_DiskSmallRange)        ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Apply(benchmarkArguments<false, false, true, true>);
-#else
-UNUSED(BM_DiskRedistribute);
-UNUSED(BM_DiskSmallRange);
 #endif
 
 // This reporter does nothing.
