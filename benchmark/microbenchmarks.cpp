@@ -962,6 +962,11 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
             benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, f});
         }
     }
+
+    // If nothing else is requested, run the default values only.
+    if (!sweepBlocksPerPermutationRange && !sweepReplicationLevel && !sweepDataPerRank && !sweepFailureRateOfPEs) {
+        benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange, promilleOfRankFailures});
+    }
 }
 
 BENCHMARK(BM_submitBlocks)          ///
