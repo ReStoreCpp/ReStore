@@ -1187,6 +1187,18 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Warm up the network by sending a message from each rank to each rank.
+    std::vector<MPI_Request> sendRequests(asserting_cast<size_t>(numRanks()));
+    std::vector<MPI_Status>  recvStatuses(asserting_cast<size_t>(numRanks()));
+    int                      buf = 42;
+    for (int destRank = 0; destRank < numRanks(); ++destRank) {
+        MPI_Isend(&buf, 1, MPI_INT, destRank, 0, MPI_COMM_WORLD, &sendRequests[asserting_cast<size_t>(destRank)]);
+    }
+    for (int srcRank = 0; srcRank < numRanks(); ++srcRank) {
+        MPI_Recv(&buf, 1, MPI_INT, srcRank, 0, MPI_COMM_WORLD, &recvStatuses[asserting_cast<size_t>(srcRank)]);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
     if (rank == 0) {
         ::benchmark::Initialize(&argc, argv);
 
