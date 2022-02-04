@@ -148,11 +148,6 @@ class EqualLoadBalancer {
             --numAliveRanks;
         }
 
-        // Remove old block ranges
-        auto it = std::remove_if(_blockRanges.begin(), _blockRanges.end(), [this](auto blockRange) {
-            return _ranksBitVector[asserting_cast<size_t>(blockRange.second)] == false;
-        });
-        _blockRanges.erase(it, _blockRanges.end());
         // Our suggestion is taken so we update the current block ranges
         _blockRanges.insert(
             _blockRanges.end(), _previousReturnedBlockRanges.begin(), _previousReturnedBlockRanges.end());
