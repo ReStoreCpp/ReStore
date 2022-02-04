@@ -36,7 +36,6 @@ class EqualLoadBalancer {
             --numAliveRanks;
         }
 
-
         // First, sort by rank id so the following loop works
         std::sort(_blockRanges.begin(), _blockRanges.end(), [](const auto& lhs, const auto& rhs) {
             return lhs.second < rhs.second;
@@ -71,7 +70,7 @@ class EqualLoadBalancer {
         ReStoreMPI::original_rank_t rankCounter                   = 0;
         size_t                      blockRangeIndexIndex          = 0;
         size_t                      numBlocksUsedFromCurrentRange = 0;
-        for (int rank = 0; asserting_cast<size_t>(rank) < _ranksBitVector.size(); ++rank)
+        for (int rank = 0; asserting_cast<size_t>(rank) < _ranksBitVector.size(); ++rank) {
             if (_ranksBitVector[asserting_cast<size_t>(rank)]) {
                 const block_id_t lowerBound =
                     numBlocksPerRank * asserting_cast<block_id_t>(rankCounter)
@@ -106,6 +105,7 @@ class EqualLoadBalancer {
                 }
                 ++rankCounter;
             }
+        }
 
         // Re-insert ranks as the user has not committed to the change yet
         for (const auto diedRank: diedRanks) {
@@ -117,7 +117,6 @@ class EqualLoadBalancer {
         return requests;
     }
 
-
     std::vector<std::pair<block_id_t, size_t>> getNewBlocksAfterFailureForPullBlocks(
         const std::vector<ReStoreMPI::original_rank_t>& diedRanks, ReStoreMPI::original_rank_t myRank) {
         auto resultPushBlocks = getNewBlocksAfterFailureForPushBlocks(diedRanks);
@@ -126,6 +125,7 @@ class EqualLoadBalancer {
         });
         resultPushBlocks.erase(it, resultPushBlocks.end());
         std::vector<std::pair<block_id_t, size_t>> resultPullBlocks;
+        resultPullBlocks.reserve(resultPushBlocks.size());
         std::transform(
             resultPushBlocks.begin(), resultPushBlocks.end(), std::back_inserter(resultPullBlocks),
             [](auto pushRequest) { return pushRequest.first; });
