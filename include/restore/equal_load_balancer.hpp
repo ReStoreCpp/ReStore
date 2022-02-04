@@ -11,6 +11,7 @@
 
 #include "restore/block_retrieval.hpp"
 #include "restore/helpers.hpp"
+#include "restore/mpi_context.hpp"
 
 namespace ReStore {
 class EqualLoadBalancer {
@@ -28,6 +29,9 @@ class EqualLoadBalancer {
 
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>>
     getNewBlocksAfterFailureForPushBlocks(const std::vector<ReStoreMPI::original_rank_t>& diedRanks) {
+        if (diedRanks.empty()) {
+            return {};
+        }
         _previousReturnedBlockRanges.clear();
         _previousDiedRanksVector = diedRanks;
         for (const auto diedRank: diedRanks) {
@@ -36,26 +40,30 @@ class EqualLoadBalancer {
             --numAliveRanks;
         }
 
-        // First, sort by rank id so the following loop works
-        std::sort(_blockRanges.begin(), _blockRanges.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.second < rhs.second;
-        });
-
         // Store for each of the dead ranks how many blocks it used to hold and which blockRanges these corresponded to
         std::vector<size_t> blockRangeIndices;
         size_t              numBlocks       = 0;
         size_t              blockRangeIndex = 0;
-        for (size_t i = 0; i < diedRanks.size(); ++i) {
-            ReStoreMPI::original_rank_t diedRank = diedRanks[i];
-            for (; blockRangeIndex < _blockRanges.size() && _blockRanges[blockRangeIndex].second <= diedRank;
-                 ++blockRangeIndex) {
-                if (_blockRanges[blockRangeIndex].second == diedRank) {
-                    // numBlocksOfRank[i] += blockRanges[blockRangeIndex].first.second;
-                    numBlocks += _blockRanges[blockRangeIndex].first.second;
-                    blockRangeIndices.emplace_back(blockRangeIndex);
-                    // blockRangeIndices[i].first  = std::min(blockRangeIndex, blockRangeIndices[i].first);
-                    // blockRangeIndices[i].second = std::max(blockRangeIndex, blockRangeIndices[i].second);
+        while (blockRangeIndex < _blockRanges.size()) {
+            for (size_t i = 0; i < diedRanks.size(); ++i) {
+                ReStoreMPI::original_rank_t diedRank = diedRanks[i];
+                for (; blockRangeIndex < _blockRanges.size() && _blockRanges[blockRangeIndex].second <= diedRank;
+                     ++blockRangeIndex) {
+                    if (_blockRanges[blockRangeIndex].second == diedRank) {
+                        // numBlocksOfRank[i] += blockRanges[blockRangeIndex].first.second;
+                        numBlocks += _blockRanges[blockRangeIndex].first.second;
+                        blockRangeIndices.emplace_back(blockRangeIndex);
+                        // blockRangeIndices[i].first  = std::min(blockRangeIndex, blockRangeIndices[i].first);
+                        // blockRangeIndices[i].second = std::max(blockRangeIndex, blockRangeIndices[i].second);
+                    }
                 }
+                assert(blockRangeIndices.size() > 0);
+                assert(_blockRanges[blockRangeIndices.back()].second == diedRank);
+            }
+            assert(diedRanks.size() > 0);
+            for (; blockRangeIndex < _blockRanges.size() && _blockRanges[blockRangeIndex].second >= diedRanks.back();
+                 ++blockRangeIndex) {
+                // Progress to next run of blockRanges
             }
         }
 
