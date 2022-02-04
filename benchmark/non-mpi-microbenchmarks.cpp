@@ -79,14 +79,22 @@ static void BM_EqualLoadBalancerPushBlocks(benchmark::State& state) {
     BM_EqualLoadBalancer<false>(state);
 }
 
+static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
+    const ReStoreMPI::original_rank_t startRankCount = 48;
+    const ReStoreMPI::original_rank_t endRankCount   = 12288;
+
+    for (ReStoreMPI::original_rank_t rankCount = startRankCount; rankCount <= endRankCount; rankCount *= 2) {
+        benchmark->Args({rankCount});
+    }
+}
+
+
 BENCHMARK(BM_EqualLoadBalancerPullBlocks) ///
     ->Unit(benchmark::kMillisecond)       ///
-    ->RangeMultiplier(2)                  ///
-    ->Range(48, 12288);                   ///
+    ->Apply(benchmarkArguments);
 
 BENCHMARK(BM_EqualLoadBalancerPushBlocks) ///
     ->Unit(benchmark::kMillisecond)       ///
-    ->RangeMultiplier(2)                  ///
-    ->Range(48, 12288);                   ///
+    ->Apply(benchmarkArguments);
 
 BENCHMARK_MAIN();
