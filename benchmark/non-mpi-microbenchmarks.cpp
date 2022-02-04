@@ -34,6 +34,7 @@ static void BM_EqualLoadBalancer(benchmark::State& state) {
     const double   numExpectedFailures = ceil(0.01 * static_cast<double>(numRanks));
 
     for (auto _: state) {
+        state.PauseTiming();
         std::vector<ReStoreMPI::original_rank_t> ranksToDie(asserting_cast<size_t>(numRanks));
         std::iota(ranksToDie.begin(), ranksToDie.end(), 0);
         std::random_shuffle(ranksToDie.begin(), ranksToDie.end());
@@ -47,8 +48,7 @@ static void BM_EqualLoadBalancer(benchmark::State& state) {
         }
 
         ReStore::EqualLoadBalancer loadBalancer(blockRanges, numRanks);
-
-        auto start = std::chrono::high_resolution_clock::now();
+        state.ResumeTiming();
         for (size_t failure = 0; failure < static_cast<size_t>(numExpectedFailures); ++failure) {
             auto rankToFail = ranksToDie[failure];
             if (rankToFail == myRank) {
@@ -67,9 +67,6 @@ static void BM_EqualLoadBalancer(benchmark::State& state) {
             benchmark::DoNotOptimize(newBlockRanges);
             benchmark::ClobberMemory();
         }
-        auto end            = std::chrono::high_resolution_clock::now();
-        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-        state.SetIterationTime(elapsedSeconds);
         // std::cout << dummy << std::endl;
     }
 }
@@ -83,13 +80,11 @@ static void BM_EqualLoadBalancerPushBlocks(benchmark::State& state) {
 }
 
 BENCHMARK(BM_EqualLoadBalancerPullBlocks) ///
-    ->UseManualTime()                     ///
     ->Unit(benchmark::kMillisecond)       ///
     ->RangeMultiplier(2)                  ///
     ->Range(48, 12288);                   ///
 
 BENCHMARK(BM_EqualLoadBalancerPushBlocks) ///
-    ->UseManualTime()                     ///
     ->Unit(benchmark::kMillisecond)       ///
     ->RangeMultiplier(2)                  ///
     ->Range(48, 12288);                   ///
