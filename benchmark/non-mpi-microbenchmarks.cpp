@@ -25,6 +25,7 @@
 #include <restore/helpers.hpp>
 #include <restore/mpi_context.hpp>
 
+template <bool pullBlocks>
 static void BM_EqualLoadBalancer(benchmark::State& state) {
     const auto numRanks = throwing_cast<ReStoreMPI::original_rank_t>(state.range(0));
 
@@ -55,7 +56,13 @@ static void BM_EqualLoadBalancer(benchmark::State& state) {
             }
             ranksToDieInThisIteration = {rankToFail};
 
-            auto newBlockRanges = loadBalancer.getNewBlocksAfterFailureForPullBlocks(ranksToDieInThisIteration, myRank);
+            auto newBlockRanges = [&]() {
+                if constexpr (pullBlocks) {
+                    return loadBalancer.getNewBlocksAfterFailureForPullBlocks(ranksToDieInThisIteration, myRank);
+                } else {
+                    return loadBalancer.getNewBlocksAfterFailureForPushBlocks(ranksToDieInThisIteration);
+                }
+            }();
             loadBalancer.commitToPreviousCall();
             benchmark::DoNotOptimize(newBlockRanges);
             benchmark::ClobberMemory();
@@ -63,14 +70,28 @@ static void BM_EqualLoadBalancer(benchmark::State& state) {
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
         state.SetIterationTime(elapsedSeconds);
-        //std::cout << dummy << std::endl;
+        // std::cout << dummy << std::endl;
     }
 }
 
-BENCHMARK(BM_EqualLoadBalancer)     ///
-    ->UseManualTime()               ///
-    ->Unit(benchmark::kMillisecond) ///
-    ->RangeMultiplier(2)            ///
-    ->Range(48, 6144);              ///
+static void BM_EqualLoadBalancerPullBlocks(benchmark::State& state) {
+    BM_EqualLoadBalancer<true>(state);
+}
+
+static void BM_EqualLoadBalancerPushBlocks(benchmark::State& state) {
+    BM_EqualLoadBalancer<false>(state);
+}
+
+BENCHMARK(BM_EqualLoadBalancerPullBlocks) ///
+    ->UseManualTime()                     ///
+    ->Unit(benchmark::kMillisecond)       ///
+    ->RangeMultiplier(2)                  ///
+    ->Range(48, 12288);                   ///
+
+BENCHMARK(BM_EqualLoadBalancerPushBlocks) ///
+    ->UseManualTime()                     ///
+    ->Unit(benchmark::kMillisecond)       ///
+    ->RangeMultiplier(2)                  ///
+    ->Range(48, 12288);                   ///
 
 BENCHMARK_MAIN();
