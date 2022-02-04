@@ -72,6 +72,14 @@ target_include_directories(${MICROBENCHMARKS_TARGET} PRIVATE ../include/)
 target_link_libraries(${MICROBENCHMARKS_TARGET} "ReStore::ReStore;benchmark::benchmark")
 target_compile_options(${MICROBENCHMARKS_TARGET} PRIVATE -O3 "${WARNING_FLAGS}")
 
+# non-mpi microbenchmarks
+set(NON_MPI_MICROBENCHMARKS_TARGET "non-mpi-microbenchmarks")
+add_executable(${NON_MPI_MICROBENCHMARKS_TARGET} non-mpi-microbenchmarks.cpp)
+target_include_directories(${NON_MPI_MICROBENCHMARKS_TARGET} SYSTEM PRIVATE ../extern/)
+target_include_directories(${NON_MPI_MICROBENCHMARKS_TARGET} PRIVATE ../include/)
+target_link_libraries(${NON_MPI_MICROBENCHMARKS_TARGET} "ReStore::ReStore;benchmark::benchmark")
+target_compile_options(${NON_MPI_MICROBENCHMARKS_TARGET} PRIVATE -O3 "${WARNING_FLAGS}")
+
 # pseudo random permutation
 set(PSEUDO_RANDOM_PERMUTATION_TARGET "pseudo-random-permutation")
 add_executable(${PSEUDO_RANDOM_PERMUTATION_TARGET} pseudo_random_permutation.cpp)
