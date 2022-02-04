@@ -5,10 +5,11 @@ import sys
 import argparse
 import time
 import subprocess
+import os
 
 import math
 
-def test(nodesWithScores, doFT):
+def test(inputDir, nodesWithScores, doFT):
     execCommand = [mpirun, "-np", "4", "--oversubscribe", executable]
     args = ["-p", "-s", "-f", "3", "-n", "100", "--seed", "4"]
     if doFT:
@@ -16,7 +17,7 @@ def test(nodesWithScores, doFT):
     else:
         args.extend(["--percentFailures", "0.00", "--enable-ft=false"])
 
-    fullCommand = execCommand + inputPaths + args
+    fullCommand = execCommand + [inputDir] + args
     print(" ".join(fullCommand))
     mpiOutput = subprocess.check_output(fullCommand)
     mpiOutput = mpiOutput.decode('UTF-8')
@@ -69,7 +70,7 @@ def test(nodesWithScores, doFT):
     print("SUCCESS")
 
 parser = argparse.ArgumentParser(description="Calculate PageRank scores using NetworKit")
-parser.add_argument('inputPaths', nargs='+')
+parser.add_argument('inputDir')
 parser.add_argument("-s", "--sort", help="sort output by PageRank value",
                     action="store_true")
 parser.add_argument("-o", "--outputPath", help="path to write the output")
@@ -83,7 +84,7 @@ parser.add_argument("-m", "--mpirun", help="path to the mpirun")
 
 args = parser.parse_args()
 
-inputPaths = args.inputPaths
+inputDir = args.inputDir
 outputPath = args.outputPath
 sortOutput = args.sort
 printOutput=args.print
@@ -97,16 +98,18 @@ if mpirun == "":
 
 
 G = nk.graph.Graph(weighted=False, directed=True)
-for inputPath in inputPaths:
-    with open(inputPath, "r") as graphFile:
-        for line in graphFile:
-            words = line.split(" ")
-            if line.startswith("p") and G.numberOfNodes() == 0:
-                G.addNodes(int(words[1]))
-            if line.startswith("e"):
-                u = int(words[1]) - 1
-                v = int(words[2]) - 1
-                G.addEdge(u,v)
+for filename in os.listdir(inputDir):
+    inputPath = os.path.join(inputDir, filename)
+    if os.path.isfile(inputPath):
+        with open(inputPath, "r") as graphFile:
+            for line in graphFile:
+                words = line.split(" ")
+                if line.startswith("p") and G.numberOfNodes() == 0:
+                    G.addNodes(int(words[1]))
+                if line.startswith("e"):
+                    u = int(words[1]) - 1
+                    v = int(words[2]) - 1
+                    G.addEdge(u,v)
 
 start = time.time()
 for i in range(repetitions):
@@ -129,5 +132,5 @@ if printOutput:
         print(str(nodesWithScores[i]))
 
 if doTest:
-    test(nodesWithScores, True)
-    test(nodesWithScores, False)
+    test(inputDir, nodesWithScores, True)
+    test(inputDir, nodesWithScores, False)

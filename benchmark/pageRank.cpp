@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cxxopts.hpp>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -63,7 +64,7 @@ bool simulateFailures = true;
 using block_distribution_t = std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::current_rank_t>>;
 
 std::tuple<node_t, edge_id_t, edge_id_t, std::vector<edge_t>, std::vector<node_t>, block_distribution_t>
-readGraph(const std::vector<std::string>& graphs) {
+readGraph(const std::string& graphDir) {
     int myRank   = -1;
     int numRanks = -1;
     MPI_Comm_rank(comm_, &myRank);
@@ -82,8 +83,16 @@ readGraph(const std::vector<std::string>& graphs) {
     edge_id_t            upperBound = 0;
     block_distribution_t blockDistribution;
 
-    for (const auto& graph: graphs) {
-        MemoryMappedFileReader fileReader(graph);
+    // Get all graph files and sort them so all ranks read them in the same order
+    std::vector<std::filesystem::path> graphFiles;
+    std::copy(
+        std::filesystem::directory_iterator(graphDir), std::filesystem::directory_iterator(),
+        std::back_inserter(graphFiles));
+    std::sort(graphFiles.begin(), graphFiles.end());
+
+
+    for (const auto& graph: graphFiles) {
+        MemoryMappedFileReader fileReader(graph.string());
         while (!fileReader.finishedFile()) {
             if (!fileReader.isLetter()) {
                 fileReader.skipLine();
@@ -474,7 +483,7 @@ int main(int argc, char** argv) {
     cxxopts::Options cliParser("pageRank", "Benchmarks a fault tolerant page rank algorithm.");
 
     cliParser.add_options()                                                                                    ///
-        ("graphs", "paths to the input graph files", cxxopts::value<std::vector<std::string>>())               ///
+        ("graphDir", "path to the directory containing the input graph files", cxxopts::value<std::string>())  ///
         ("o,output", "path to the output file", cxxopts::value<std::string>())                                 ///
         ("s,sort", "sort the output", cxxopts::value<bool>()->default_value("false"))                          ///
         ("p,print", "print the first 20 scores of the output", cxxopts::value<bool>()->default_value("false")) ///
@@ -495,8 +504,8 @@ int main(int argc, char** argv) {
          cxxopts::value<double>()->default_value("0.1")) ///
         ("h,help", "Print help message.");
 
-    cliParser.parse_positional({"graphs"});
-    cliParser.positional_help("<graphs>");
+    cliParser.parse_positional({"graphDir"});
+    cliParser.positional_help("<graphDir>");
 
     cxxopts::ParseResult options;
     try {
@@ -515,9 +524,9 @@ int main(int argc, char** argv) {
         exit(0);
     }
 
-    if (!options.count("graphs")) {
+    if (!options.count("graphDir")) {
         if (myRank == 0) {
-            std::cout << "Please provide a graph." << std::endl;
+            std::cout << "Please provide a graph Directory." << std::endl;
             std::cout << cliParser.help() << std::endl;
         }
         exit(1);
@@ -558,7 +567,7 @@ int main(int argc, char** argv) {
     auto start = MPI_Wtime();
     // TIME_NEXT_SECTION("Read graph");
     auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees, blockDistribution] =
-        readGraph(options["graphs"].as<std::vector<std::string>>());
+        readGraph(options["graphDir"].as<std::string>());
     std::sort(edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
     // TIME_STOP();
     auto end              = MPI_Wtime();
