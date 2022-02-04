@@ -84,7 +84,9 @@ class TimerRegister {
 
     // stop the currently running timer.
     void stop() {
+        asm("" ::: "memory"); // prevent compiler reordering
         auto new_time_point = std::chrono::high_resolution_clock::now();
+        asm("" ::: "memory");
         if (running_) {
             Entry& e = find_or_create(running_);
             e.duration += new_time_point - time_point_;
