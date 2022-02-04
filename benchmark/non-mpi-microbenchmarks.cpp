@@ -81,7 +81,7 @@ static void BM_EqualLoadBalancerPushBlocks(benchmark::State& state) {
 
 static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     const ReStoreMPI::original_rank_t startRankCount = 48;
-    const ReStoreMPI::original_rank_t endRankCount   = 12288;
+    const ReStoreMPI::original_rank_t endRankCount   = 512 * 48;
 
     for (ReStoreMPI::original_rank_t rankCount = startRankCount; rankCount <= endRankCount; rankCount *= 2) {
         benchmark->Args({rankCount});
