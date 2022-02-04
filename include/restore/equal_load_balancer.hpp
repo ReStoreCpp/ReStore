@@ -53,8 +53,8 @@ class EqualLoadBalancer {
         }
 
         // Store for each of the dead ranks how many blocks it used to hold and which blockRanges these corresponded to
-        std::vector<size_t> blockRangeIndices;
-        size_t              numBlocks = 0;
+        _blockRangeIndices.clear();
+        size_t numBlocks = 0;
         for (size_t round = 0; round < _blockOffsetsPerRound.size(); ++round) {
             for (size_t i = 0; i < diedRanks.size(); ++i) {
                 ReStoreMPI::original_rank_t diedRank = diedRanks[i];
@@ -66,14 +66,14 @@ class EqualLoadBalancer {
                      ++blockRangeIndex) {
                     // numBlocksOfRank[i] += blockRanges[blockRangeIndex].first.second;
                     numBlocks += _blockRanges[blockRangeIndex].first.second;
-                    blockRangeIndices.emplace_back(blockRangeIndex);
+                    _blockRangeIndices.emplace_back(blockRangeIndex);
                     // blockRangeIndices[i].first  = std::min(blockRangeIndex, blockRangeIndices[i].first);
                     // blockRangeIndices[i].second = std::max(blockRangeIndex, blockRangeIndices[i].second);
                 }
-                assert(blockRangeIndices.size() > 0);
+                assert(_blockRangeIndices.size() > 0);
                 // There may be some edge cases with very few blocks on lots of ranks where this is not true.
                 // But for both our applications, this should hold
-                assert(_blockRanges[blockRangeIndices.back()].second == diedRank);
+                assert(_blockRanges[_blockRangeIndices.back()].second == diedRank);
             }
         }
 
@@ -99,7 +99,7 @@ class EqualLoadBalancer {
                 size_t           numBlocksRemainingForRank = numBlocksForThisRank;
 
                 while (numBlocksRemainingForRank > 0) {
-                    auto blockRangeIndex = blockRangeIndices[blockRangeIndexIndex];
+                    auto blockRangeIndex = _blockRangeIndices[blockRangeIndexIndex];
                     auto blockRange      = _blockRanges[blockRangeIndex];
                     assert(std::find(diedRanks.begin(), diedRanks.end(), blockRange.second) != diedRanks.end());
                     size_t numBlocksRemainingInBlockRange = blockRange.first.second - numBlocksUsedFromCurrentRange;
@@ -191,6 +191,9 @@ class EqualLoadBalancer {
     std::vector<bool>                                                                  _ranksisAlive;
     size_t                                                                             numAliveRanks;
     std::vector<std::vector<size_t>>                                                   _blockOffsetsPerRound;
+
+    // Helper vector stored here so it doesn't get reallocated every call
+    std::vector<size_t> _blockRangeIndices;
 
     std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::original_rank_t>> _previousReturnedBlockRanges;
     std::vector<ReStoreMPI::original_rank_t>                                           _previousDiedRanksVector;
