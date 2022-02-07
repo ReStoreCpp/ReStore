@@ -1128,36 +1128,43 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
 BENCHMARK(BM_submitBlocks)          ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, true, true, true>);
 
 BENCHMARK(BM_pullBlocksRedistribute) ///
     ->UseManualTime()                ///
     ->Unit(benchmark::kMillisecond)  ///
+    ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, true, true, true>);
 
 BENCHMARK(BM_pullBlocksSmallRange)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, true, true, true>);
 
 BENCHMARK(BM_pullBlocksSingleRank)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK(BM_DiskRedistribute)      ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, false, true, true>);
 
 BENCHMARK(BM_DiskSmallRange)        ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, false, true, true>);
 
 BENCHMARK(BM_DiskSingleRank)        ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, false, false, false>);
 
 // This reporter does nothing.
