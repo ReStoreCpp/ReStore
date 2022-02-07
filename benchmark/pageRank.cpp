@@ -571,6 +571,19 @@ int main(int argc, char** argv) {
         failureSimulator.emplace(seed, failureProbability);
     }
 
+    // Warm up the network by sending a message from each rank to each rank.
+    std::vector<MPI_Request> sendRequests(asserting_cast<size_t>(numRanks));
+    std::vector<MPI_Status>  recvStatuses(asserting_cast<size_t>(numRanks));
+    int                      buf = 42;
+    for (int destRank = 0; destRank < numRanks; ++destRank) {
+        MPI_Isend(&buf, 1, MPI_INT, destRank, 0, MPI_COMM_WORLD, &sendRequests[asserting_cast<size_t>(destRank)]);
+    }
+    for (int srcRank = 0; srcRank < numRanks; ++srcRank) {
+        MPI_Recv(&buf, 1, MPI_INT, srcRank, 0, MPI_COMM_WORLD, &recvStatuses[asserting_cast<size_t>(srcRank)]);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+
     auto start = MPI_Wtime();
     // TIME_NEXT_SECTION("Read graph");
     auto [numVertices, numEdges, firstEdgeId, edges, nodeDegrees, blockDistribution] =
