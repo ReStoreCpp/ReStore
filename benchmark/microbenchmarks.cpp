@@ -678,7 +678,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     // Setup
     uint64_t rankId = asserting_cast<uint64_t>(myRankId());
 
-    std::string filePrefix      = "checkpoint_redistribute_" + std::to_string(numRanks()) + "_";
+    std::string filePrefix      = "disk-benchmarks/checkpoint_redistribute_" + std::to_string(numRanks()) + "_";
     std::string fileNametoWrite = filePrefix + std::to_string(rankId);
     auto        readRank        = (rankId + 49) % asserting_cast<uint64_t>(numRanks());
     std::string fileNameToRead  = filePrefix + std::to_string(readRank);
@@ -829,7 +829,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
 
     std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(bytesPerBlock));
 
-    std::string                filePrefix      = "checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
+    std::string                filePrefix      = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
     ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
     std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
     std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
@@ -984,7 +984,7 @@ static void BM_DiskSingleRank(benchmark::State& state) {
 
     std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(bytesPerBlock));
 
-    std::string                filePrefix      = "checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
+    std::string                filePrefix      = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
     ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
     std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
     std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
