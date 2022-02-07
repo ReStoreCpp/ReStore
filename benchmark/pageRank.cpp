@@ -379,6 +379,7 @@ std::vector<double> pageRank(
             if (isRecomputation) {
                 assert(enableFT);
                 assert(i > 0);
+                MPI_Barrier(comm_);
                 TIME_PUSH_AND_START("Recomputation");
             }
             for (; i < edges.size(); ++i) {
@@ -405,8 +406,10 @@ std::vector<double> pageRank(
             // }
 
             if (isRecomputation) {
+                MPI_Barrier(comm_);
                 TIME_PUSH_AND_START("Communication-Recomputation");
             } else {
+                MPI_Barrier(comm_);
                 TIME_PUSH_AND_START("Communication");
             }
 
@@ -415,13 +418,16 @@ std::vector<double> pageRank(
             }) || !ft_barrier();
 
             if (isRecomputation) {
+                MPI_Barrier(comm_);
                 TIME_POP("Communication-Recomputation");
             } else {
+                MPI_Barrier(comm_);
                 TIME_POP("Communication");
             }
 
             if (communicationSuccessfull) {
                 assert(enableFT);
+                MPI_Barrier(comm_);
                 if (amIDead) {
                     return currPageRanks;
                 }
@@ -429,10 +435,12 @@ std::vector<double> pageRank(
                 assert(reStoreVectorHelper.has_value());
                 recoverFromFailure(
                     numEdges, edges, reStoreVectorHelper.value(), loadBalancer, myRank, numRanks, myOriginalRank);
+                MPI_Barrier(comm_);
                 TIME_POP("Recovery");
                 anotherPass = true;
             }
             if (isRecomputation) {
+                MPI_Barrier(comm_);
                 TIME_POP("Recomputation");
             }
         } while (anotherPass);
@@ -581,7 +589,7 @@ int main(int argc, char** argv) {
     for (int srcRank = 0; srcRank < numRanks; ++srcRank) {
         MPI_Recv(&buf, 1, MPI_INT, srcRank, 0, MPI_COMM_WORLD, &recvStatuses[asserting_cast<size_t>(srcRank)]);
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(comm_);
 
 
     auto start = MPI_Wtime();
