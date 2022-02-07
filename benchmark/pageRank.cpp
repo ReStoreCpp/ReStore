@@ -364,9 +364,8 @@ std::vector<double> pageRank(
     for (int currentIt = 0; currentIt < numIterations; ++currentIt) {
         std::swap(prevPageRanks, currPageRanks);
         std::fill(currPageRanks.begin(), currPageRanks.end(), 0.0);
-        size_t i            = 0;
-        bool   updatedEdges = false;
-        bool   anotherPass  = false;
+        size_t i           = 0;
+        bool   anotherPass = false;
 
         ranksToKill.clear();
         if (simulateFailures) {
@@ -379,6 +378,7 @@ std::vector<double> pageRank(
             anotherPass          = false;
             if (isRecomputation) {
                 assert(enableFT);
+                assert(i > 0);
                 TIME_PUSH_AND_START("Recomputation");
             }
             for (; i < edges.size(); ++i) {
@@ -417,8 +417,7 @@ std::vector<double> pageRank(
                 recoverFromFailure(
                     numEdges, edges, reStoreVectorHelper.value(), loadBalancer, myRank, numRanks, myOriginalRank);
                 TIME_POP("Recovery");
-                updatedEdges = true;
-                anotherPass  = true;
+                anotherPass = true;
             }
             if (isRecomputation) {
                 TIME_POP("Recomputation");
@@ -428,11 +427,6 @@ std::vector<double> pageRank(
         std::for_each(currPageRanks.begin(), currPageRanks.end(), [teleport, dampening](double& value) {
             value = getActualPageRank(value, teleport, dampening);
         });
-        if (updatedEdges) {
-            assert(enableFT);
-            std::sort(
-                edges.begin(), edges.end(), [](const edge_t lhs, const edge_t rhs) { return lhs.from < rhs.from; });
-        }
     }
     const double sum = std::accumulate(currPageRanks.begin(), currPageRanks.end(), 0.0);
     std::for_each(currPageRanks.begin(), currPageRanks.end(), [sum](double& value) { value /= sum; });
