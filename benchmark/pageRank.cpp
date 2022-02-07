@@ -404,10 +404,23 @@ std::vector<double> pageRank(
             //     std::cout << std::endl;
             // }
 
-            if (!fault_tolerant_mpi_call([&]() {
-                    return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm_);
-                })
-                || !ft_barrier()) {
+            if (isRecomputation) {
+                TIME_PUSH_AND_START("Communication-Recomputation");
+            } else {
+                TIME_PUSH_AND_START("Communication");
+            }
+
+            bool communicationSuccessfull = !fault_tolerant_mpi_call([&]() {
+                return MPI_Allreduce(currPageRanks.data(), tempPageRanks.data(), n, MPI_DOUBLE, MPI_SUM, comm_);
+            }) || !ft_barrier();
+
+            if (isRecomputation) {
+                TIME_POP("Communication-Recomputation");
+            } else {
+                TIME_POP("Communication");
+            }
+
+            if (communicationSuccessfull) {
                 assert(enableFT);
                 if (amIDead) {
                     return currPageRanks;
