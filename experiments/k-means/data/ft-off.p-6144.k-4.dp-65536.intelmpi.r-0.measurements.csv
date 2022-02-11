@@ -1,0 +1,2 @@
+simulationId,repeatId,numRanks,numDataPointsPerRank,numCenters,numIterations,numDimensions,useFaultTolerance,replicationLevel,failureSimulatorSeed,clusterCenterSeed,blocksPerPermutationRange,idRandomization,failureProbability,numSimulatedRankFailures,load-data,pick-centers,perform-iterations,total
+unspecified,0,6144,65536,20,500,32,0,0,0,0,4096,1,0,0,0.879102,0.000801378,22.4193,23.2992

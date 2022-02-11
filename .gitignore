@@ -373,5 +373,9 @@ experiments/page-rank-overhead/*.png
 # Presentations
 Presentations/
 
-# Experimental results
-experiments/id-compression/*.csv
+# Not published experimental results
+experiments/deprecated-*
+experiments/page-rank/
+experiments/k-means/cluster-centers
+experiments/microbenchmarks/communication-pattern-*.csv
+experiments/microbenchmarks/plot-communication-pattern.R

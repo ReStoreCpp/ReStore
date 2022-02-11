@@ -1,0 +1,15 @@
+# microbenchmarks
+cmake -B build-random-ids -DCMAKE_BUILD_TYPE=Release -DReStore_USE_FTMPI=Off -DReStore_ID_RANDOMIZATION=On -DReStore_SIMULATE_FAILURES=On
+cmake -B build-no-random-ids -DCMAKE_BUILD_TYPE=Release -DReStore_USE_FTMPI=Off -DReStore_ID_RANDOMIZATION=Off -DReStore_SIMULATE_FAILURES=On
+cmake --build build-random-ids -j --target microbenchmarks
+cmake --build build-no-random-ids -j --target microbenchmarks
+
+# k-means & page-rank
+cmake -B build-gnu-intelmpi -DCMAKE_BUILD_TYPE=Release -DReStore_USE_FTMPI=Off -DReStore_ID_RANDOMIZATION=On -DReStore_SIMULATE_FAILURES=On
+cmake --build build-gnu-intelmpi -j --target k-means --target pageRank
+
+# FT-RAxML-NG
+cmake -B build -DUSE_MPI=On -DUSE_TERRAPHAST=Off -DPROFILE_RESTORE_ONLY=Off
+cmake -B build-minimal -DUSE_MPI=On -DUSE_TERRAPHAST=Off -DPROFILE_RESTORE_ONLY=On
+cmake --build build -j
+cmake --build build-minimal -j
