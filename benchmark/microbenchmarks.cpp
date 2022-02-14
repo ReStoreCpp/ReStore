@@ -695,7 +695,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     assert(data.size() == blocksPerRank);
 
 
-    std::vector<BlockType> recvData(blocksPerRank, BlockType(bytesPerBlock));
+    std::vector<std::byte> readData(bytesPerRank);
     // Measurement
     for (auto _: state) {
         UNUSED(_);
@@ -733,21 +733,13 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         MPI_Barrier(MPI_COMM_WORLD);
         auto          start = std::chrono::high_resolution_clock::now();
         std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
-        for (auto& block: recvData) {
-            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-            assert(!inFileStream.eof());
-            inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
-            assert(block[0] == static_cast<ElementType>((readBlock++) % std::numeric_limits<uint8_t>::max()));
-            assert(!inFileStream.fail());
-            assert(inFileStream.good());
-        }
+        inFileStream.read((char*)readData.data(), asserting_cast<long>(bytesPerRank));
+        assert(!inFileStream.eof());
+        assert(!inFileStream.fail());
         assert(inFileStream.peek() == std::char_traits<char>::eof());
         inFileStream.close();
-        benchmark::DoNotOptimize(recvData.data());
+        benchmark::DoNotOptimize(readData.data());
         benchmark::ClobberMemory();
-        assert(std::all_of(recvData.begin(), recvData.end(), [bytesPerBlock](const BlockType& block) {
-            return block.size() == bytesPerBlock;
-        }));
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
         MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
@@ -828,8 +820,9 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         0, asserting_cast<unsigned long>(numRanks()) - numRankFailures);
 
     std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(bytesPerBlock));
+    std::vector<std::byte> readData(recvBlocksPerRank * bytesPerBlock);
 
-    std::string                filePrefix      = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
+    std::string                filePrefix = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
     ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
     std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
     std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
@@ -889,19 +882,12 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         MPI_Barrier(MPI_COMM_WORLD);
         auto          start = std::chrono::high_resolution_clock::now();
         std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
-        for (auto& block: recvData) {
-            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-            inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
-            assert(block[0] == static_cast<ElementType>((myStartBlock++) % std::numeric_limits<uint8_t>::max()));
-            assert(inFileStream.good());
-        }
+        inFileStream.read((char*)readData.data(), asserting_cast<long>(recvBlocksPerRank * bytesPerBlock));
+        assert(inFileStream.good());
         assert(inFileStream.peek() == std::char_traits<char>::eof());
         inFileStream.close();
-        benchmark::DoNotOptimize(recvData.data());
+        benchmark::DoNotOptimize(readData.data());
         benchmark::ClobberMemory();
-        assert(std::all_of(recvData.begin(), recvData.end(), [bytesPerBlock](const BlockType& block) {
-            return block.size() == bytesPerBlock;
-        }));
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
         MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
@@ -983,8 +969,9 @@ static void BM_DiskSingleRank(benchmark::State& state) {
         0, asserting_cast<unsigned long>(numRanks()) - numRankFailures);
 
     std::vector<BlockType> recvData(recvBlocksPerRank, BlockType(bytesPerBlock));
+    std::vector<std::byte> readData(recvBlocksPerRank * bytesPerBlock);
 
-    std::string                filePrefix      = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
+    std::string                filePrefix = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
     ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
     std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
     std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
@@ -1044,19 +1031,12 @@ static void BM_DiskSingleRank(benchmark::State& state) {
         MPI_Barrier(MPI_COMM_WORLD);
         auto          start = std::chrono::high_resolution_clock::now();
         std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
-        for (auto& block: recvData) {
-            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-            inFileStream.read((char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
-            assert(block[0] == static_cast<ElementType>((myStartBlock++) % std::numeric_limits<uint8_t>::max()));
-            assert(inFileStream.good());
-        }
+        inFileStream.read((char*)readData.data(), asserting_cast<long>(recvBlocksPerRank * bytesPerBlock));
+        assert(inFileStream.good());
         assert(inFileStream.peek() == std::char_traits<char>::eof());
         inFileStream.close();
-        benchmark::DoNotOptimize(recvData.data());
+        benchmark::DoNotOptimize(readData.data());
         benchmark::ClobberMemory();
-        assert(std::all_of(recvData.begin(), recvData.end(), [bytesPerBlock](const BlockType& block) {
-            return block.size() == bytesPerBlock;
-        }));
         auto end            = std::chrono::high_resolution_clock::now();
         auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
         MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
