@@ -657,7 +657,7 @@ static void BM_pullBlocksRedistribute(benchmark::State& state) {
 }
 
 
-template <bool MPI_IO>
+template <bool use_MPI_IO>
 static void BM_DiskRedistribute(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
 
@@ -681,9 +681,9 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     uint64_t rankId = asserting_cast<uint64_t>(myRankId());
 
     std::string filePrefix      = "disk-benchmarks/checkpoint_redistribute_" + std::to_string(numRanks()) + "_";
-    std::string fileNametoWrite = filePrefix + (MPI_IO ? "all" : std::to_string(rankId));
+    std::string fileNametoWrite = filePrefix + (use_MPI_IO ? "all" : std::to_string(rankId));
     auto        readRank        = (rankId + 49) % asserting_cast<uint64_t>(numRanks());
-    std::string fileNameToRead  = filePrefix + (MPI_IO ? "all" : std::to_string(readRank));
+    std::string fileNameToRead  = filePrefix + (use_MPI_IO ? "all" : std::to_string(readRank));
 
     std::vector<BlockType> data;
     for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
@@ -703,12 +703,12 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         UNUSED(_);
 
         // make sure the File doesn't exist already from a previous run
-        bool shouldDelete = !MPI_IO || myRankId() == 0;
+        bool shouldDelete = !use_MPI_IO || myRankId() == 0;
         if (shouldDelete) {
             std::remove(fileNametoWrite.c_str());
         }
 
-        if constexpr (!MPI_IO) {
+        if constexpr (!use_MPI_IO) {
             std::ofstream outFileStream(fileNametoWrite, std::ios::binary | std::ios::out | std::ios::app);
 
             auto writeBlock = blocksPerRank * rankId;
@@ -752,7 +752,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         // round.
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
-        if constexpr (!MPI_IO) {
+        if constexpr (!use_MPI_IO) {
             std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
             inFileStream.read((char*)readData.data(), asserting_cast<long>(bytesPerRank));
             assert(!inFileStream.eof());
@@ -781,7 +781,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 }
 
 
-template <bool MPI_IO>
+template <bool use_MPI_IO>
 static void BM_DiskSmallRange(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
 
@@ -857,15 +857,15 @@ static void BM_DiskSmallRange(benchmark::State& state) {
 
     std::string                filePrefix = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
     ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
-    std::string                fileNameToWrite = filePrefix + (MPI_IO ? "all" : std::to_string(rankToWriteFor));
-    std::string                fileNameToRead  = filePrefix + (MPI_IO ? "all" : std::to_string(myRankId()));
+    std::string                fileNameToWrite = filePrefix + (use_MPI_IO ? "all" : std::to_string(rankToWriteFor));
+    std::string                fileNameToRead  = filePrefix + (use_MPI_IO ? "all" : std::to_string(myRankId()));
 
     // Measurement
     for (auto _: state) {
         UNUSED(_);
 
         // make sure the File doesn't exist already from a previous run
-        bool shouldDelete = !MPI_IO || myRankId() == 0;
+        bool shouldDelete = !use_MPI_IO || myRankId() == 0;
         if (shouldDelete) {
             std::remove(fileNameToWrite.c_str());
         }
@@ -896,7 +896,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
             });
 
 
-        if constexpr (!MPI_IO) {
+        if constexpr (!use_MPI_IO) {
             std::ofstream outFileStream(fileNameToWrite, std::ios::binary | std::ios::out | std::ios::app);
 
             for (const auto& block: recvData) {
@@ -935,7 +935,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         // round.
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
-        if constexpr (!MPI_IO) {
+        if constexpr (!use_MPI_IO) {
             std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
             inFileStream.read((char*)readData.data(), asserting_cast<long>(recvBlocksPerRank * bytesPerBlock));
 
