@@ -697,7 +697,19 @@ static void BM_DiskRedistribute(benchmark::State& state) {
     assert(data.size() == blocksPerRank);
 
 
-    std::vector<std::byte> readData(bytesPerRank);
+    std::vector<std::byte>   readData(bytesPerRank);
+    std::vector<ElementType> writeVector;
+    writeVector.reserve(blocksPerRank);
+
+    for (const auto& block: data) {
+        writeVector.insert(writeVector.end(), block.begin(), block.end());
+    }
+    assert(writeVector.size() * sizeof(ElementType) == bytesPerRank);
+    assert(
+        writeVector[0]
+        == static_cast<ElementType>(
+            (asserting_cast<size_t>(myRankId()) * blocksPerRank) % std::numeric_limits<uint8_t>::max()));
+
     // Measurement
     for (auto _: state) {
         UNUSED(_);
@@ -714,13 +726,9 @@ static void BM_DiskRedistribute(benchmark::State& state) {
             auto writeBlock = blocksPerRank * rankId;
             UNUSED(writeBlock);
 
-            for (const auto& block: data) {
-                assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-                assert(block[0] == static_cast<ElementType>((writeBlock++) % std::numeric_limits<uint8_t>::max()));
-                outFileStream.write(
-                    (const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
-                assert(outFileStream.good());
-            }
+            outFileStream.write((const char*)writeVector.data(), asserting_cast<long>(blocksPerRank * bytesPerBlock));
+            assert(outFileStream.good());
+
             outFileStream.close();
         } else {
             auto accessMode =
@@ -729,11 +737,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
             mpi_io::ConcurrentFile mpiFile(fileNametoWrite, accessMode, MPI_COMM_WORLD);
             auto                   writeByte = blocksPerRank * rankId * bytesPerBlock;
 
-            for (const auto& block: data) {
-                assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-                mpiFile.write_collective(block, writeByte);
-                writeByte += bytesPerBlock;
-            }
+            mpiFile.write_collective(writeVector, writeByte);
         }
 
         auto readBlock = blocksPerRank * readRank;
@@ -860,6 +864,8 @@ static void BM_DiskSmallRange(benchmark::State& state) {
     std::string                fileNameToWrite = filePrefix + (use_MPI_IO ? "all" : std::to_string(rankToWriteFor));
     std::string                fileNameToRead  = filePrefix + (use_MPI_IO ? "all" : std::to_string(myRankId()));
 
+    std::vector<ElementType> writeVector(recvBlocksPerRank);
+
     // Measurement
     for (auto _: state) {
         UNUSED(_);
@@ -900,16 +906,19 @@ static void BM_DiskSmallRange(benchmark::State& state) {
 
         assert(recvHandlerCounter == recvBlocksPerRank);
 
+        writeVector.clear();
+        for (const auto& block: recvData) {
+            writeVector.insert(writeVector.end(), block.begin(), block.end());
+        }
+        assert(writeVector.size() * sizeof(ElementType) == recvBlocksPerRank * bytesPerBlock);
+        assert(writeVector[0] == static_cast<ElementType>((writeStartBlock) % std::numeric_limits<uint8_t>::max()));
+
         if constexpr (!use_MPI_IO) {
             std::ofstream outFileStream(fileNameToWrite, std::ios::binary | std::ios::out | std::ios::app);
 
-            for (const auto& block: recvData) {
-                assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-                outFileStream.write(
-                    (const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
-                assert(block[0] == static_cast<ElementType>((writeStartBlock++) % std::numeric_limits<uint8_t>::max()));
-                assert(outFileStream.good());
-            }
+            outFileStream.write(
+                (const char*)writeVector.data(), asserting_cast<long>(recvBlocksPerRank * bytesPerBlock));
+            assert(outFileStream.good());
             outFileStream.close();
         } else {
             auto accessMode =
@@ -918,11 +927,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
             mpi_io::ConcurrentFile mpiFile(fileNameToWrite, accessMode, MPI_COMM_WORLD);
             auto writeByte = asserting_cast<size_t>(rankToWriteFor) * recvBlocksPerRank * bytesPerBlock;
 
-            for (const auto& block: recvData) {
-                assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-                mpiFile.write_collective(block, writeByte);
-                writeByte += bytesPerBlock;
-            }
+            mpiFile.write_collective(writeVector, writeByte);
         }
 
 
@@ -933,10 +938,10 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         //         block.begin(), block.end(), [](const ElementType& blockElement) { return blockElement == 255; });
         // }));
 
-        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
-        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
-        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
-        // round.
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks
+        // from having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in
+        // the SparseAllToAll implementation which will sometimes allow messages spilling over into the next
+        // SparseAllToAll round.
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
         if constexpr (!use_MPI_IO) {
@@ -1204,34 +1209,34 @@ BENCHMARK_TEMPLATE(BM_DiskRedistribute, false) ///
     ->UseManualTime()                          ///
     ->Unit(benchmark::kMillisecond)            ///
     ->Iterations(1)                            ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskRedistribute, true) ///
     ->Name("BM_MpiIoRedistribute")            ///
     ->UseManualTime()                         ///
     ->Unit(benchmark::kMillisecond)           ///
     ->Iterations(1)                           ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskSmallRange, false) ///
     ->Name("BM_DiskSmallRange")              ///
     ->UseManualTime()                        ///
     ->Unit(benchmark::kMillisecond)          ///
     ->Iterations(1)                          ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskSmallRange, true) ///
     ->Name("BM_MpiIoSmallRange")            ///
     ->UseManualTime()                       ///
     ->Unit(benchmark::kMillisecond)         ///
     ->Iterations(1)                         ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
-// BENCHMARK(BM_DiskSingleRank)        ///
-//     ->UseManualTime()               ///
-//     ->Unit(benchmark::kMillisecond) ///
-//     ->Iterations(1)                 ///
-//     ->Apply(benchmarkArguments<false, false, false, false>);
+BENCHMARK(BM_DiskSingleRank)        ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 // This reporter does nothing.
 // We can use it to disable output from all but the root process
