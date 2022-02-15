@@ -751,9 +751,9 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
         // round.
         MPI_Barrier(MPI_COMM_WORLD);
-        auto          start = std::chrono::high_resolution_clock::now();
-        std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
+        auto start = std::chrono::high_resolution_clock::now();
         if constexpr (!MPI_IO) {
+            std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
             inFileStream.read((char*)readData.data(), asserting_cast<long>(bytesPerRank));
             assert(!inFileStream.eof());
             assert(!inFileStream.fail());
@@ -761,7 +761,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
             inFileStream.close();
         } else {
             mpi_io::ConcurrentFile mpiFile(
-                fileNametoWrite, mpi_io::ConcurrentFile::AccessMode::ReadOnly, MPI_COMM_WORLD);
+                fileNameToRead, mpi_io::ConcurrentFile::AccessMode::ReadOnly, MPI_COMM_WORLD);
             auto readByte = blocksPerRank * readRank * bytesPerBlock;
 
             mpiFile.read_collective(readData, bytesPerRank, readByte);
@@ -781,6 +781,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 }
 
 
+template <bool MPI_IO>
 static void BM_DiskSmallRange(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
 
@@ -856,8 +857,8 @@ static void BM_DiskSmallRange(benchmark::State& state) {
 
     std::string                filePrefix = "disk-benchmarks/checkpoint_smallRange_" + std::to_string(numRanks()) + "_";
     ReStoreMPI::current_rank_t rankToWriteFor  = (myRankId() + 49) % numRanks();
-    std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
-    std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
+    std::string                fileNameToWrite = filePrefix + (MPI_IO ? "all" : std::to_string(rankToWriteFor));
+    std::string                fileNameToRead  = filePrefix + (MPI_IO ? "all" : std::to_string(myRankId()));
 
     // make sure the File doesn't exist already from a previous run
     std::remove(fileNameToWrite.c_str());
@@ -889,15 +890,31 @@ static void BM_DiskSmallRange(benchmark::State& state) {
                     reinterpret_cast<const ElementType*>(buffer + size));
             });
 
-        std::ofstream outFileStream(fileNameToWrite, std::ios::binary | std::ios::out | std::ios::app);
 
-        for (const auto& block: recvData) {
-            assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-            outFileStream.write((const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
-            assert(block[0] == static_cast<ElementType>((writeStartBlock++) % std::numeric_limits<uint8_t>::max()));
-            assert(outFileStream.good());
+        if constexpr (!MPI_IO) {
+            std::ofstream outFileStream(fileNameToWrite, std::ios::binary | std::ios::out | std::ios::app);
+
+            for (const auto& block: recvData) {
+                assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+                outFileStream.write(
+                    (const char*)block.data(), asserting_cast<long>(block.size() * sizeof(ElementType)));
+                assert(block[0] == static_cast<ElementType>((writeStartBlock++) % std::numeric_limits<uint8_t>::max()));
+                assert(outFileStream.good());
+            }
+            outFileStream.close();
+        } else {
+            auto accessMode =
+                mpi_io::ConcurrentFile::AccessMode::WriteOnly | mpi_io::ConcurrentFile::AccessMode::Create;
+
+            mpi_io::ConcurrentFile mpiFile(fileNameToWrite, accessMode, MPI_COMM_WORLD);
+            auto writeByte = asserting_cast<size_t>(rankToWriteFor) * recvBlocksPerRank * bytesPerBlock;
+
+            for (const auto& block: recvData) {
+                assert(block.size() * sizeof(ElementType) == bytesPerBlock);
+                mpiFile.write(block, writeByte);
+                writeByte += bytesPerBlock;
+            }
         }
-        outFileStream.close();
 
 
         // std::for_each(
@@ -912,12 +929,21 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
         // round.
         MPI_Barrier(MPI_COMM_WORLD);
-        auto          start = std::chrono::high_resolution_clock::now();
-        std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
-        inFileStream.read((char*)readData.data(), asserting_cast<long>(recvBlocksPerRank * bytesPerBlock));
-        assert(inFileStream.good());
-        assert(inFileStream.peek() == std::char_traits<char>::eof());
-        inFileStream.close();
+        auto start = std::chrono::high_resolution_clock::now();
+        if constexpr (!MPI_IO) {
+            std::ifstream inFileStream(fileNameToRead, std::ios::binary | std::ios::in);
+            inFileStream.read((char*)readData.data(), asserting_cast<long>(recvBlocksPerRank * bytesPerBlock));
+
+            assert(inFileStream.good());
+            assert(inFileStream.peek() == std::char_traits<char>::eof());
+            inFileStream.close();
+        } else {
+            mpi_io::ConcurrentFile mpiFile(
+                fileNameToRead, mpi_io::ConcurrentFile::AccessMode::ReadOnly, MPI_COMM_WORLD);
+            auto readByte = asserting_cast<size_t>(myRankId()) * recvBlocksPerRank * bytesPerBlock;
+
+            mpiFile.read_collective(readData, recvBlocksPerRank * bytesPerBlock, readByte);
+        }
         benchmark::DoNotOptimize(readData.data());
         benchmark::ClobberMemory();
         assert(
