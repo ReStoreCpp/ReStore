@@ -731,7 +731,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 
             for (const auto& block: data) {
                 assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-                mpiFile.write(block, writeByte);
+                mpiFile.write_collective(block, writeByte);
                 writeByte += bytesPerBlock;
             }
         }
@@ -882,10 +882,13 @@ static void BM_DiskSmallRange(benchmark::State& state) {
         blockRanges.emplace_back(writeStartBlock, recvBlocksPerRank);
         assert(writeStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
 
+        size_t recvHandlerCounter = 0;
         store.pullBlocks(
-            blockRanges,
-            [&recvData, writeStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
+            blockRanges, [&recvData, writeStartBlock, bytesPerBlock,
+                          &recvHandlerCounter](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
+                ++recvHandlerCounter;
                 assert(blockId >= writeStartBlock);
+                assert(size == bytesPerBlock);
                 auto index = blockId - writeStartBlock;
                 assert(index < recvData.size());
                 // assert(recvData[index].size() == 0);
@@ -895,6 +898,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
                     reinterpret_cast<const ElementType*>(buffer + size));
             });
 
+        assert(recvHandlerCounter == recvBlocksPerRank);
 
         if constexpr (!use_MPI_IO) {
             std::ofstream outFileStream(fileNameToWrite, std::ios::binary | std::ios::out | std::ios::app);
@@ -916,7 +920,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
 
             for (const auto& block: recvData) {
                 assert(block.size() * sizeof(ElementType) == bytesPerBlock);
-                mpiFile.write(block, writeByte);
+                mpiFile.write_collective(block, writeByte);
                 writeByte += bytesPerBlock;
             }
         }
@@ -1200,34 +1204,34 @@ BENCHMARK_TEMPLATE(BM_DiskRedistribute, false) ///
     ->UseManualTime()                          ///
     ->Unit(benchmark::kMillisecond)            ///
     ->Iterations(1)                            ///
-    ->Apply(benchmarkArguments<false, false, true, true>);
+    ->Apply(benchmarkArguments<false, false, true, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskRedistribute, true) ///
     ->Name("BM_MpiIoRedistribute")            ///
     ->UseManualTime()                         ///
     ->Unit(benchmark::kMillisecond)           ///
     ->Iterations(1)                           ///
-    ->Apply(benchmarkArguments<false, false, true, true>);
+    ->Apply(benchmarkArguments<false, false, true, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskSmallRange, false) ///
     ->Name("BM_DiskSmallRange")              ///
     ->UseManualTime()                        ///
     ->Unit(benchmark::kMillisecond)          ///
     ->Iterations(1)                          ///
-    ->Apply(benchmarkArguments<false, false, true, true>);
+    ->Apply(benchmarkArguments<false, false, true, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskSmallRange, true) ///
     ->Name("BM_MpiIoSmallRange")            ///
     ->UseManualTime()                       ///
     ->Unit(benchmark::kMillisecond)         ///
     ->Iterations(1)                         ///
-    ->Apply(benchmarkArguments<false, false, true, true>);
+    ->Apply(benchmarkArguments<false, false, true, false>);
 
-BENCHMARK(BM_DiskSingleRank)        ///
-    ->UseManualTime()               ///
-    ->Unit(benchmark::kMillisecond) ///
-    ->Iterations(1)                 ///
-    ->Apply(benchmarkArguments<false, false, false, false>);
+// BENCHMARK(BM_DiskSingleRank)        ///
+//     ->UseManualTime()               ///
+//     ->Unit(benchmark::kMillisecond) ///
+//     ->Iterations(1)                 ///
+//     ->Apply(benchmarkArguments<false, false, false, false>);
 
 // This reporter does nothing.
 // We can use it to disable output from all but the root process
