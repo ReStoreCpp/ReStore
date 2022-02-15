@@ -1175,7 +1175,7 @@ BENCHMARK(BM_submitBlocks)          ///
 BENCHMARK(BM_pullBlocksRedistribute) ///
     ->UseManualTime()                ///
     ->Unit(benchmark::kMillisecond)  ///
-    ->Iterations(1)                 ///
+    ->Iterations(1)                  ///
     ->Apply(benchmarkArguments<false, true, true, true>);
 
 BENCHMARK(BM_pullBlocksSmallRange)  ///
@@ -1190,16 +1190,32 @@ BENCHMARK(BM_pullBlocksSingleRank)  ///
     ->Iterations(1)                 ///
     ->Apply(benchmarkArguments<false, false, false, false>);
 
-BENCHMARK(BM_DiskRedistribute)      ///
-    ->UseManualTime()               ///
-    ->Unit(benchmark::kMillisecond) ///
-    ->Iterations(1)                 ///
+BENCHMARK_TEMPLATE(BM_DiskRedistribute, false) ///
+    ->Name("BM_DiskRedistribute")              ///
+    ->UseManualTime()                          ///
+    ->Unit(benchmark::kMillisecond)            ///
+    ->Iterations(1)                            ///
     ->Apply(benchmarkArguments<false, false, true, true>);
 
-BENCHMARK(BM_DiskSmallRange)        ///
-    ->UseManualTime()               ///
-    ->Unit(benchmark::kMillisecond) ///
-    ->Iterations(1)                 ///
+BENCHMARK_TEMPLATE(BM_DiskRedistribute, true) ///
+    ->Name("BM_MpiIoRedistribute")            ///
+    ->UseManualTime()                         ///
+    ->Unit(benchmark::kMillisecond)           ///
+    ->Iterations(1)                           ///
+    ->Apply(benchmarkArguments<false, false, true, true>);
+
+BENCHMARK_TEMPLATE(BM_DiskSmallRange, false) ///
+    ->Name("BM_DiskSmallRange")              ///
+    ->UseManualTime()                        ///
+    ->Unit(benchmark::kMillisecond)          ///
+    ->Iterations(1)                          ///
+    ->Apply(benchmarkArguments<false, false, true, true>);
+
+BENCHMARK_TEMPLATE(BM_DiskSmallRange, true) ///
+    ->Name("BM_MpiIoSmallRange")            ///
+    ->UseManualTime()                       ///
+    ->Unit(benchmark::kMillisecond)         ///
+    ->Iterations(1)                         ///
     ->Apply(benchmarkArguments<false, false, true, true>);
 
 BENCHMARK(BM_DiskSingleRank)        ///
