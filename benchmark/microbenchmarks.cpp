@@ -1204,28 +1204,28 @@ BENCHMARK_TEMPLATE(BM_DiskRedistribute, false) ///
     ->UseManualTime()                          ///
     ->Unit(benchmark::kMillisecond)            ///
     ->Iterations(1)                            ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskRedistribute, true) ///
     ->Name("BM_MpiIoRedistribute")            ///
     ->UseManualTime()                         ///
     ->Unit(benchmark::kMillisecond)           ///
     ->Iterations(1)                           ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskSmallRange, false) ///
     ->Name("BM_DiskSmallRange")              ///
     ->UseManualTime()                        ///
     ->Unit(benchmark::kMillisecond)          ///
     ->Iterations(1)                          ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskSmallRange, true) ///
     ->Name("BM_MpiIoSmallRange")            ///
     ->UseManualTime()                       ///
     ->Unit(benchmark::kMillisecond)         ///
     ->Iterations(1)                         ///
-    ->Apply(benchmarkArguments<false, false, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
 // BENCHMARK(BM_DiskSingleRank)        ///
 //     ->UseManualTime()               ///
