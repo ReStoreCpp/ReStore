@@ -163,18 +163,23 @@ class ConcurrentFile {
         if (pages_to_read > static_cast<size_t>(std::numeric_limits<int>::max())) {
             throw MPIException("To many blocks in read");
         }
-        int err = MPI_File_read_at_all(handle, position, buffer.data(), pages_to_read, page_type, &status);
+        int err = MPI_File_read_at_all(
+            handle, static_cast<MPI_Offset>(position), buffer.data(), static_cast<int>(pages_to_read), page_type,
+            &status);
         check_mpi_error(err, __FILE__, __LINE__);
         int pages_read;
         MPI_Get_count(&status, page_type, &pages_read);
         size_t remaining_bytes = bytes_to_read % blocksize;
-        position += pages_read * blocksize;
-        std::byte* buffer_pointer = reinterpret_cast<std::byte*>(buffer.data()) + pages_read * blocksize;
-        err = MPI_File_read_at_all(handle, position, buffer_pointer, remaining_bytes, MPI_BYTE, &status);
+        position += static_cast<size_t>(pages_read) * blocksize;
+        std::byte* buffer_pointer =
+            reinterpret_cast<std::byte*>(buffer.data()) + static_cast<size_t>(pages_read) * blocksize;
+        err = MPI_File_read_at_all(
+            handle, static_cast<MPI_Offset>(position), buffer_pointer, static_cast<int>(remaining_bytes), MPI_BYTE,
+            &status);
         check_mpi_error(err, __FILE__, __LINE__);
         int bytes_read;
         MPI_Get_count(&status, MPI_BYTE, &bytes_read);
-        total_bytes_read     = pages_read * blocksize + bytes_read;
+        total_bytes_read     = static_cast<size_t>(pages_read) * blocksize + static_cast<size_t>(bytes_read);
         size_t elements_read = total_bytes_read / sizeof(T);
         buffer.resize(elements_read);
         return elements_read;
@@ -186,29 +191,35 @@ class ConcurrentFile {
         size_t     bytes_to_write = buffer.size() * sizeof(T);
         size_t     total_bytes_written;
         if (bytes_to_write <= blocksize) {
-            int err = MPI_File_write_at(handle, position, buffer.data(), bytes_to_write, MPI_BYTE, &status);
+            int err = MPI_File_write_at(
+                handle, static_cast<MPI_Offset>(position), buffer.data(), static_cast<int>(bytes_to_write), MPI_BYTE,
+                &status);
             check_mpi_error(err, __FILE__, __LINE__);
             int bytes_written;
             MPI_Get_count(&status, MPI_BYTE, &bytes_written);
-            total_bytes_written = bytes_written;
+            total_bytes_written = static_cast<size_t>(bytes_written);
         } else {
             size_t pages_to_write = bytes_to_write / blocksize;
             if (pages_to_write > std::numeric_limits<int>::max()) {
                 throw MPIException("To many blocks in write");
             }
-            int err = MPI_File_write_at(handle, position, buffer.data(), pages_to_write, page_type, &status);
+            int err = MPI_File_write_at(
+                handle, static_cast<MPI_Offset>(position), buffer.data(), static_cast<int>(pages_to_write), page_type,
+                &status);
             check_mpi_error(err, __FILE__, __LINE__);
             int pages_written;
             MPI_Get_count(&status, page_type, &pages_written);
             size_t remaining_bytes = bytes_to_write % blocksize;
-            position += pages_written * blocksize;
+            position += static_cast<size_t>(pages_written) * blocksize;
             const std::byte* buffer_pointer =
-                reinterpret_cast<const std::byte*>(buffer.data()) + pages_written * blocksize;
-            err = MPI_File_write_at(handle, position, buffer_pointer, remaining_bytes, MPI_BYTE, &status);
+                reinterpret_cast<const std::byte*>(buffer.data()) + static_cast<size_t>(pages_written) * blocksize;
+            err = MPI_File_write_at(
+                handle, static_cast<MPI_Offset>(position), buffer_pointer, static_cast<int>(remaining_bytes), MPI_BYTE,
+                &status);
             check_mpi_error(err, __FILE__, __LINE__);
             int bytes_read;
             MPI_Get_count(&status, MPI_BYTE, &bytes_read);
-            total_bytes_written = pages_written * blocksize + bytes_read;
+            total_bytes_written = static_cast<size_t>(pages_written) * blocksize + static_cast<size_t>(bytes_read);
         }
         size_t elements_written = total_bytes_written / sizeof(T);
         return elements_written;
