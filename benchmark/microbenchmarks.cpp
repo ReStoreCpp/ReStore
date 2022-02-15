@@ -860,11 +860,16 @@ static void BM_DiskSmallRange(benchmark::State& state) {
     std::string                fileNameToWrite = filePrefix + (MPI_IO ? "all" : std::to_string(rankToWriteFor));
     std::string                fileNameToRead  = filePrefix + (MPI_IO ? "all" : std::to_string(myRankId()));
 
-    // make sure the File doesn't exist already from a previous run
-    std::remove(fileNameToWrite.c_str());
     // Measurement
     for (auto _: state) {
         UNUSED(_);
+
+        // make sure the File doesn't exist already from a previous run
+        bool shouldDelete = !MPI_IO || myRankId() == 0;
+        if (shouldDelete) {
+            std::remove(fileNameToWrite.c_str());
+        }
+
 
         assert(writeStartBlock == std::numeric_limits<ReStore::block_id_t>::max());
 
@@ -1037,15 +1042,11 @@ static void BM_DiskSingleRank(benchmark::State& state) {
     std::string                fileNameToWrite = filePrefix + std::to_string(rankToWriteFor);
     std::string                fileNameToRead  = filePrefix + std::to_string(myRankId());
 
+    // make sure the File doesn't exist already from a previous run
+    std::remove(fileNameToWrite.c_str());
     // Measurement
     for (auto _: state) {
         UNUSED(_);
-
-        // make sure the File doesn't exist already from a previous run
-        bool shouldDelete = !MPI_IO || myRankId() == 0;
-        if (shouldDelete) {
-            std::remove(fileNameToWrite.c_str());
-        }
 
         assert(writeStartBlock == std::numeric_limits<ReStore::block_id_t>::max());
 
