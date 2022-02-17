@@ -894,6 +894,7 @@ static void BM_DiskSmallRange(benchmark::State& state) {
                           &recvHandlerCounter](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
                 ++recvHandlerCounter;
                 assert(blockId >= writeStartBlock);
+                UNUSED(bytesPerBlock);
                 assert(size == bytesPerBlock);
                 auto index = blockId - writeStartBlock;
                 assert(index < recvData.size());
