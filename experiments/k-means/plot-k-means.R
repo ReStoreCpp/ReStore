@@ -1,31 +1,20 @@
-library(readr)
-library(dplyr)
-library(ggplot2)
-library(data.table)
-library(purrr)
-library(tidyr)
-
-# Automatically use showtext to render text for future devices.
-showtext_auto()
-
-# Load Computer Modern font
-font_add("Computer Modern", "cmunrm.ttf")
-
 # Read the input data
-input_dir = "~/projects/ReStore/results/k-means-overhead/"
-output_dir <- input_dir
+output_dir = "~/projects/ReStore/experiments/k-means"
+input_dir <- paste(output_dir, "data", sep = '/')
 setwd(input_dir)
+
+source("../../common.R")
 
 ft_off_data <- 
   list.files(pattern = "ft-off.*.intelmpi.*.csv") %>% 
-  map_df(~fread(.)) %>%
+  map_df(~read_csv(.)) %>%
   # Older versions of the benchmark have a bug where the replication level is
   # not initialized if fault tolerance is turned off.
   mutate(replicationLevel = 0)
 
 ft_on_data <- 
   list.files(pattern = "ft-on.*.intelmpi.*.csv") %>% 
-  map_df(~fread(.))
+  map_df(~read_csv(.))
 
 # Joint the data from the experiments with and without failure simulation.
 # The experiments without simulated failures will have fewer columns, these are
@@ -152,9 +141,9 @@ aggregated_data %>%
       `rebalance-after-failure` = "rebalance after failure",
       `other-ft-mechanisms` = "other ft mechanisms",
       `restore-overhead` = "restore overhead",
-      `total` = "overall runtime"),
+      `total` = "overall running time"),
       levels = c("k-means loop", "restore overhead", "submit data to restore", "rebalance after failure",
-                 "restore lost data", "other ft mechanisms", "overall runtime")
+                 "restore lost data", "other ft mechanisms", "overall running time")
   )) %>% 
 ggplot(
   aes(
@@ -188,53 +177,8 @@ ggplot(
   )
 ggsave(
   paste(output_dir, "k-means.pdf", sep = '/'),
-  width = 120, height = 50, units = "mm"
+  width = 120, height = 40, units = "mm"
 )
-
-# time per failure
-aggregated_data %>%
-  filter(timer == "restore-data") %>%
-  mutate(
-    meanTimePerFailure_s = time_mean_s / failures_mean,
-    sdTimePerFailure_s = time_sd_s /failures_mean
-    ) %>%
-ggplot(aes(x = numRanksStart, y = meanTimePerFailure_s, color = useFaultTolerance)) +
-  geom_line() +
-  geom_point() +
-  geom_errorbar(
-    aes(
-      ymin = meanTimePerFailure_s - sdTimePerFailure_s,
-      ymax = meanTimePerFailure_s + sdTimePerFailure_s
-    ),
-    width = 0.2
-  ) +
-  facet_wrap(~factor(
-    timer,
-    levels = c(
-      "pick-centers", "perform-iterations", "submit-data", "restore-data",
-      "rebalance-after-failure",  "other-ft-mechanisms", "total", "get-ranks-died-since-last-call",
-      "get-my-original-rank", "get-new-blocks-after-failure-for-pull-blocks"
-    ))) +
-  theme_bw() +
-  theme(
-    # Remove unneeded grid elements
-    panel.grid.minor.x = element_blank(),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.y = element_blank(),
-    panel.grid.major.y = element_blank(),
-    
-    # Angle the x-axis labels
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    
-    # Move legend position and remove its title
-    legend.position = c(0.15, 0.85)
-  ) +
-  scale_x_log10(breaks = x_breaks) +
-  labs(
-    x = "#ranks",
-    y = "time [s]",
-    color = "rank failures"
-  )
 
 # slowdown introduced by fault-tolerance and failures
 slowdown_data <- data %>%
@@ -305,5 +249,4 @@ data %>%
     slowdon_by_restore = `restore-overhead` / total
   ) %>%
   summary()
-  
   

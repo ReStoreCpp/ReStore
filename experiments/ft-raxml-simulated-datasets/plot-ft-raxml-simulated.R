@@ -1,10 +1,10 @@
-source("../common.R")
-
-NUM_RANKS_PER_NODE <- 48
-
 input_dir <- "~/projects/ReStore/experiments/ft-raxml-simulated-datasets" 
 output_dir <- input_dir
 csv_file <- paste(input_dir, "data.csv", sep = '/') 
+
+source("../common.R")
+
+NUM_RANKS_PER_NODE <- 48
 
 ### Data loading ###
 data <- read_csv(
@@ -74,8 +74,12 @@ ggplot(
     size = 1
   ) +
   theme_husky(
-    legend.position = c(0, 0),
-    legend.justification = c("left", "bottom"),
+    #legend.position = c(0, 0),
+    legend.position = "bottom",
+    legend.margin = margin(),
+    legend.box.margin = margin(),
+    legend.box.spacing = unit(1, "mm"),
+    #legend.justification = c("left", "bottom"),
     legend.title = element_blank(),
     axis.text.x = element_text(angle = 45, hjust = 1),
     axis.title.y = element_blank()
@@ -91,7 +95,13 @@ ggplot(
         "loadMSAFromRBACached" = "load cached binary file",
         "loadMSAFromRBAUncached" = "load uncached binary file"
       ),
-      values = c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e")
-  )
-ggsave(paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'), width = 58.5, height = 59, units = "mm")
+      values = c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e"),
+  ) +
+  guides(
+    color = guide_legend(
+      nrow = 4,
+      byrow = TRUE,
+      keyheight  = unit(0, "mm"),
+  ))
+ggsave(paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'), width = 58.5, height = 55, units = "mm")
 

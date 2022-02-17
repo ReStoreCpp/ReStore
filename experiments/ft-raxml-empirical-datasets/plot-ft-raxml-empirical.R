@@ -1,7 +1,8 @@
-source("../common.R")
-
 output_dir <- "~/projects/ReStore/experiments/ft-raxml-empirical-datasets"
 data_dir <- paste(output_dir, "data", sep = '/') 
+setwd(output_dir)
+
+source("../common.R")
 
 # Dataset to verbose label
 dataset2Label <- function(s) {
@@ -123,6 +124,7 @@ ggplot() +
   theme_husky(
     legend.position = "none",
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.45),
+    axis.title.x = element_blank(),
     # legend.position = c(0, 1),
     # legend.justification = c("left", "top"),
     # legend.box.just = "left",
@@ -139,13 +141,13 @@ ggplot() +
       #"dna_rokasD1" = "DNA SongD1 @ 480 ranks\n1339k sites · 37 taxa\n48 MiB\n0.10 MiB/rank",
       #"dna_rokasD4" = "DNA XiD4 @ 192 ranks\n240k sites · 46 taxa\n11 MiB\n0.06 MiB/rank",
       #"dna_rokasD7" = "DNA TarvD7 @ 4000 ranks\n21411k sites · 36 taxa\n736 MiB\n0.18 MiB/rank"
-      "aa_rokasA1" = "NagyA1 · 96 ranks\n0.10 MiB/rank",
-      "aa_rokasA4" = "ChenA4 · 4000 ranks\n0.03 MiB/rank",
-      "aa_rokasA8" = "YangA8 · 96 ranks\n0.48 MiB/rank",
-      "dna_PeteD8" = "PeteD8 · 240 ranks\n2.08 MiB/rank",
-      "dna_rokasD1" = "SongD1 · 480 ranks\n0.10 MiB/rank",
-      "dna_rokasD4" = "XiD4 · 192 ranks\n0.06 MiB/rank",
-      "dna_rokasD7" = "TarvD7 · 4000 ranks\n0.18 MiB/rank"
+      "aa_rokasA1" = "NagyA1 · 96 PEs\n0.10 MiB/PE",
+      "aa_rokasA4" = "ChenA4 · 4000 PEs\n0.03 MiB/PE",
+      "aa_rokasA8" = "YangA8 · 96 PEs\n0.48 MiB/PE",
+      "dna_PeteD8" = "PeteD8 · 240 PEs\n2.08 MiB/PE",
+      "dna_rokasD1" = "SongD1 · 480 PEs\n0.10 MiB/PE",
+      "dna_rokasD4" = "XiD4 · 192 PEs\n0.06 MiB/PE",
+      "dna_rokasD7" = "TarvD7 · 4000 PEs\n0.18 MiB/PE"
     ),
     #limits = (across_ranks_stats_long %>% filter(timer == "LoadAssignmentDataFirstLoad") %>% arrange(msAvg))$dataset
   ) +
@@ -159,4 +161,4 @@ ggplot() +
       values = c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e")
   ) + 
   annotation_logticks(sides = "l")
-ggsave(paste(output_dir, "ft-raxml-empirical.pdf", sep = '/'), width = 60, height = 75, units = "mm")
+ggsave(paste(output_dir, "ft-raxml-empirical.pdf", sep = '/'), width = 60, height = 52, units = "mm")

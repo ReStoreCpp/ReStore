@@ -1,10 +1,10 @@
-source("../common.R")
-
-# Load the simulated data
 data_dir <- "~/projects/ReStore/experiments/failures-until-data-loss"
 output_dir <- data_dir
 setwd(data_dir)
 
+source("../common.R")
+
+# Load the simulated data
 data <- read_csv(
   "failure-probability.csv",
   col_types = cols(
@@ -26,7 +26,8 @@ data <- read_csv(
 x_breaks <- data %>% pull(numberOfPEs) %>% unique
 
 ggplot(
-  data,
+  data %>%
+    mutate(replicationLevel = paste("r := ", replicationLevel, sep = "")),
   aes(
     x = numberOfPEs,
     y = roundsUntilIrrecoverableDataLoss_mean / numberOfPEs * 100,
@@ -51,5 +52,5 @@ ggplot(
   )
 ggsave(
   paste(output_dir, "failures-until-irrecoverable-data-loss.pdf", sep = '/'),
-  width = 120, height = 70, units = "mm"
+  width = 120, height = 55, units = "mm"
 )

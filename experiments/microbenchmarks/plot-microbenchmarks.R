@@ -1,11 +1,11 @@
-source("../common.R")
-
-NUM_RANKS_PER_NODE <- 48
-
 # Set the current working directory
 input_dir <- "~/projects/ReStore/experiments/microbenchmarks"
 output_dir <- input_dir
 setwd(input_dir)
+
+source("../common.R")
+
+NUM_RANKS_PER_NODE <- 48
 
 # Select the data source depending on the plot you want to generate.
 #csv_file <- "determine-optimal-blocksPerPermutationRange.csv"
@@ -72,10 +72,13 @@ data <- read_csv(csv_file,
       DiskRedistribute = "load from disk (all data)",
       DiskSmallRange = "load from disk (1 % of data)",
       pullBlocksSingleRank = "load from restore (data of a single rank)",
-      DiskSingleRank = "load from disk (data of a single rank)"
+      DiskSingleRank = "load from disk (data of a single rank)",
+      MpiIoRedistribute = "load from disk (MPI I/O; all data)",
+      MpiIoSmallRange = "load from disk (MPI I/O; 1 % of data)"
     ), levels = c("submit to restore", "load from restore (all data)", "load from restore (1 % of data)",
                   "load from disk (all data)", "load from disk (1 % of data)",
-                  "load from restore (data of a single rank)", "load from disk (data of a single rank)"))
+                  "load from restore (data of a single rank)", "load from disk (data of a single rank)",
+                  "load from disk (MPI I/O; all data)", "load from disk (MPI I/O; 1 % of data)"))
   ) %>%
   group_by(
     numberOfRanks, benchmark, benchmarkHR, bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange,
@@ -203,7 +206,7 @@ ggplot(
   ) +
   facet_wrap(
     vars(idRandomization),
-    labeller = labeller(idRandomization = c("Off" = "consecutive IDS", "On" = "permuted IDs"))
+    labeller = labeller(idRandomization = c("Off" = "consecutive IDs", "On" = "permuted IDs"))
   ) +
   theme_husky(
     legend.position = "bottom",
@@ -213,13 +216,13 @@ ggplot(
     axis.text.x = element_text(angle = 45, hjust = 1),
   )
 ggsave(
-  paste(output_dir, "id-randomization-on-or-off.pdf", sep = '/'),
-  width = 120, height = 70, units = "mm"
+  paste(output_dir, "id-randomization-on-or-off-bottom-legend.pdf", sep = '/'),
+  width = 120, height = 55, units = "mm"
 )
 
 ### Compare load-from-restore vs load-from-disk ###
 # load microbenchmarks.csv
-data %>%
+data <- data %>%
     mutate(
       amountOfData = factor(recode(benchmark,
         pullBlocksRedistribute = "all data",
@@ -227,25 +230,32 @@ data %>%
         DiskRedistribute = "all data",
         DiskSmallRange = "1 % of data",
         pullBlocksSingleRank = "data of a single rank",
-        DiskSingleRank = "data of a single rank"
+        DiskSingleRank = "data of a single rank",
+        MpiIoRedistribute = "all data",
+        MpiIoSmallRange = "1 % of data"
       ), levels = c("data of a single rank", "1 % of data", "all data" )),
       benchmark = recode(benchmark,
         submitBlocks = "submit to restore",
         pullBlocksRedistribute = "load from restore",
         pullBlocksSmallRange = "load from restore",
-        DiskRedistribute = "load from disk",
-        DiskSmallRange = "load from disk",
+        DiskRedistribute = "load from disk (ifstream)",
+        DiskSmallRange = "load from disk (ifstream)",
         pullBlocksSingleRank = "load from restore",
-        DiskSingleRank = "load from disk"
-    )) %>%
+        DiskSingleRank = "load from disk (ifstream)",
+        MpiIoRedistribute = "load from disk (MPI I/O)",
+        MpiIoSmallRange = "load from disk (MPI I/O)",
+    ))
+
+data %>%
     filter(
       bytesPerRankHR == " 16 MiB",
       replicationLevel == 4,
-      idRandomization == "On" && (amountOfData == "1 % of data" || benchmark == "load from disk") || 
+      idRandomization == "On" && 
+        (amountOfData == "1 % of data" || benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)")) || 
       idRandomization == "Off" && amountOfData == "all data",
       blocksPerPermutationRange == 4096,
       promilleOfRanksThatFail == 10,
-      benchmark %in% c("load from disk", "load from restore"),
+      benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)", "load from restore"),
       amountOfData %in% c("1 % of data", "all data")
     ) %>%
 ggplot(
@@ -259,7 +269,7 @@ ggplot(
   )) +
   geom_line_with_points_and_errorbars() +
   scale_color_dark2() +
-  scale_y_log_with_ticks_and_lines(scale_accuracy = 0.1) +
+  scale_y_log_with_ticks_and_lines(scale_accuracy = 1) +
   labs(
     x = "#PEs",
     y = "time [ms]",
@@ -279,5 +289,35 @@ ggplot(
   )
 ggsave(
   paste(output_dir, "load-from-restore-vs-load-from-disk.pdf", sep = '/'),
-  width = 120, height = 60, units = "mm"
+  width = 120, height = 45, units = "mm"
 )
+
+# What's the speedup?
+data %>%
+  filter(
+    numberOfRanks >= 512 * NUM_RANKS_PER_NODE,
+    bytesPerRankHR == " 16 MiB",
+    replicationLevel == 4,
+    idRandomization == "On" && 
+      (amountOfData == "1 % of data" || benchmark %in% c("load from disk", "load from disk (MPI I/O)")) || 
+      idRandomization == "Off" && amountOfData == "all data",
+    blocksPerPermutationRange == 4096,
+    promilleOfRanksThatFail == 10,
+    benchmark %in% c("load from disk", "load from disk (MPI I/O)", "load from restore"),
+    amountOfData %in% c("1 % of data", "all data")
+  ) %>%
+  select(numberOfRanks, benchmarkHR, real_time_mean, amountOfData) %>%
+  pivot_wider(
+    id_cols = c("numberOfRanks", "amountOfData"),
+    names_from = benchmark,
+    values_from = real_time_mean
+  ) %>%
+  mutate(
+    speedupOverDisk = `load from disk` / `load from restore`,
+    speedupOverMpiIo = `load from disk (MPI I/O)` / `load from restore`
+  ) %>% 
+  group_by(amountOfData) %>%
+  summarize(
+    speedupOverDisk_median = median(speedupOverDisk),
+    speedupOverMpiIo_median = median(speedupOverMpiIo),
+  )
