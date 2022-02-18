@@ -15,7 +15,7 @@ data <- read_csv(
   group_by(numberOfPEs, replicationLevel) %>%
   summarize(
     roundsUntilIrrecoverableDataLoss_mean = mean(roundsUntilIrrecoverableDataLoss),
-    roundsUntilIrrecoverableDataLoss_median = mean(roundsUntilIrrecoverableDataLoss),
+    roundsUntilIrrecoverableDataLoss_median = median(roundsUntilIrrecoverableDataLoss),
     roundsUntilIrrecoverableDataLoss_sd = sd(roundsUntilIrrecoverableDataLoss),
     roundsUntilIrrecoverableDataLoss_q10 = quantile(roundsUntilIrrecoverableDataLoss, probs = 0.9),
     roundsUntilIrrecoverableDataLoss_q90 = quantile(roundsUntilIrrecoverableDataLoss, probs = 0.1),
