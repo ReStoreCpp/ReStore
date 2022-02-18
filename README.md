@@ -5,7 +5,7 @@ On modern cluster systems it is typically impractical to request replacement res
 Therefore, applications have to continue working with the remaining resources.
 This requires redistributing the workload and that the non-failed processes reload the lost data.
 ReStore is a C++ header-only library for MPI programs that enables recovery of lost data after (a) process failure(s).
-By storing all required data in memory via an appropriate data distribution and replication, recovery is substantial faster than with standard checkpointing schemes that rely on a parallel file system.
+By storing all required data in memory via an appropriate data distribution and replication, recovery is substantially faster than with standard checkpointing schemes that rely on a parallel file system.
 As you as the application programmer can specify which data to load ReStore also supports shrinking recovery instead of recovery using spare compute nodes.
 
 ## Including ReStore into your application
@@ -39,13 +39,14 @@ See Hespe and Hübner et al. (2022) [1] for details.
 This example shows the general usage of ReStore.
 
 ```cpp
+#include <core.hpp>
+
 // First, create the restore object.
-using YourAwesomeDatatype = uint64_t;
 ReStore::ReStore<YourAwesomeDatatype> store(
     MPI_COMM_WORLD, // MPI communicator to use. ULFM currently supports only MPI_COMM_WORLD.
-    4,              // Replication level, 4 is a sane default.
+    4,              // Replication level, 3 or 4 are sane defaults.
     ReStore::OffsetMode::constant, // Currently, the only supported mode.
-    sizeof(int)     // Your block size, use at least 64 bytes.
+    sizeof(YourAwesomeDatatype)    // Your block size, use at least 64 bytes.
 );
 
 // Next, submit you data to the ReStore, if a failure happened between creation of the ReStore
@@ -58,15 +59,15 @@ store.submitBlocks(
         // Either use:
         stream << value;
         // or, for big, already consecutively stored data:
-        stream.writeBytes(constBytePtr, numBytesToCopy);
+        stream.writeBytes(constBytePtr, sizeof(YourAwesomeDatatype));
         },
     // The enumerator function; should return nullopt if there are no more blocks to submit
     // on this PE.
-    [blockId, ...]() {
-        auto ret = numberOfBlocksOnThisPE == blockId
+    [localBlockId, ...]() {
+        auto ret = numberOfBlocksOnThisPE == localBlockId
                         ? std::nullopt
                         : std::make_optional(ReStore::NextBlock<YourAwesomeDatatype>(
-                            {blockId, constRefToYourDataForThisBlock}));
+                            {globalBlockId(localBlockId), constRefToYourDataForThisBlock}));
         blockId++;  // We cannot put this in the above line, as we can't assume if the first
                     // argument of the pair is bound before or after the increment.
         return ret;
@@ -81,7 +82,7 @@ store.updateComm(newComm);
 // Next, request the data you need on each PE.
 // requestedBlocks is of type
 // std::vector<std::pair<ReStore::block_id_t, size_t>>
-// [ (firstBlockIdOfRange1, numberOfBlocks1), (firstBlockIdOfRange, numberOfBlocks2), ...]
+// [ (firstBlockIdOfRange1, numberOfBlocks1), (firstBlockIdOfRange2, numberOfBlocks2), ...]
 store.pullBlocks(
     requestedBlocks,
     //  De-serialization function.
@@ -95,11 +96,16 @@ store.pullBlocks(
 If your data resides in a `std::vector`, you can use the ReStore-provided wrapper.
 
 ```cpp
+#include <restore/core.hpp>
+#include <restore/restore_vector.hpp>
+
 // Create the ReStoreVector wrapper.
 ReStore::ReStoreVector<YourAwesomeDatatype>> reStoreVectorWrapper(
     blockSizeInBytes, // Can for example be used to group all dimensions of a single data point.
     MPI_COMM_WORLD,
-    replicationLevel
+    replicationLevel,
+    blocksPerPermutationRange, // defaults to 4096
+    paddingValue, // The value used to pad the data; defaults to 0
 );
 
 // Submit your data to the ReStore.
@@ -122,6 +128,9 @@ Each surviving PE will get an equal share of the blocks residing on each PE that
 This of course works for multiple rounds of failing PEs, too.
 
 ```cpp
+#include <restore/core.hpp>
+#include <restore/equal_load_balancer.hpp>
+
 // Describes, which block range (firstBlockId, numberOfBlocks) resides on which PE.
 using BlockRange     = std::pair<std::pair<ReStore::block_id_t, size_t>, ReStoreMPI::original_rank_t>;
 using BlockRangeList = std::vector<BlockRange>;
