@@ -18,7 +18,7 @@ class ReStoreVector {
     using BlockRangeToRestoreList        = std::vector<BlockRangeToRestore>;
 
     ReStoreVector(
-        size_t blockSize, MPI_Comm comm, uint16_t replicationLevel, uint64_t blocksPerPermutationRange,
+        size_t blockSize, MPI_Comm comm, uint16_t replicationLevel, uint64_t blocksPerPermutationRange = 4096,
         data_t paddingValue = data_t())
         : _nativeBlockSize(blockSize),
           _reStore(comm, replicationLevel, OffsetMode::constant, _bytesPerBlock(), blocksPerPermutationRange),
