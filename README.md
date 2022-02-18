@@ -51,7 +51,7 @@ ReStore::ReStore<YourAwesomeDatatype> store(
 
 // Next, submit you data to the ReStore, if a failure happened between creation of the ReStore
 // and the submission of the data, please re-create the ReStore.
-ReStore::block_id_t blockId = 0;
+ReStore::block_id_t localBlockId = 0;
 store.submitBlocks(
     // The serialization function; your can stream your data to the provided stream using
     // the << operator.
@@ -68,8 +68,7 @@ store.submitBlocks(
                         ? std::nullopt
                         : std::make_optional(ReStore::NextBlock<YourAwesomeDatatype>(
                             {globalBlockId(localBlockId), constRefToYourDataForThisBlock}));
-        blockId++;  // We cannot put this in the above line, as we can't assume if the first
-                    // argument of the pair is bound before or after the increment.
+        localBlockId++;
         return ret;
     },
     globalNumberOfBlocks
