@@ -153,10 +153,12 @@ _loadBalancer.commitToPreviousCall();
 ## Publication
 If you use ReStore in your research, please cite the following paper:
 
+```bibtex
 @article{restore,
   title={ReStore: In-Memory REplicated STORagE for Rapid Recovery in Fault-Tolerant Algorithms},
   author={Hespe, Demian and Hübner, Lukas and Sanders, Peter and Stamatakis, Alexandros},
   journal={arXiv preprint arXiv:2203.01107},
   year={2022}
 }
+```
 
