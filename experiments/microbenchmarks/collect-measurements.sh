@@ -11,12 +11,11 @@ keep-first-five-fields() {
 }
 
 expand-name-field() {
-    # sed -E "2,\$s/\"BM_(pushBlocksSmallRange)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4,\5,\6/" | 
-    # sed -E "2,\$s/\"BM_(pullBlocksSmallRange)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4,\5,\6/" | 
-    # sed -E "2,\$s/\"BM_(submitBlocks)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4,,\5/" | 
-    sed -E "2,\$s/\"BM_([a-zA-Z]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/iterations:1\/manual_time\"/\1,\2,\3,\4,\5,\6/" | 
-
-    sed -E "1s/name,/benchmark,bytesPerBlock,replicationLevel,bytesPerRank,blocksPerPermutationRange,promilleOfRanksThatFail,/"
+    # sed -E "2,\$s/\"BM_(pushBlocksSmallRange)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4,\5,\6/" |
+    # sed -E "2,\$s/\"BM_(pullBlocksSmallRange)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4,\5,\6/" |
+    # sed -E "2,\$s/\"BM_(submitBlocks)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/manual_time\"/\1,\2,\3,\4,,\5/" |
+    sed -E "2,\$s/\"BM_([a-zA-Z]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/([0-9]+)\/iterations:1\/manual_time\"/\1,\2,\3,\4,\5,\6/" |
+        sed -E "1s/name,/benchmark,bytesPerBlock,replicationLevel,bytesPerRank,blocksPerPermutationRange,promilleOfRanksThatFail,/"
 }
 
 add-field() {
@@ -33,16 +32,15 @@ concat-files() {
     for mode in "random-ids" "no-random-ids"; do
         for file in "$BASENAME-$mode-"*.csv; do
             p="${file%.csv}"
-            p="${p#$BASENAME-$mode-}"
+            p="${p#"$BASENAME-$mode-"}"
 
-            cat "$file" \
-                | remove-googlebenchmark-preample \
-                | remove-summary-rows \
-                | keep-first-five-fields \
-                | expand-name-field \
-                | add-field "numberOfNodes" "$p" \
-                | add-field "idRandomization" "$mode"
-        done 
+            remove-googlebenchmark-preample <"$file" |
+                remove-summary-rows |
+                keep-first-five-fields |
+                expand-name-field |
+                add-field "numberOfNodes" "$p" |
+                add-field "idRandomization" "$mode"
+        done
     done
 }
 
@@ -50,4 +48,3 @@ concat-files | sed \
     -e "2,$ { /^idRandomization/d }" \
     -e "s/^no-random-ids/FALSE/" \
     -e "s/random-ids/TRUE/"
-

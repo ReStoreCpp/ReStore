@@ -2,7 +2,7 @@ print_config "run-with-restore"
 RANK_SHIFT_ON_FAILURE=$(( SLURM_NTASKS / SLURM_JOB_NUM_NODES ))
 EXEC="${EXEC:-ft-restore-raxml}"
 
-for REPEAT in ${REPEATS[@]}; do
+for REPEAT in "${REPEATS[@]}"; do
     RBA_FILE="../rba/$DATASET.rba.$REPEAT"
     MODEL_FILE="../$DATASET.model"
 
