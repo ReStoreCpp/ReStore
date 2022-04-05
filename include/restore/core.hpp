@@ -146,7 +146,7 @@ class ReStore {
         }
 
         // Initialize the block id permuter.
-        const auto largestBlockId = totalNumberOfBlocks - 1;
+        const auto largestBlockId            = totalNumberOfBlocks - 1;
         const auto blocksPerPermutationRange = std::min(_blocksPerPermutationRange, largestBlockId);
         _blockIdPermuter.emplace(largestBlockId, blocksPerPermutationRange, _randomPermutationSeed);
         assert(_blockIdPermuter);
