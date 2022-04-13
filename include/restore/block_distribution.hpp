@@ -289,9 +289,9 @@ class BlockDistribution {
         ReStoreMPI::original_rank_t firstRank = static_cast<ReStoreMPI::original_rank_t>(range.id());
         assert(firstRank >= 0);
 
-        const auto hash = xxhash(seed, baseSeed);
-        uint64_t nthAliveRank = hash % _replicationLevel;
-        bool     secondRound  = false;
+        const auto hash         = xxhash(seed, baseSeed);
+        uint64_t   nthAliveRank = hash % _replicationLevel;
+        bool       secondRound  = false;
         do {
             uint64_t aliveRanksSeen = 0;
             for (uint64_t replica = 0; replica < _replicationLevel; replica++) {
