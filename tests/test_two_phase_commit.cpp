@@ -53,7 +53,7 @@ TEST(TwoPhaseCommit, Basic) {
 }
 
 TEST(TwoPhaseCommit, ComplexDataType) {
-    TwoPhaseCommit<std::vector<int>> vec (std::initializer_list<int>{0, 1, 2});
+    TwoPhaseCommit<std::vector<int>> vec(std::initializer_list<int>{0, 1, 2});
 
     // No changes yet
     ASSERT_THAT(*vec, ElementsAre(0, 1, 2));

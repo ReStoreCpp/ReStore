@@ -50,6 +50,7 @@ TEST(BlockDistributionTest, BlockRange) {
         ASSERT_EQ(range.id(), 0);
         ASSERT_EQ(range.start(), 0);
         ASSERT_EQ(range.length(), 10);
+        ASSERT_EQ(range.last(), 9);
 
         for (block_id_t blockId = 0; blockId < 10; blockId++) {
             ASSERT_TRUE(range.contains(blockId));
@@ -72,6 +73,7 @@ TEST(BlockDistributionTest, BlockRange) {
         ASSERT_EQ(range.id(), 2);
         ASSERT_EQ(range.start(), 20);
         ASSERT_EQ(range.length(), 10);
+        ASSERT_EQ(range.last(), 29);
 
         for (block_id_t blockId = 0; blockId < 20; blockId++) {
             ASSERT_FALSE(range.contains(blockId));

@@ -1,6 +1,6 @@
+#include <optional>
 #include <type_traits>
 #include <utility>
-#include <optional>
 
 template <class T>
 class TwoPhaseCommit {

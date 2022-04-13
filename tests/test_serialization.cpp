@@ -273,7 +273,7 @@ TEST(SerializedBlockStoreStream, InStream) {
 
     stream2.writeToReservedBytes(handle1p0, 0xFF_uint8);
     EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 2);
-    
+
     stream2.writeToReservedBytes(handle1p3, 0xFF_uint8);
     EXPECT_EQ(stream2.numWritableStreamPositionsWithBytesLeft(), 1);
 

@@ -56,8 +56,8 @@ TEST_F(ReStoreTestWithFailures, ComplexDataType) {
     // The logic of this tests assumes that there are four ranks
     assert(numRanks() == 4);
 
-    const uint8_t replicationLevel = 3;
-    const size_t  constantOffset   = 10;
+    const uint8_t  replicationLevel          = 3;
+    const size_t   constantOffset            = 10;
     const uint64_t blocksPerPermutationRange = 2;
 
     ReStore::ReStore<AwesomeDataType> store(

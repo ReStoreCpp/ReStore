@@ -20,7 +20,7 @@ class ReStoreVectorTest : public ::testing::Test {
     protected:
     RankFailureManager _rankFailureManager;
 
-    ReStoreVectorTest () : _rankFailureManager(MPI_COMM_WORLD) {}
+    ReStoreVectorTest() : _rankFailureManager(MPI_COMM_WORLD) {}
 
     virtual ~ReStoreVectorTest() override {}
 
@@ -35,7 +35,7 @@ class kMeansTestWithFailures : public ::testing::Test {
     protected:
     RankFailureManager _rankFailureManager;
 
-    kMeansTestWithFailures () : _rankFailureManager(MPI_COMM_WORLD) {}
+    kMeansTestWithFailures() : _rankFailureManager(MPI_COMM_WORLD) {}
 
     virtual ~kMeansTestWithFailures() override {}
 

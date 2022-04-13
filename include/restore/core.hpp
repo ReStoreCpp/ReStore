@@ -290,7 +290,7 @@ class ReStore {
     ) {
         UNUSED(canBeParallelized);
 
-        // Transform to format used by functions already implemented for pushBlocks
+        // Transform to format used by functions already implemented for pushBlocks.
         std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> blockRangesWithReceiver;
         std::transform(
             blockRanges.begin(), blockRanges.end(), std::back_inserter(blockRangesWithReceiver),
@@ -350,16 +350,13 @@ class ReStore {
         ReStoreMPI::successOrThrowMpiCall([&]() { return MPI_Barrier(_mpiContext.getComm()); });
 
         std::vector<request_t> sendBlockRanges;
-
         for (const auto& receivedRequestMessage: recvMessagesRequests) {
             auto castedDataPtr           = reinterpret_cast<const request_t*>(receivedRequestMessage.data.data());
             auto castedPastTheEndDataPtr = reinterpret_cast<const request_t*>(
                 receivedRequestMessage.data.data() + receivedRequestMessage.data.size());
             sendBlockRanges.insert(sendBlockRanges.end(), castedDataPtr, castedPastTheEndDataPtr);
         }
-
         std::sort(sendBlockRanges.begin(), sendBlockRanges.end(), sortByRankAndBegin);
-
 
         const auto recvMessages = sparseAllToAll(sendBlockRanges, _offsetMode, _mpiContext, _serializedBlocks.get());
 

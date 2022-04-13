@@ -126,7 +126,7 @@ TEST(PseudoRandomPermutationTest, FeistelUnevenBitCount) {
 TEST(PseudoRandomPermutationTest, Range201326592) {
     // microbencharks reported a block id of 201326592 when using exactly 201326592 blocks.
 
-    const uint64_t maxValue              = 201326592 - 1;
+    const uint64_t maxValue       = 201326592 - 1;
     const uint64_t seed           = 0;
     const uint64_t lengthOfRanges = 1000;
 
@@ -136,7 +136,7 @@ TEST(PseudoRandomPermutationTest, Range201326592) {
     ASSERT_EQ(permutation.lastIdOfRange(maxValue), maxValue);
 
     // Apply permutation to every element in the test vector.
-    //for (size_t n = 201300000; n < maxValue; ++n) {
+    // for (size_t n = 201300000; n < maxValue; ++n) {
     for (size_t n = maxValue - lengthOfRanges * 3; n <= maxValue; ++n) {
         auto permutedN = permutation.f(n);
         auto invertedN = permutation.finv(permutedN);
