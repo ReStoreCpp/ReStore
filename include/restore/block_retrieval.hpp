@@ -67,8 +67,10 @@ inline ReStoreMPI::original_rank_t getServingRank(
         return receivingRank;
     }
 
-    // Select a random alive rank to serve this block range; use same PE for all requests of a PE for a given BlockRange.
-    auto servingRank = _blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, asserting_cast<uint64_t>(receivingRank));
+    // Select a random alive rank to serve this block range; use same PE for all requests of a PE for a given
+    // BlockRange.
+    auto servingRank =
+        _blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, asserting_cast<uint64_t>(receivingRank));
 
     if (servingRank == -1) {
         throw UnrecoverableDataLossException();
@@ -138,7 +140,9 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
         const auto lengthOfRange       = blockRange.first.second;
         assert(lengthOfRange > 0);
         const auto lastBlockIdInRange = firstBlockIdInRange + lengthOfRange - 1;
-        const auto destinationRank    = blockRange.second;
+        assert(firstBlockIdInRange <= lastBlockIdInRange);
+        assert(lastBlockIdInRange < _blockDistribution->numBlocks());
+        const auto destinationRank = blockRange.second;
 
         const auto firstBlockIdOfNextInternalRange = [&_blockDistribution](const block_id_t blockId) {
             return _blockDistribution->rangeOfBlock(blockId).start()
@@ -149,6 +153,9 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
         // the request.
         for (block_id_t blockId = firstBlockIdInRange; blockId <= lastBlockIdInRange;
              blockId            = firstBlockIdOfNextInternalRange(blockId)) {
+            assert(blockId < _blockDistribution->numBlocks());
+            assert(_blockDistribution);
+
             const typename BlockDistribution<MPIContext>::BlockRange blockRangeInternal =
                 _blockDistribution->rangeOfBlock(blockId);
 
