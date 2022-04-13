@@ -157,6 +157,13 @@ restore_add_mpi_test(
     4 "ReStore::ReStore"
 )
 
+if (NOT ${PROJECT_NAME}_ID_RANDOMIZATION)
+restore_add_mpi_test(
+    test_restore_end_to_end_already_serialized_data.cpp TestRestore_EndToEnd_AlreadySerializedData
+    4 "ReStore::ReStore"
+)
+endif()
+
 restore_add_mpi_test(
     test_mpi_context.cpp MPIContext
     4 "ReStore::ReStore"

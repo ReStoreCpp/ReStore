@@ -107,6 +107,78 @@ class ReStore {
         return _mpiContext.getRanksDiedSinceLastCall();
     }
 
+#ifndef ID_RANDOMIZATION
+    // submitBlocks() - overload for already serialized data
+    // StartEndBlocks is a std::vector<std::pair<block_id_t, block_id_t>> describing the ranges of blocks in the
+    // serialized data stream. The first block_id_t describes the id of the first block, the second block_id_t the id of
+    // the last block + 1 (think 'end'). The number of blocks described by a pair is automatically calculated to be end
+    // - start. So if your first std::pair describes the ids (3, 6), i.e. 3 blocks, the second std::pair is assumed to
+    // describe the blocks starting at the 4th position in the serialized data stream.
+    // I.e. data stream: {block 0, 1, 2, 10, 11}; blocks: {{0, 3}, {10, 12}}
+    void submitSerializedBlocks(
+        const std::vector<SerializedBlocksDescriptor>& blocks, const block_id_t globalNumberOfBlocks) {
+        const size_t localNumberOfBlocks =
+            std::accumulate(blocks.begin(), blocks.end(), 0ul, [](size_t sum, const SerializedBlocksDescriptor block) {
+                assert(block.blockIdEnd >= block.blockIdBegin);
+                return sum + (block.blockIdEnd - block.blockIdBegin);
+            });
+        assert(_offsetMode == OffsetMode::constant);
+
+        _blockIdPermuter.emplace(0, 0, 0); // All values are dummy values.
+        assert(_blockIdPermuter);
+
+        try { // Ranks failures might be detected during this code block.
+            // We define original rank ids to be the rank ids during this function call
+            _mpiContext.resetOriginalCommToCurrentComm();
+
+            // Initialize the block distribution and block storage objects.
+            if (_blockDistribution) {
+                throw std::runtime_error("You shall not call submitBlocks() twice!");
+            }
+            _blockDistribution = std::make_shared<BlockDistribution<>>(
+                _mpiContext.getOriginalSize(), globalNumberOfBlocks, _replicationLevel, _mpiContext);
+            _serializedBlocks =
+                std::make_unique<SerializedBlockStorage<>>(_blockDistribution, _offsetMode, _constOffset);
+            assert(_blockDistribution);
+            assert(_serializedBlocks);
+            assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
+
+            // Initialize the Implementation object (as in PImpl)
+            BlockSubmissionCommunication<BlockType> comm(_mpiContext, *_blockDistribution, offsetMode());
+
+            // Allocate send buffers and serialize the blocks to be sent
+            // TODO Copy the already serialized blocks into the respective send buffers.
+            auto sendBuffers = comm.copySerializedBlocksToSendBuffers(blocks, localNumberOfBlocks);
+
+            // All blocks have been serialized, send & receive replicas.
+            auto receivedMessages = comm.exchangeData(sendBuffers);
+
+            // Deallocate sendBuffers, they are no longer needed and take up replicationLevel * bytesPerRank memory.
+            // By deallocating them now, before the received messages are stored into the serialized block storage,
+            // we can reduce the peak memory consumption of this algorithm.
+            sendBuffers = decltype(sendBuffers)();
+
+            // Store the received blocks into our local block storage
+            // TODO Maybe implement the following optimization: Copy a range of blocks with consecutive block ids in one
+            // copy operation.
+            comm.parseAllIncomingMessages(
+                receivedMessages, [this](
+                                      block_id_t blockId, const std::byte* data, size_t lengthInBytes,
+                                      ReStoreMPI::current_rank_t srcRank) {
+                    UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
+                    assert(lengthInBytes == _constOffset);
+                    UNUSED(srcRank); // We simply do not need this right now
+                    this->_serializedBlocks->writeBlock(blockId, data);
+                });
+        } catch (ReStoreMPI::FaultException& e) {
+            // Reset BlockDistribution and SerializedBlockStorage
+            _blockDistribution = nullptr;
+            _serializedBlocks  = nullptr;
+            throw e;
+        }
+    }
+#endif
+
     // submitBlocks()
     //
     // Submits blocks to the replicated storage. They will be replicated among the ranks and can be

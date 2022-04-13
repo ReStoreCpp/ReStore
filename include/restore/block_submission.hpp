@@ -17,6 +17,19 @@
 
 namespace ReStore {
 
+// Describes a list of blocks with contiguous block ids which are serialized in consecutive storage. Used by the user to
+// provide submit already serialized blocks.
+struct SerializedBlocksDescriptor {
+    SerializedBlocksDescriptor(block_id_t _blockIdBegin, block_id_t _blockIdEnd, const std::byte* _data)
+        : blockIdBegin(_blockIdBegin),
+          blockIdEnd(_blockIdEnd),
+          data(_data) {}
+
+    block_id_t       blockIdBegin;
+    block_id_t       blockIdEnd;
+    const std::byte* data;
+};
+
 // This class implements helper functions for communication during ReStore::submitBlocks()
 template <class BlockType, class MPIContext = ReStoreMPI::MPIContext>
 class BlockSubmissionCommunication {
@@ -63,6 +76,13 @@ class BlockSubmissionCommunication {
             }
         }
 
+        void writeId(IDType firstId, IDType lastId, std::vector<ReStoreMPI::original_rank_t> ranks) {
+            assert(!ranks.empty());
+            for (const ReStoreMPI::original_rank_t rank: ranks) {
+                writeId(firstId, lastId, rank);
+            }
+        }
+
         void writeId(IDType id, ReStoreMPI::original_rank_t rank) {
             // Get the range state of this rank
             assert(rank >= 0);
@@ -84,6 +104,33 @@ class BlockSubmissionCommunication {
 
                     // start a new range
                     rangeState->range.first = rangeState->range.last = id;
+                    rangeState->positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
+                }
+            }
+        }
+
+        void writeId(IDType firstId, IDType lastId, ReStoreMPI::original_rank_t rank) {
+            // Get the range state of this rank
+            assert(rank >= 0);
+            assert(rank < asserting_cast<decltype(rank)>(_currentRanges.size()));
+
+            auto& rangeState = _currentRanges[asserting_cast<size_t>(rank)];
+            // Is this the first id?
+            if (!rangeState) {
+                BlockIDRange range(firstId, lastId);
+                const auto   positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
+                rangeState.emplace(range, positionInStream);
+            } else { // This is not the first id
+                // Is this a consecutive id range?
+                if (rangeState->range.last == firstId - 1) {
+                    rangeState->range.last = lastId;
+                } else { // Not a consecutive id
+                    // close and write out previous range
+                    serializeBlockIDRange(rangeState->positionInStream, rangeState->range);
+
+                    // start a new range
+                    rangeState->range.first      = firstId;
+                    rangeState->range.last       = lastId;
                     rangeState->positionInStream = _stream.reserveBytesForWriting(rank, 2 * sizeof(IDType));
                 }
             }
@@ -212,6 +259,89 @@ class BlockSubmissionCommunication {
         : _mpiContext(mpiContext),
           _blockDistribution(blockDistribution),
           _offsetModeDescriptor(offsetModeDescriptor) {}
+
+
+    SendBuffers copySerializedBlocksToSendBuffers(
+        const std::vector<SerializedBlocksDescriptor>& blocks, const size_t localNumberOfBlocks) {
+        const auto  bytesPerBlock = _offsetModeDescriptor.constOffset;
+        SendBuffers sendBuffers;
+
+        assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
+        sendBuffers.resize(asserting_cast<size_t>(_mpiContext.getOriginalSize()));
+        assert(std::for_each(
+            sendBuffers.begin(), sendBuffers.end(), [](const std::vector<std::byte>& b) { return b.empty(); }));
+
+        // Create the object which represents the store stream
+        auto storeStream = SerializedBlockStoreStream(sendBuffers, _mpiContext.getOriginalSize());
+        // This is too much, but let's see if we can get away with it.
+        storeStream.reserve(bytesPerBlock * localNumberOfBlocks);
+
+        // Create the object resposible for serializing the range ids
+        BlockIDSerialization<block_id_t> blockIDSerializationManager(
+            BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, storeStream, _mpiContext.getOriginalSize());
+
+        // Loop over the blocks and copy them to the respective send buffers.
+        assert(blocks.size() >= 1);
+        auto currentRange = _blockDistribution.rangeOfBlock(blocks[0].blockIdBegin);
+        auto ranks        = _blockDistribution.ranksBlockRangeIsStoredOn(currentRange);
+        // Create the proxy to write to; it will automatically copy the written bytes to every destination
+        // rank's send buffer.
+        storeStream.setDestinationRanks(ranks);
+        for (const auto& block: blocks) {
+            assert(block.blockIdEnd > block.blockIdBegin); // Empty ranges are not allowed, do not specify the range.
+            const auto firstBlock = block.blockIdBegin;
+            const auto lastBlock  = block.blockIdEnd - 1;
+            auto       dataPtr    = block.data;
+            assert(firstBlock <= lastBlock);
+            assert(firstBlock < _blockDistribution.numBlocks());
+            assert(lastBlock < _blockDistribution.numBlocks());
+
+            auto nextBlock = firstBlock;
+
+            do {
+                // Determine which ranks will get the next block(s); assume that no failures occurred.
+                assert(_mpiContext.numFailuresSinceReset() == 0);
+                // Only recompute the destination ranks if they have changed.
+                if (!currentRange.contains(nextBlock)) {
+                    currentRange = _blockDistribution.rangeOfBlock(nextBlock);
+                    ranks        = _blockDistribution.ranksBlockRangeIsStoredOn(currentRange);
+
+                    // Create the proxy to write to; it will automatically copy the written bytes to every destination
+                    // rank's send buffer.
+                    storeStream.setDestinationRanks(ranks);
+                }
+                const auto firstBlockToWrite = nextBlock;
+                const auto lastBlockToWrite  = std::min(lastBlock, currentRange.last());
+                const auto numBlocksToWrite  = lastBlockToWrite - firstBlockToWrite + 1;
+                assert(!ranks.empty());
+                assert(currentRange.contains(firstBlockToWrite));
+                assert(currentRange.contains(lastBlockToWrite));
+
+                // Write the block's id to the stream.
+                blockIDSerializationManager.writeId(firstBlockToWrite, lastBlockToWrite, ranks);
+
+                // Copy the already serialized bytes to the send buffers.
+                const auto bytesWrittenBeforeSerialization = storeStream.bytesWritten(ranks[0]);
+                const auto numBytesToWrite                 = bytesPerBlock * numBlocksToWrite;
+                storeStream.writeBytes(dataPtr, numBytesToWrite);
+                assert(_offsetModeDescriptor.mode == OffsetMode::constant);
+                [[maybe_unused]] const auto bytesWrittenDuringSerialization =
+                    storeStream.bytesWritten(ranks[0]) - bytesWrittenBeforeSerialization;
+                assert(bytesWrittenDuringSerialization == numBytesToWrite);
+
+                // Forward nextBlock and the currentDataPtr
+                nextBlock += numBlocksToWrite;
+                assert(numBytesToWrite == bytesPerBlock * numBlocksToWrite);
+                dataPtr += numBytesToWrite;
+            } while (nextBlock <= lastBlock);
+            assert(nextBlock == lastBlock + 1);
+        }
+
+        // Write out the remaining open id ranges
+        blockIDSerializationManager.finalize();
+
+        return sendBuffers;
+    }
 
     // serializeBlocksForTransmission()
     //

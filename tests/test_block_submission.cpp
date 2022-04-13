@@ -265,6 +265,412 @@ TEST(BlockSubmissionTest, ParseIncomingMessages) {
     ASSERT_EQ(called, 10);
 }
 
+TEST(BlockSubmissionTest, CopyAlreadySerializedBlocksToSendBuffers) {
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using ReStore::block_id_t;
+    using ReStore::NextBlock;
+    using ReStore::OffsetMode;
+    using ReStoreMPI::current_rank_t;
+    using ReStoreMPI::original_rank_t;
+    using ReStoreMPI::RecvMessage;
+
+    struct World {
+        bool    useMagic;
+        uint8_t unicornCount;
+    };
+
+    NiceMock<MPIContextMock> mpiContext;
+    EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([](std::vector<original_rank_t> ranks) {
+        return getAliveOnlyFake({}, ranks);
+    });
+    EXPECT_CALL(mpiContext, getOriginalSize()).WillRepeatedly(Return(10));
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(10));
+
+    auto blockDistribution = std::make_shared<BlockDistribution>(10, 100, 3, mpiContext);
+
+    ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(
+        mpiContext, *blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, 2});
+
+    World              earth       = {false, 0};
+    World              narnia      = {true, 10};
+    World              middleEarth = {true, 0};
+    std::vector<World> worlds      = {earth, narnia, middleEarth};
+
+    std::vector<std::byte> serializedData = {
+        0_byte,  0_byte, // earth
+        10_byte, 1_byte, // narnia
+        0_byte,  1_byte  // middle earth
+    };
+    const size_t localNumberOfBlocks = 3;
+
+    std::vector<ReStore::SerializedBlocksDescriptor> blockDescriptors = {{0, 3, serializedData.data()}};
+    auto sendBuffers = comm.copySerializedBlocksToSendBuffers(blockDescriptors, localNumberOfBlocks);
+
+    // All these three blocks belong to range 0 and are therefore stored on ranks 0, 3 and 6
+    std::vector<std::byte> expectedSendBuffer = {
+        0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 0
+        2_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 2
+    };
+    expectedSendBuffer.insert(expectedSendBuffer.end(), serializedData.begin(), serializedData.end());
+
+    ASSERT_EQ(sendBuffers.size(), 10);
+
+    ASSERT_EQ(sendBuffers[0].size(), 22);
+    ASSERT_EQ(sendBuffers[3].size(), 22);
+    ASSERT_EQ(sendBuffers[6].size(), 22);
+
+    ASSERT_EQ(sendBuffers[0], expectedSendBuffer);
+    ASSERT_EQ(sendBuffers[3], expectedSendBuffer);
+    ASSERT_EQ(sendBuffers[6], expectedSendBuffer);
+}
+
+TEST(BlockSubmissionTest, CopyAlreadySerializedBlocksToSendBuffers_rangeSpanningMultiplePEs) {
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using ReStore::block_id_t;
+    using ReStore::NextBlock;
+    using ReStore::OffsetMode;
+    using ReStoreMPI::current_rank_t;
+    using ReStoreMPI::original_rank_t;
+    using ReStoreMPI::RecvMessage;
+    const size_t   numberOfPEs      = 10;
+    const uint16_t replicationLevel = 3;
+    const size_t   numberOfBlocks   = 20;
+
+    struct World {
+        bool    useMagic;
+        uint8_t unicornCount;
+    };
+
+    NiceMock<MPIContextMock> mpiContext;
+    EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([](std::vector<original_rank_t> ranks) {
+        return getAliveOnlyFake({}, ranks);
+    });
+    EXPECT_CALL(mpiContext, getOriginalSize()).WillRepeatedly(Return(numberOfPEs));
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(numberOfPEs));
+
+    auto blockDistribution =
+        std::make_shared<BlockDistribution>(numberOfPEs, numberOfBlocks, replicationLevel, mpiContext);
+
+    ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(
+        mpiContext, *blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, 2});
+
+    World              earth       = {false, 0};
+    World              narnia      = {true, 10};
+    World              middleEarth = {true, 0};
+    std::vector<World> worlds      = {earth, narnia, middleEarth};
+
+    std::vector<std::byte> serializedData = {
+        0_byte,  0_byte, // earth
+        10_byte, 1_byte, // narnia
+        0_byte,  1_byte  // middle earth
+    };
+    const size_t localNumberOfBlocks = 3;
+
+    std::vector<ReStore::SerializedBlocksDescriptor> blockDescriptors = {{0, 3, serializedData.data()}};
+    auto sendBuffers = comm.copySerializedBlocksToSendBuffers(blockDescriptors, localNumberOfBlocks);
+
+    // There are two blocks per range. Therefore, blocks 0 and 1 are stored on ranks 0, 3, and 6. Block 2 is stored on
+    // ranks 1, 4, and 7.
+    std::vector<std::byte> expectedSendBuffer036 = {
+        0_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 0
+        1_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 1
+        0_byte,  0_byte,                                                 // earth
+        10_byte, 1_byte,                                                 // narnia
+    };
+
+    std::vector<std::byte> expectedSendBuffer147 = {
+        2_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 2
+        2_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 2
+        0_byte, 1_byte,                                                 // middle earth
+    };
+
+    ASSERT_EQ(sendBuffers.size(), 10);
+
+    ASSERT_EQ(sendBuffers[0].size(), 20);
+    ASSERT_EQ(sendBuffers[3].size(), 20);
+    ASSERT_EQ(sendBuffers[6].size(), 20);
+
+    ASSERT_EQ(sendBuffers[0], expectedSendBuffer036);
+    ASSERT_EQ(sendBuffers[3], expectedSendBuffer036);
+    ASSERT_EQ(sendBuffers[6], expectedSendBuffer036);
+
+    ASSERT_EQ(sendBuffers[1].size(), 18);
+    ASSERT_EQ(sendBuffers[4].size(), 18);
+    ASSERT_EQ(sendBuffers[7].size(), 18);
+
+    ASSERT_EQ(sendBuffers[1], expectedSendBuffer147);
+    ASSERT_EQ(sendBuffers[4], expectedSendBuffer147);
+    ASSERT_EQ(sendBuffers[7], expectedSendBuffer147);
+}
+
+TEST(BlockSubmissionTest, CopyAlreadySerializedBlocksToSendBuffers_multipleRangesSpanningMultiplePEs) {
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using ReStore::block_id_t;
+    using ReStore::NextBlock;
+    using ReStore::OffsetMode;
+    using ReStoreMPI::current_rank_t;
+    using ReStoreMPI::original_rank_t;
+    using ReStoreMPI::RecvMessage;
+    const size_t   numberOfPEs      = 10;
+    const uint16_t replicationLevel = 3;
+    const size_t   numberOfBlocks   = 20;
+
+    struct World {
+        bool    useMagic;
+        uint8_t unicornCount;
+    };
+
+    NiceMock<MPIContextMock> mpiContext;
+    EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([](std::vector<original_rank_t> ranks) {
+        return getAliveOnlyFake({}, ranks);
+    });
+    EXPECT_CALL(mpiContext, getOriginalSize()).WillRepeatedly(Return(numberOfPEs));
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(numberOfPEs));
+
+    auto blockDistribution =
+        std::make_shared<BlockDistribution>(numberOfPEs, numberOfBlocks, replicationLevel, mpiContext);
+
+    ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(
+        mpiContext, *blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, 2});
+
+    std::vector<std::byte> serializedData = {
+        0_byte, 0_byte,  // earth; block 0
+        10_byte, 1_byte, // narnia; block 1
+        // Block 2 not serialized!
+        0_byte, 1_byte // middle earth; block3
+    };
+    const size_t localNumberOfBlocks = 3;
+
+    std::vector<ReStore::SerializedBlocksDescriptor> blockDescriptors = {
+        {0, 2, serializedData.data()},
+        {3, 4, serializedData.data() + 2 * sizeof(World)}};
+    auto sendBuffers = comm.copySerializedBlocksToSendBuffers(blockDescriptors, localNumberOfBlocks);
+
+    // There are two blocks per range. Therefore, blocks 0 and 1 are stored on ranks 0, 3, and 6. Block 3 is stored on
+    // ranks 1, 4, and 7.
+    std::vector<std::byte> expectedSendBuffer036 = {
+        0_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 0
+        1_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 1
+        0_byte,  0_byte,                                                 // earth
+        10_byte, 1_byte,                                                 // narnia
+    };
+
+    std::vector<std::byte> expectedSendBuffer147 = {
+        3_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 3
+        3_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 3
+        0_byte, 1_byte,                                                 // middle earth
+    };
+
+    ASSERT_EQ(sendBuffers.size(), 10);
+
+    ASSERT_EQ(sendBuffers[0].size(), 20);
+    ASSERT_EQ(sendBuffers[3].size(), 20);
+    ASSERT_EQ(sendBuffers[6].size(), 20);
+
+    ASSERT_EQ(sendBuffers[0], expectedSendBuffer036);
+    ASSERT_EQ(sendBuffers[3], expectedSendBuffer036);
+    ASSERT_EQ(sendBuffers[6], expectedSendBuffer036);
+
+    ASSERT_EQ(sendBuffers[1].size(), 18);
+    ASSERT_EQ(sendBuffers[4].size(), 18);
+    ASSERT_EQ(sendBuffers[7].size(), 18);
+
+    ASSERT_EQ(sendBuffers[1], expectedSendBuffer147);
+    ASSERT_EQ(sendBuffers[4], expectedSendBuffer147);
+    ASSERT_EQ(sendBuffers[7], expectedSendBuffer147);
+}
+
+TEST(BlockSubmissionTest, CopyAlreadySerializedBlocksToSendBuffers_multipleRangesSpanningMultiplePEs2) {
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using ReStore::block_id_t;
+    using ReStore::NextBlock;
+    using ReStore::OffsetMode;
+    using ReStoreMPI::current_rank_t;
+    using ReStoreMPI::original_rank_t;
+    using ReStoreMPI::RecvMessage;
+    const size_t   numberOfPEs      = 10;
+    const uint16_t replicationLevel = 3;
+    const size_t   numberOfBlocks   = 40;
+
+    struct World {
+        bool    useMagic;
+        uint8_t unicornCount;
+    };
+
+    NiceMock<MPIContextMock> mpiContext;
+    EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([](std::vector<original_rank_t> ranks) {
+        return getAliveOnlyFake({}, ranks);
+    });
+    EXPECT_CALL(mpiContext, getOriginalSize()).WillRepeatedly(Return(numberOfPEs));
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(numberOfPEs));
+
+    auto blockDistribution =
+        std::make_shared<BlockDistribution>(numberOfPEs, numberOfBlocks, replicationLevel, mpiContext);
+
+    ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(
+        mpiContext, *blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, 2});
+
+    std::vector<std::byte> serializedData = {
+        0_byte,  0_byte, // earth
+        10_byte, 1_byte, // narnia
+        0_byte,  1_byte, // middle earth; not transmitted
+        1_byte,  1_byte, // narnia1; not transmitted
+        2_byte,  1_byte, // narnia2
+        3_byte,  1_byte, // narnia3
+        4_byte,  1_byte, // narnia4
+        5_byte,  1_byte, // narnia5
+    };
+    const size_t localNumberOfBlocks = 8;
+
+    const std::vector<ReStore::SerializedBlocksDescriptor> blockDescriptors = {
+        {0, 2, serializedData.data()},
+        {4, 8, serializedData.data() + 4 * sizeof(World)}};
+    auto sendBuffers = comm.copySerializedBlocksToSendBuffers(blockDescriptors, localNumberOfBlocks);
+
+    // There are four blocks per range. Therefore, blocks 0 and 1 are stored on ranks 0, 3, and 6. Blocks 4, 5, 6, 7 are
+    // stored on ranks 1, 4, and 7.
+    std::vector<std::byte> expectedSendBuffer036 = {
+        0_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 0
+        1_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 1
+        0_byte,  0_byte,                                                 // earth
+        10_byte, 1_byte,                                                 // narnia
+    };
+
+    std::vector<std::byte> expectedSendBuffer147 = {
+        4_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 4
+        7_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 7
+        2_byte, 1_byte,                                                 // narnia2
+        3_byte, 1_byte,                                                 // narnia3
+        4_byte, 1_byte,                                                 // narnia4
+        5_byte, 1_byte,                                                 // narnia5
+    };
+
+    ASSERT_EQ(sendBuffers.size(), 10);
+
+    ASSERT_EQ(sendBuffers[0].size(), 20);
+    ASSERT_EQ(sendBuffers[3].size(), 20);
+    ASSERT_EQ(sendBuffers[6].size(), 20);
+
+    ASSERT_EQ(sendBuffers[0], expectedSendBuffer036);
+    ASSERT_EQ(sendBuffers[3], expectedSendBuffer036);
+    ASSERT_EQ(sendBuffers[6], expectedSendBuffer036);
+
+    ASSERT_EQ(sendBuffers[1].size(), 24);
+    ASSERT_EQ(sendBuffers[4].size(), 24);
+    ASSERT_EQ(sendBuffers[7].size(), 24);
+
+    ASSERT_EQ(sendBuffers[1], expectedSendBuffer147);
+    ASSERT_EQ(sendBuffers[4], expectedSendBuffer147);
+    ASSERT_EQ(sendBuffers[7], expectedSendBuffer147);
+}
+
+TEST(BlockSubmissionTest, CopyAlreadySerializedBlocksToSendBuffers_multipleRangesSpanningMultiplePEs3) {
+    using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
+    using ReStore::block_id_t;
+    using ReStore::NextBlock;
+    using ReStore::OffsetMode;
+    using ReStoreMPI::current_rank_t;
+    using ReStoreMPI::original_rank_t;
+    using ReStoreMPI::RecvMessage;
+    const size_t   numberOfPEs      = 10;
+    const uint16_t replicationLevel = 3;
+    const size_t   numberOfBlocks   = 20;
+
+    struct World {
+        bool    useMagic;
+        uint8_t unicornCount;
+    };
+
+    NiceMock<MPIContextMock> mpiContext;
+    EXPECT_CALL(mpiContext, getOnlyAlive(_)).WillRepeatedly([](std::vector<original_rank_t> ranks) {
+        return getAliveOnlyFake({}, ranks);
+    });
+    EXPECT_CALL(mpiContext, getOriginalSize()).WillRepeatedly(Return(numberOfPEs));
+    EXPECT_CALL(mpiContext, getCurrentSize()).WillRepeatedly(Return(numberOfPEs));
+
+    auto blockDistribution =
+        std::make_shared<BlockDistribution>(numberOfPEs, numberOfBlocks, replicationLevel, mpiContext);
+
+    ReStore::BlockSubmissionCommunication<World, MPIContextMock> comm(
+        mpiContext, *blockDistribution, ReStore::OffsetModeDescriptor{OffsetMode::constant, 2});
+
+    std::vector<std::byte> serializedData = {
+        0_byte,  0_byte, // earth
+        10_byte, 1_byte, // narnia
+        0_byte,  1_byte, // middle earth; not transmitted
+        1_byte,  1_byte, // narnia1; not transmitted
+        2_byte,  1_byte, // narnia2
+        3_byte,  1_byte, // narnia3
+        4_byte,  1_byte, // narnia4
+        5_byte,  1_byte, // narnia5
+    };
+    const size_t localNumberOfBlocks = 8;
+
+    const std::vector<ReStore::SerializedBlocksDescriptor> blockDescriptors = {
+        {0, 2, serializedData.data()},                      // -> ranks 0, 3, 6
+        {4, 8, serializedData.data() + 4 * sizeof(World)}}; // -> two blocks each: ranks 1, 4, 7 and ranks 2, 5, 8
+    auto sendBuffers = comm.copySerializedBlocksToSendBuffers(blockDescriptors, localNumberOfBlocks);
+
+    // There are two blocks per range. Therefore, blocks 0 and 1 are stored on ranks 0, 3, and 6. Blocks 4 and 5 are
+    // stored on ranks 2, 5, and 8. Blocks 6 and 7 are stored on ranks 3, 6, and 9.
+    std::vector<std::byte> expectedSendBuffer0 = {
+        0_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 0
+        1_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 1
+        0_byte,  0_byte,                                                 // earth
+        10_byte, 1_byte,                                                 // narnia
+    };
+
+    std::vector<std::byte> expectedSendBuffer36 = {
+        0_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 0
+        1_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 1
+        0_byte,  0_byte,                                                 // earth
+        10_byte, 1_byte,                                                 // narnia
+        6_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 6
+        7_byte,  0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 7
+        4_byte,  1_byte,                                                 // narnia4
+        5_byte,  1_byte,                                                 // narnia5
+    };
+
+    std::vector<std::byte> expectedSendBuffer258 = {
+        4_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 4
+        5_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 7
+        2_byte, 1_byte,                                                 // narnia2
+        3_byte, 1_byte,                                                 // narnia3
+    };
+
+    std::vector<std::byte> expectedSendBuffer9 = {
+        6_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // from block id 6
+        7_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, 0_byte, // to block id 7
+        4_byte, 1_byte,                                                 // narnia4
+        5_byte, 1_byte,                                                 // narnia5
+    };
+
+    std::vector<std::byte> expectedSendBuffer147 = {};
+
+    ASSERT_EQ(sendBuffers.size(), 10);
+
+    EXPECT_EQ(sendBuffers[0].size(), 20);
+    EXPECT_EQ(sendBuffers[1].size(), 0);
+    EXPECT_EQ(sendBuffers[2].size(), 20);
+    EXPECT_EQ(sendBuffers[3].size(), 40);
+    EXPECT_EQ(sendBuffers[4].size(), 0);
+    EXPECT_EQ(sendBuffers[5].size(), 20);
+    EXPECT_EQ(sendBuffers[6].size(), 40);
+    EXPECT_EQ(sendBuffers[7].size(), 0);
+    EXPECT_EQ(sendBuffers[8].size(), 20);
+    EXPECT_EQ(sendBuffers[9].size(), 20);
+
+    EXPECT_EQ(sendBuffers[0], expectedSendBuffer0);
+    EXPECT_EQ(sendBuffers[1], expectedSendBuffer147);
+    EXPECT_EQ(sendBuffers[2], expectedSendBuffer258);
+    EXPECT_EQ(sendBuffers[3], expectedSendBuffer36);
+    EXPECT_EQ(sendBuffers[4], expectedSendBuffer147);
+    EXPECT_EQ(sendBuffers[5], expectedSendBuffer258);
+    EXPECT_EQ(sendBuffers[6], expectedSendBuffer36);
+    EXPECT_EQ(sendBuffers[7], expectedSendBuffer147);
+    EXPECT_EQ(sendBuffers[8], expectedSendBuffer258);
+    EXPECT_EQ(sendBuffers[9], expectedSendBuffer9);
+}
 TEST(BlockSubmissionTest, SerializeBlockForSubmission) {
     using BlockDistribution = ReStore::BlockDistribution<MPIContextMock>;
     using ReStore::block_id_t;
