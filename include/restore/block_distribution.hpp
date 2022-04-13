@@ -125,6 +125,10 @@ class BlockDistribution {
             return length;
         }
 
+        size_t last() const {
+            return this->start() + this->length() - 1;
+        }
+
         size_t id() const noexcept {
             return _id;
         }
