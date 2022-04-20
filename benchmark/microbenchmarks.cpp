@@ -103,6 +103,60 @@ static void BM_submitBlocks(benchmark::State& state) {
     }
 }
 
+static void BM_submitSerializedData(benchmark::State& state) {
+    // Parse arguments
+    auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
+    auto fractionOfRanksThatFail   = static_cast<double>(state.range(4)) / 1000.;
+    UNUSED(fractionOfRanksThatFail);
+
+    assert(bytesPerRank % bytesPerBlock == 0);
+    size_t blocksPerRank = bytesPerRank / bytesPerBlock;
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    const auto rankId               = asserting_cast<uint64_t>(myRankId());
+    const auto numBlocks            = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
+    const auto firstBlockOfThisRank = rankId * blocksPerRank;
+    const auto lastBlockOfThisRank  = (rankId + 1) * blocksPerRank - 1;
+
+    // Generate the data to be stored in the ReStore.
+    std::vector<uint8_t> data(blocksPerRank * bytesPerBlock);
+    std::fill(data.begin(), data.end(), 0);
+    assert(data.size() == blocksPerRank * bytesPerBlock);
+
+    // Measurement
+    for (auto _: state) {
+        UNUSED(_);
+
+        ReStore::ReStore<BlockType> store(
+            MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * bytesPerBlock,
+            blocksPerPermutationRange);
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        // Start measurement
+        auto start = std::chrono::high_resolution_clock::now();
+
+        std::vector<ReStore::SerializedBlocksDescriptor> blockDescriptors;
+        blockDescriptors.emplace_back(
+            firstBlockOfThisRank, lastBlockOfThisRank + 1, reinterpret_cast<std::byte*>(data.data()));
+        store.submitSerializedBlocks(blockDescriptors, numBlocks);
+
+        // End and register measurement
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+    }
+}
 // pushBlocks was declassified by pullBlocks in experiments, we therefore no longer benchmark it.
 //
 // static void BM_pushBlocksRedistribute(benchmark::State& state) {
@@ -1185,7 +1239,13 @@ BENCHMARK(BM_submitBlocks)          ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Iterations(1)                 ///
-    ->Apply(benchmarkArguments<false, true, true, true>);
+    ->Apply(benchmarkArguments<false, true, true, false>);
+
+BENCHMARK(BM_submitSerializedData)  ///
+    ->UseManualTime()               ///
+    ->Unit(benchmark::kMillisecond) ///
+    ->Iterations(1)                 ///
+    ->Apply(benchmarkArguments<false, true, true, false>);
 
 BENCHMARK(BM_pullBlocksRedistribute) ///
     ->UseManualTime()                ///
