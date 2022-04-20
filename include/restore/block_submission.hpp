@@ -201,8 +201,8 @@ class BlockSubmissionCommunication {
         BlockIDDeserialization& operator=(BlockIDDeserialization&&) = delete;
         BlockIDDeserialization& operator=(const BlockIDDeserialization&) = delete;
 
-        // Returns the next block if. If the current range still hast ids left, returns the next one from that
-        // range. If there are no more ids in the current range, reads the descriptor of the next range form the
+        // Returns the next block. If the current range still hast ids left, returns the next one from that
+        // range. If there are no more ids in the current range, reads the descriptor of the next range from the
         // given position in the stream. Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes
         // read from the data stream and blockID is the id of the next block.
         std::pair<size_t, IDType> readId(size_t position) {
