@@ -777,9 +777,6 @@ static void BM_DiskRedistribute(benchmark::State& state) {
         if constexpr (!use_MPI_IO) {
             std::ofstream outFileStream(fileNametoWrite, std::ios::binary | std::ios::out | std::ios::app);
 
-            auto writeBlock = blocksPerRank * rankId;
-            UNUSED(writeBlock);
-
             outFileStream.write((const char*)writeVector.data(), asserting_cast<long>(blocksPerRank * bytesPerBlock));
             assert(outFileStream.good());
 
@@ -793,16 +790,6 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 
             mpiFile.write_collective(writeVector, writeByte);
         }
-
-        auto readBlock = blocksPerRank * readRank;
-        UNUSED(readBlock);
-        // std::for_each(
-        //     recvData.begin(), recvData.end(), [](auto& block) { std::fill(block.begin(), block.end(), 255); });
-        // assert(std::all_of(recvData.begin(), recvData.end(), [](const BlockType& block) {
-        //     return std::all_of(
-        //         block.begin(), block.end(), [](const ElementType& blockElement) { return blockElement == 255; });
-        // }));
-
 
         // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
         // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
