@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#!/usr/bin/env python3
 
 import argparse
 import numpy as np
@@ -27,7 +27,7 @@ def simulate(p, k, repetitions):
                 if failCounts[failedBlockRange] >= k:
                     assert(not failed)
                     failed = True
-                    roundsUntilFailure.append(i)
+                    roundsUntilFailure.append(i + 1)
                     break
             if failed:
                 break
