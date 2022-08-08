@@ -37,99 +37,93 @@ class BlockDistribution {
     // from that.
     class BlockRange {
         public:
+        static const size_t INVALID_RANGE = std::numeric_limits<size_t>::max();
+
         // Constructor
         //
         // Build a block range from the given block id. We need to know the number of blocks and the number ranges
         // to compute the starting block and number of block in this BlockRange.
-        BlockRange(size_t range_id, const BlockDistribution* blockDistribution)
+        BlockRange(size_t range_id, const BlockDistribution& blockDistribution)
             : _id(range_id),
-              _blockDistribution(blockDistribution) {
-            if (blockDistribution == nullptr) {
-                throw std::invalid_argument("blockDistribution may not be a nullptr");
-            } else if (range_id > _blockDistribution->numRanges()) {
+              _numRangesWithAdditionalBlock(blockDistribution.numRangesWithAdditionalBlock()),
+              _blocksPerRange(blockDistribution.blocksPerRange()),
+              _numRanges(blockDistribution.numRanges()),
+              _numBlocks(blockDistribution.numBlocks()) {
+            if (range_id > _numRanges) {
                 throw std::invalid_argument("This range does not exist (id too large).");
             }
+            updateCachedStartLengthLast();
         }
 
+        // The default constructor creates an invalid range.
+        BlockRange() noexcept
+            : _id(INVALID_RANGE),
+              _numRangesWithAdditionalBlock(0),
+              _blocksPerRange(0),
+              _numRanges(0),
+              _numBlocks(0) {}
+
         // Copying and copy assignment is fine ...
-        BlockRange(const BlockRange& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {
-            assert(_blockDistribution != nullptr);
-            assert(_id <= _blockDistribution->numRanges());
+        BlockRange(const BlockRange& that) noexcept
+            : _id(that._id),
+              _numRangesWithAdditionalBlock(that._numRangesWithAdditionalBlock),
+              _blocksPerRange(that._blocksPerRange),
+              _numRanges(that._numRanges),
+              _numBlocks(that._numBlocks) {
+            assert(_id <= _numRanges);
+            updateCachedStartLengthLast();
         }
 
         BlockRange& operator=(const BlockRange& that) {
-            this->_id                = that._id;
-            this->_blockDistribution = that._blockDistribution;
-            assert(_blockDistribution != nullptr);
-            assert(_id <= _blockDistribution->numRanges());
+            this->_id                           = that._id;
+            this->_numRangesWithAdditionalBlock = that._numRangesWithAdditionalBlock;
+            this->_blocksPerRange               = that._blocksPerRange;
+            this->_numRanges                    = that._numRanges;
+            this->_numBlocks                    = that._numBlocks;
+            assert(_id <= _numRanges);
+            updateCachedStartLengthLast();
             return *this;
         }
 
         // ... as is moving and move assignment
-        BlockRange(BlockRange&& that) noexcept : _id(that._id), _blockDistribution(that._blockDistribution) {
-            assert(_blockDistribution != nullptr);
-            assert(_id <= _blockDistribution->numRanges());
+        BlockRange(BlockRange&& that) noexcept
+            : _id(that._id),
+              _numRangesWithAdditionalBlock(that._numRangesWithAdditionalBlock),
+              _blocksPerRange(that._blocksPerRange),
+              _numRanges(that._numRanges),
+              _numBlocks(that._numBlocks) {
+            assert(_id <= _numRanges);
+            updateCachedStartLengthLast();
         }
 
         BlockRange& operator=(BlockRange&& that) noexcept {
-            this->_id                = that._id;
-            this->_blockDistribution = that._blockDistribution;
-            assert(_blockDistribution != nullptr);
-            assert(_id <= _blockDistribution->numRanges());
+            this->_id                           = that._id;
+            this->_numRangesWithAdditionalBlock = that._numRangesWithAdditionalBlock;
+            this->_blocksPerRange               = that._blocksPerRange;
+            this->_numRanges                    = that._numRanges;
+            this->_numBlocks                    = that._numBlocks;
+            assert(_id <= _numRanges);
+            updateCachedStartLengthLast();
             return *this;
         }
 
         block_id_t start() const {
-            assert(_blockDistribution != nullptr);
-            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
-            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
+            assert(isValid());
+            return _start;
+        }
 
-            assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution->numBlocks());
-            assert(
-                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
-                == _blockDistribution->numBlocks());
-
-            // Do we - and all blocks with a lower id than us - have an additional block?
-            size_t start;
-            if (_id < numRangesWithAdditionalBlock) {
-                start = _id * (blocksPerRange + 1);
-            } else {
-                start = blocksPerRange * _id + numRangesWithAdditionalBlock;
-            }
-
-            return start;
+        block_id_t last() const {
+            assert(isValid());
+            return _last;
         }
 
         size_t length() const {
-            assert(_blockDistribution != nullptr);
-            size_t blocksPerRange               = _blockDistribution->blocksPerRange();
-            size_t numRangesWithAdditionalBlock = _blockDistribution->numRangesWithAdditionalBlock();
-
-            assert(blocksPerRange > 0);
-            assert(blocksPerRange <= _blockDistribution->numBlocks());
-            assert(
-                blocksPerRange * _blockDistribution->numRanges() + numRangesWithAdditionalBlock
-                == _blockDistribution->numBlocks());
-
-            // Do we - and all blocks with a lower id than us - have an additional block?
-            size_t length;
-            if (_id < numRangesWithAdditionalBlock) {
-                length = blocksPerRange + 1;
-            } else {
-                length = blocksPerRange;
-            }
-
-            assert(length == blocksPerRange || length == blocksPerRange + 1);
-
-            return length;
-        }
-
-        size_t last() const {
-            return this->start() + this->length() - 1;
+            assert(isValid());
+            return _length;
         }
 
         size_t id() const noexcept {
+            assert(isValid());
             return _id;
         }
 
@@ -137,15 +131,29 @@ class BlockDistribution {
         //
         // Returns true if the given block is part of this range; false otherwise
         bool contains(block_id_t block) const {
-            return block >= this->start() && block < this->start() + this->length();
+            assert(isValid());
+            return block >= this->start() && block <= this->last();
         }
 
         // Comparison Operator
         //
         // We assume that both block ranges belong to the same BlockDistribution.
         bool operator==(const BlockRange& that) const {
-            return this->_id == that._id && this->_blockDistribution == that._blockDistribution;
+#ifndef NDEBUG
+            assert(isValid());
+            if (this->_id == that._id) {
+                assert(this->_numRangesWithAdditionalBlock == that._numRangesWithAdditionalBlock);
+                assert(this->_blocksPerRange == that._blocksPerRange);
+                assert(this->_numRanges == that._numRanges);
+                assert(this->_numBlocks == that._numBlocks);
+                assert(this->_start == that._start);
+                assert(this->_length == that._length);
+                assert(this->_last == that._last);
+            }
+#endif
+            return this->_id == that._id;
         }
+
         bool operator!=(const BlockRange& that) const {
             return !(*this == that);
         }
@@ -158,9 +166,46 @@ class BlockDistribution {
                       << ",length=" << blockRange.length() << ")>";
         }
 
+        bool isValid() const {
+            return _id != INVALID_RANGE;
+        }
+
         private:
-        size_t                   _id                = std::numeric_limits<size_t>::max();
-        const BlockDistribution* _blockDistribution = nullptr;
+        size_t _id = std::numeric_limits<size_t>::max();
+        // We're caching the values of the block distribution's members for decoupling.
+        block_id_t _numRangesWithAdditionalBlock;
+        block_id_t _blocksPerRange;
+        size_t     _numRanges;
+        block_id_t _numBlocks;
+        // Pre-compute these values for increased performance.
+        block_id_t _start;
+        block_id_t _last;
+        block_id_t _length;
+
+        void updateCachedStartLengthLast() {
+            assert(isValid());
+            assert(_blocksPerRange > 0);
+            assert(_blocksPerRange <= _numBlocks);
+            assert(_blocksPerRange * _numRanges + _numRangesWithAdditionalBlock == _numBlocks);
+
+            // Do we - and all blocks with a lower id than us - have an additional block?
+            if (_id < _numRangesWithAdditionalBlock) {
+                _start  = _id * (_blocksPerRange + 1);
+                _length = _blocksPerRange + 1;
+            } else {
+                _start  = _blocksPerRange * _id + _numRangesWithAdditionalBlock;
+                _length = _blocksPerRange;
+            }
+            assert(_length > 0);
+            assert(_length == _blocksPerRange || _length == _blocksPerRange + 1);
+            assert(_start <= _numBlocks);
+
+            _last = _start + _length - 1;
+
+            assert(_last <= _numBlocks);
+            assert(_start <= _last);
+            assert(_last >= _length - 1);
+        }
     };
 
     BlockDistribution(uint32_t numRanks, size_t numBlocks, uint16_t replicationLevel, const MPIContext& mpiContext)
@@ -202,12 +247,11 @@ class BlockDistribution {
         return !(*this == that);
     }
 
-
     // blockRangeById()
     //
     // A factory method to build a BlockRange by its id.
     BlockRange blockRangeById(size_t rangeId) const {
-        return BlockRange(rangeId, this);
+        return BlockRange(rangeId, *this);
     }
 
     // rangeOfBlock()
@@ -333,48 +377,48 @@ class BlockDistribution {
     //
     // Returns the block ranges residing on the given rank.
     // If the given rank is dead, this returns an empty vector.
-    std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::original_rank_t rankId) const {
-        if (!_mpiContext.isAlive(rankId)) {
-            return std::vector<BlockRange>();
-        }
+    // std::vector<BlockRange> rangesStoredOnRank(ReStoreMPI::original_rank_t rankId) const {
+    //     if (!_mpiContext.isAlive(rankId)) {
+    //         return std::vector<BlockRange>();
+    //     }
 
-        if (rankId < 0) {
-            throw std::runtime_error("Invalid rank id: Less than zero.");
-        } else if (static_cast<size_t>(rankId) > _numRanks) {
-            throw std::runtime_error("Invalid rank id: lower than the number of ranks.");
-        }
+    //     if (rankId < 0) {
+    //         throw std::runtime_error("Invalid rank id: Less than zero.");
+    //     } else if (static_cast<size_t>(rankId) > _numRanks) {
+    //         throw std::runtime_error("Invalid rank id: lower than the number of ranks.");
+    //     }
 
-        // The range with the same id as this rank is stored on this rank ...
-        auto rangeIds = std::vector<BlockRange>();
-        assert(rankId >= 0);
-        BlockRange firstRange = blockRangeById(static_cast<size_t>(rankId));
-        rangeIds.push_back(firstRange);
+    //     // The range with the same id as this rank is stored on this rank ...
+    //     auto rangeIds = std::vector<BlockRange>();
+    //     assert(rankId >= 0);
+    //     BlockRange firstRange = blockRangeById(static_cast<size_t>(rankId));
+    //     rangeIds.push_back(firstRange);
 
-        // ... as are <replication level> - 1 further ranges, all <shift width> apart
-        for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
-            assert(firstRange.id() <= static_cast<size_t>(std::numeric_limits<int64_t>::max()));
-            assert(_shiftWidth * replica <= static_cast<size_t>(std::numeric_limits<int64_t>::max()));
-            assert(in_range<int64_t>(_numRanges));
-            assert(_numRanges > 0);
+    //     // ... as are <replication level> - 1 further ranges, all <shift width> apart
+    //     for (uint16_t replica = 1; replica < _replicationLevel; replica++) {
+    //         assert(firstRange.id() <= static_cast<size_t>(std::numeric_limits<int64_t>::max()));
+    //         assert(_shiftWidth * replica <= static_cast<size_t>(std::numeric_limits<int64_t>::max()));
+    //         assert(in_range<int64_t>(_numRanges));
+    //         assert(_numRanges > 0);
 
-            assert(in_range<int64_t>(_shiftWidth));
-            assert(in_range<int64_t>(_shiftWidth * replica));
-            static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
-            int64_t rangeId = static_cast<int64_t>(firstRange.id())
-                              - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
-            if (rangeId < 0) {
-                assert(in_range<int64_t>(_numRanges));
-                rangeId =
-                    static_cast<int64_t>(_numRanges) + static_cast<int64_t>(rangeId % static_cast<int64_t>(_numRanges));
-            }
-            assert(rangeId >= 0);
-            BlockRange nextRange = blockRangeById(static_cast<size_t>(rangeId));
-            assert(nextRange.id() < _numRanges);
-            rangeIds.push_back(nextRange);
-        }
+    //         assert(in_range<int64_t>(_shiftWidth));
+    //         assert(in_range<int64_t>(_shiftWidth * replica));
+    //         static_assert(std::numeric_limits<decltype(replica)>::max() <= std::numeric_limits<int32_t>::max());
+    //         int64_t rangeId = static_cast<int64_t>(firstRange.id())
+    //                           - static_cast<int64_t>(_shiftWidth) * static_cast<int32_t>(replica);
+    //         if (rangeId < 0) {
+    //             assert(in_range<int64_t>(_numRanges));
+    //             rangeId =
+    //                 static_cast<int64_t>(_numRanges) + static_cast<int64_t>(rangeId % static_cast<int64_t>(_numRanges));
+    //         }
+    //         assert(rangeId >= 0);
+    //         BlockRange nextRange = blockRangeById(static_cast<size_t>(rangeId));
+    //         assert(nextRange.id() < _numRanges);
+    //         rangeIds.push_back(nextRange);
+    //     }
 
-        return rangeIds;
-    }
+    //     return rangeIds;
+    // }
 
     // isStoredOn()
     //
@@ -510,5 +554,6 @@ class BlockDistribution {
     const MPIContext& _mpiContext;
 };
 
-} // end of namespace ReStore
+} // namespace ReStore
+
 #endif // Include guard

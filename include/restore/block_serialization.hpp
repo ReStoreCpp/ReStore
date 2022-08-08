@@ -198,8 +198,7 @@ class SerializedBlockStorage {
 
     public:
     SerializedBlockStorage(
-        std::shared_ptr<const BlockDistribution<MPIContext>> blockDistribution, OffsetMode offsetMode,
-        size_t constOffset = 0)
+        const BlockDistribution<MPIContext>& blockDistribution, OffsetMode offsetMode, size_t constOffset = 0)
         : _offsetMode(offsetMode),
           _constOffset(constOffset),
           _blockDistribution(blockDistribution) {
@@ -231,13 +230,10 @@ class SerializedBlockStorage {
     void writeBlock(block_id_t blockId, const std::byte* data) {
         // TODO implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
-
-        if (data == nullptr) {
-            throw std::runtime_error("The data argument might not be a nullptr.");
-        }
+        assert(data != nullptr);
 
         if (!_writingState || !(_writingState->range.contains(blockId))) {
-            auto range = _blockDistribution->rangeOfBlock(blockId);
+            auto range = _blockDistribution.rangeOfBlock(blockId);
             if (!hasRange(range)) {
                 registerRange(range);
             }
@@ -253,9 +249,98 @@ class SerializedBlockStorage {
         assert(blockId >= rangeOfBlock.start());
 
         auto offsetInBlockRange = (blockId - rangeOfBlock.start()) * _constOffset;
-        auto blockDest =
-            dest.begin() + asserting_cast<typename decltype(dest.begin())::difference_type>(offsetInBlockRange);
+        using offset_type       = typename decltype(dest.begin())::difference_type;
+        auto blockDest          = dest.begin() + asserting_cast<offset_type>(offsetInBlockRange);
         std::copy(data, data + _constOffset, blockDest);
+    }
+
+    // writeConsecutiveBlocks()
+    //
+    // Writes the data associated with that block to the storage.
+    // blockId and data: The id and data of the block to be written. In this overload we know the length of the data
+    //      because it is equal to the constant offset.
+    // TODO Maybe also use these optimizations in writeBlock? Completely remove writeBlock? Forward calls to writeBlock
+    // to this function?
+    void writeConsecutiveBlocks(block_id_t firstBlockId, block_id_t lastBlockId, const std::byte* data) {
+        // TODO implement LUT mode
+        assert(_offsetMode == OffsetMode::constant);
+        assert(data != nullptr);
+        assert(_constOffset > 0);
+        const auto numTotalBlocksToCopy = lastBlockId - firstBlockId + 1;
+        const auto assumedEndOfInput    = data + numTotalBlocksToCopy * _constOffset;
+        UNUSED(numTotalBlocksToCopy); // Only used in assertions.
+        UNUSED(assumedEndOfInput);    // Only used in assertions.
+
+        auto getAndRegisterRangeOfBlock =
+            [this](block_id_t blockId, BlockRange& range_out, std::byte*& destBase_out) -> void {
+            // Get the BlockRange of the given block.
+            range_out = _blockDistribution.rangeOfBlock(blockId);
+
+            // If we do not have the output buffer for this block range, register it.
+            if (!hasRange(range_out)) {
+                registerRange(range_out);
+            }
+
+            // Get the output buffer associated with the the BlockRange and return a pointer to it via the destBase_out
+            // parameter.
+            assert(indexOf(range_out));
+            auto indexOpt = indexOf(range_out);
+            assert(indexOpt);
+            destBase_out = _data[*indexOpt].data();
+            assert(destBase_out != nullptr);
+            // The vectors in _data are already resized to be able to hold the data for all the blocks in that range.
+            assert(_data[*indexOpt].size() == range_out.length() * _constOffset);
+        };
+
+        // Which blocks to copy?
+        auto       firstBlockToCopy = firstBlockId;
+        BlockRange rangeOfBlock;
+        std::byte* destBase = nullptr;
+        // Compute the pointers to the blocks to copy.
+        auto srcPtrBegin = data;
+        assert(srcPtrBegin != nullptr);
+        do {
+            // Which blocks to copy?
+            getAndRegisterRangeOfBlock(firstBlockToCopy, rangeOfBlock, destBase);
+            assert(destBase != nullptr);
+            assert(rangeOfBlock.isValid());
+            assert(rangeOfBlock.contains(firstBlockToCopy));
+            const auto lastBlockToCopy = std::min(lastBlockId, rangeOfBlock.last());
+            assert(destBase != nullptr);
+            assert(rangeOfBlock.contains(lastBlockToCopy));
+            const auto numBlocksToCopy = lastBlockToCopy - firstBlockToCopy + 1;
+
+            assert(firstBlockToCopy >= firstBlockId);
+            assert(lastBlockToCopy <= lastBlockId);
+            assert(firstBlockToCopy <= lastBlockToCopy); // Copy at least one block
+            assert(numBlocksToCopy > 0);
+
+            // Compute the pointers to the blocks to copy.
+            const auto numBytesToCopy = numBlocksToCopy * _constOffset;
+            const auto srcPtrEnd      = srcPtrBegin + numBytesToCopy;
+            assert(srcPtrEnd != nullptr);
+
+            // Where to copy the blocks to?
+            const size_t destOffset = (firstBlockToCopy - rangeOfBlock.start()) * _constOffset;
+            assert(destOffset < _data[*indexOf(rangeOfBlock)].size());
+            std::byte* destPtr = destBase + destOffset;
+            assert(destPtr != nullptr);
+
+            assert(srcPtrBegin != nullptr);
+            assert(srcPtrEnd != nullptr);
+            assert(destPtr != nullptr);
+            assert(srcPtrBegin >= data);
+            assert(srcPtrBegin <= assumedEndOfInput - 1);
+            assert(srcPtrEnd > data);
+            assert(srcPtrEnd <= assumedEndOfInput);
+            assert(srcPtrBegin < srcPtrEnd);
+            std::copy(srcPtrBegin, srcPtrEnd, destPtr);
+
+            // Advance iterators
+            firstBlockToCopy = lastBlockToCopy + 1;
+            srcPtrBegin      = srcPtrEnd;
+        } while (firstBlockToCopy <= lastBlockId);
+        assert(firstBlockToCopy > lastBlockId);
     }
 
     template <class HandleBlockFunction>
@@ -265,7 +350,7 @@ class SerializedBlockStorage {
             "HandleBlockFunction must be invocable as (const std::byte*, size_t)");
         block_id_t currentBlockId = blockRange.first;
         while (currentBlockId < blockRange.first + blockRange.second) {
-            const BlockRange blockRangeInternal = _blockDistribution->rangeOfBlock(currentBlockId);
+            const BlockRange blockRangeInternal = _blockDistribution.rangeOfBlock(currentBlockId);
             assert(blockRangeInternal.contains(currentBlockId));
             assert(currentBlockId >= blockRangeInternal.start());
             auto indexOpt = indexOf(blockRangeInternal);
@@ -311,7 +396,7 @@ class SerializedBlockStorage {
     std::vector<BlockRange>                _ranges;       // For all outer vectors, the indices correspond
     std::vector<std::vector<size_t>>       _offsets;      // A sentinel points to last elem + 1; only in LUT mode
     std::vector<std::vector<std::byte>>    _data;
-    const std::shared_ptr<const BlockDistribution<MPIContext>> _blockDistribution;
+    const BlockDistribution<MPIContext>&   _blockDistribution;
 
     struct WritingState {
         WritingState(BlockRange _range, std::vector<std::byte>& _data) : range(_range), data(_data) {}

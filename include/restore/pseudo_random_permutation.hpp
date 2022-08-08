@@ -62,7 +62,7 @@ class LCGPseudoRandomPermutation {
         // a has to be < m
         // a should also be congruent to 5 mod 8; i.e. be divisible by 4 but not by 8.
         // A m is a power of two, this means a and m only have the common divisors 1, 2, and 4.
-        _a    = 5; // TODO Change this!!
+        _a    = 5;
         _ainv = _modulo_multiplicative_inverse(_a, _modulo);
     }
 
@@ -176,7 +176,6 @@ class FeistelPseudoRandomPermutation {
             num_significant_bits++;
         }
 
-        // TODO asserting casts
         _bits_left_half  = asserting_cast<uint8_t>(num_significant_bits / 2);
         _bits_right_half = asserting_cast<uint8_t>(num_significant_bits - _bits_left_half);
 

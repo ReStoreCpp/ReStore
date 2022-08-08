@@ -139,19 +139,19 @@ void testSendRecvBlockRanges(int numDeadRanks) {
     ASSERT_EQ(mpiContext.getMyCurrentRank(), mpiContext.getCurrentRank(mySimulatedOriginalRank));
     ASSERT_EQ(mpiContext.getMyOriginalRank(), mpiContext.getOriginalRank(mySimulatedCurrentRank));
 
-    auto blockDistribution = std::make_shared<BlockDistribution>(10, 100, 3, mpiContext);
+    BlockDistribution blockDistribution(10, 100, 3, mpiContext);
     std::vector<std::pair<std::pair<ReStore::block_id_t, size_t>, current_rank_t>> requests = {
         std::make_pair(std::make_pair(1, 8), 0), std::make_pair(std::make_pair(1, 8), 1),
         std::make_pair(std::make_pair(10, 35), 0)};
 
     auto [sendBlockRanges, recvBlockRanges] =
-        ReStore::getSendRecvBlockRanges(requests, blockDistribution.get(), mpiContext);
+        ReStore::getSendRecvBlockRanges(requests, blockDistribution, mpiContext);
 
     for (const auto& sendBlockRange: sendBlockRanges) {
         EXPECT_EQ(
-            blockDistribution->rangeOfBlock(sendBlockRange.first.first),
-            blockDistribution->rangeOfBlock(sendBlockRange.first.first + sendBlockRange.first.second - 1));
-        auto ranksWithBlock = blockDistribution->ranksBlockIsStoredOn(sendBlockRange.first.first);
+            blockDistribution.rangeOfBlock(sendBlockRange.first.first),
+            blockDistribution.rangeOfBlock(sendBlockRange.first.first + sendBlockRange.first.second - 1));
+        auto ranksWithBlock = blockDistribution.ranksBlockIsStoredOn(sendBlockRange.first.first);
         EXPECT_TRUE(
             std::find(ranksWithBlock.begin(), ranksWithBlock.end(), mySimulatedOriginalRank) != ranksWithBlock.end());
     }
@@ -168,9 +168,9 @@ void testSendRecvBlockRanges(int numDeadRanks) {
     for (const auto& recvBlockRange: recvBlockRanges) {
         ASSERT_LT(indexInExpected, recvRangesExpected.size());
         EXPECT_EQ(
-            blockDistribution->rangeOfBlock(recvBlockRange.first.first),
-            blockDistribution->rangeOfBlock(recvBlockRange.first.first + recvBlockRange.first.second - 1));
-        auto ranksWithBlock = blockDistribution->ranksBlockIsStoredOn(recvBlockRange.first.first);
+            blockDistribution.rangeOfBlock(recvBlockRange.first.first),
+            blockDistribution.rangeOfBlock(recvBlockRange.first.first + recvBlockRange.first.second - 1));
+        auto ranksWithBlock = blockDistribution.ranksBlockIsStoredOn(recvBlockRange.first.first);
         EXPECT_TRUE(
             std::find(ranksWithBlock.begin(), ranksWithBlock.end(), mpiContext.getOriginalRank(recvBlockRange.second))
             != ranksWithBlock.end());

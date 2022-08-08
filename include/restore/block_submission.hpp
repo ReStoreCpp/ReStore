@@ -189,7 +189,7 @@ class BlockSubmissionCommunication {
         BlockIDDeserialization(BlockIDMode mode, const DataStream& dataStream)
             : _mode(mode),
               _dataStream(dataStream),
-              _currentRange(std::nullopt),
+              _lastIdOfCurrentRange(std::numeric_limits<block_id_t>::min()),
               _lastId(std::numeric_limits<IDType>::max()) {
             // We have to read at least one descriptor from the data stream.
             assert(_dataStream.size() >= DESCRIPTOR_SIZE);
@@ -206,21 +206,42 @@ class BlockSubmissionCommunication {
         // given position in the stream. Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes
         // read from the data stream and blockID is the id of the next block.
         std::pair<size_t, IDType> readId(size_t position) {
-// GCC throws a false-positive warning here.
-#pragma GCC diagnostic push
-#if defined(__GNUC__) && !defined(__clang__)
-    #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-            if (_currentRange && _lastId < _currentRange->last) {
-#pragma GCC diagnostic pop
+            if (_lastId < _lastIdOfCurrentRange) {
                 return std::make_pair(0, ++_lastId);
             } else {
                 return std::make_pair(DESCRIPTOR_SIZE, _deserializeId(position));
             }
         }
 
+        // Returns the next block. If the current range still hast ids left, returns the next one from that
+        // range. If there are no more ids in the current range, reads the descriptor of the next range from the
+        // given position in the stream. Returns (bytesConsumed,blockID) where bytesConsumed is the number of bytes
+        // read from the data stream and blockID is the id of the next block. In this overload, those values are
+        // returned via out parameters. This is more code than std::pair + structured bindings but is faster.
+        void readId(size_t position, size_t& readBytes_out, IDType& nextId_out) {
+            if (_lastId < _lastIdOfCurrentRange) {
+                readBytes_out = 0;
+                nextId_out    = ++_lastId;
+            } else {
+                readBytes_out = DESCRIPTOR_SIZE;
+                nextId_out    = _deserializeId(position);
+            }
+        }
+
+        void readIdRange(size_t position, size_t& read_bytes_out, IDType& firstId_out, IDType& lastId_out) {
+            read_bytes_out = DESCRIPTOR_SIZE;
+            _deserializeIdRange(position, firstId_out, lastId_out);
+        }
+
         private:
         IDType _deserializeId(size_t position) {
+            IDType firstId, lastId;
+            _deserializeIdRange(position, firstId, lastId);
+            _lastId = firstId;
+            return _lastId;
+        }
+
+        void _deserializeIdRange(size_t position, IDType& firstId_out, IDType& lastId_out) {
             const auto startOfDescriptor = position;
             if (startOfDescriptor + DESCRIPTOR_SIZE >= _dataStream.size()) {
                 throw std::runtime_error("Trying to read the id descriptor past the end of the data stream.");
@@ -236,22 +257,18 @@ class BlockSubmissionCommunication {
             assert(position + sizeof(BlockIDRange::last) == startOfDescriptor + DESCRIPTOR_SIZE);
 
             assert(first <= last);
-            if (!_currentRange) {
-                _currentRange.emplace(first, last);
-            } else {
-                _currentRange->first = first;
-                _currentRange->last  = last;
-            }
+            _lastIdOfCurrentRange = last;
 
-            _lastId = _currentRange->first;
-            return _lastId;
+            _lastId     = last;
+            firstId_out = first;
+            lastId_out  = last;
         }
 
-        static constexpr size_t     DESCRIPTOR_SIZE = sizeof(BlockIDRange::first) + sizeof(BlockIDRange::last);
-        BlockIDMode                 _mode;
-        const DataStream&           _dataStream;
-        std::optional<BlockIDRange> _currentRange;
-        IDType                      _lastId;
+        static constexpr size_t DESCRIPTOR_SIZE = sizeof(BlockIDRange::first) + sizeof(BlockIDRange::last);
+        BlockIDMode             _mode;
+        const DataStream&       _dataStream;
+        block_id_t              _lastIdOfCurrentRange;
+        IDType                  _lastId;
     }; // namespace ReStore
 
     BlockSubmissionCommunication(
@@ -367,7 +384,6 @@ class BlockSubmissionCommunication {
         // Create the object which represents the store stream
         auto storeStream = SerializedBlockStoreStream(sendBuffers, _mpiContext.getOriginalSize());
         // storeStream.reserve(_blockDistribution.numBlocks());
-        // TODO storeStream.reserve(...);
 
         // Create the object resposible for serializing the range ids
         BlockIDSerialization<block_id_t> blockIDSerializationManager(
@@ -452,17 +468,70 @@ class BlockSubmissionCommunication {
         BlockIDDeserialization<block_id_t> blockIdDeserializer(
             BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, message.data);
 
-        decltype(message.data.size()) consumedBytes = 0;
-        while (consumedBytes < message.data.size()) {
-            auto [bytesRead, currentBlockId] = blockIdDeserializer.readId(consumedBytes);
+        const auto numBytesToRead = message.data.size();
+        size_t     consumedBytes  = 0;
+        const auto messageData    = message.data.data();
+        const auto payloadSize    = _offsetModeDescriptor.constOffset;
+        while (consumedBytes < numBytesToRead) {
+            // The following is too slow (says the profiler). It creates and destroys std::pair all the time.
+            // auto [bytesRead, currentBlockId] = blockIdDeserializer.readId(consumedBytes);
+            size_t     bytesRead;
+            block_id_t currentBlockId;
+            blockIdDeserializer.readId(consumedBytes, bytesRead, currentBlockId);
+
             consumedBytes += bytesRead;
 
             auto startOfPayload = consumedBytes;
             assert(startOfPayload < message.data.size());
 
             // Handle the block data
-            const auto payloadSize = _offsetModeDescriptor.constOffset;
-            handleBlockData(currentBlockId, message.data.data() + startOfPayload, payloadSize, message.srcRank);
+            handleBlockData(currentBlockId, messageData + startOfPayload, payloadSize, message.srcRank);
+            consumedBytes += payloadSize;
+        }
+    }
+
+    // parseIncomingMessage_ranged()
+    //
+    // This functions iterates over a received message and calls handleBlockData() for each consecutive range of blocks
+    // stored in the messages payload. This functions responsabilities are figuring out where a block starts and ends as
+    // well as which id it has.
+    //      message: The message to be parsed.
+    //      handleBlockData(block_id_t firstBlockId, block_id_t lastBlockId, const std::byte* data,
+    //      size_t lengthInBytes): the callback function to call for each detected block.
+    // If an empty message is passed, nothing will be done.
+    template <class HandleBlockDataFunc>
+    void parseIncomingMessage_ranged(const ReStoreMPI::RecvMessage& message, HandleBlockDataFunc handleBlockData) {
+        static_assert(
+            std::is_invocable<
+                HandleBlockDataFunc, block_id_t, block_id_t, const std::byte*, size_t, ReStoreMPI::current_rank_t>(),
+            "handleBlockData has to be invocable as _(block_id_t, block_id_t, const std::byte*, size_t, "
+            "current_rank_t)");
+
+        // TODO implement LUT mode
+        assert(_offsetModeDescriptor.mode == OffsetMode::constant);
+        assert(message.data.size() > 0);
+
+        BlockIDDeserialization<block_id_t> blockIdDeserializer(
+            BlockIDSerialization<block_id_t>::BlockIDMode::RANGES, message.data);
+
+        const auto numBytesToRead = message.data.size();
+        size_t     consumedBytes  = 0;
+        const auto messageData    = message.data.data();
+        while (consumedBytes < numBytesToRead) {
+            // The following is too slow (says the profiler). It creates and destroys std::pair all the time.
+            // auto [bytesRead, currentBlockId] = blockIdDeserializer.readId(consumedBytes);
+            size_t     bytesRead;
+            block_id_t firstBlockId, lastBlockId;
+            blockIdDeserializer.readIdRange(consumedBytes, bytesRead, firstBlockId, lastBlockId);
+            consumedBytes += bytesRead;
+            const auto numBlocksInRange = lastBlockId - firstBlockId + 1;
+
+            const auto   startOfPayload = consumedBytes;
+            const size_t payloadSize    = _offsetModeDescriptor.constOffset * numBlocksInRange;
+            assert(startOfPayload < message.data.size());
+
+            // Handle the block data
+            handleBlockData(firstBlockId, lastBlockId, messageData + startOfPayload, payloadSize, message.srcRank);
             consumedBytes += payloadSize;
         }
     }
@@ -477,6 +546,19 @@ class BlockSubmissionCommunication {
             assert(message.data.size() > 0);
             assert(message.srcRank < _mpiContext.getCurrentSize());
             parseIncomingMessage(message, handleBlockData);
+        }
+    }
+
+    // parseAllIncomingMessages_ranged()
+    //
+    // Iterates over the given messages and calls parseIncomingMessage() for each consecutive range of blocks.
+    template <class HandleBlockDataFunc>
+    void parseAllIncomingMessages_ranged(
+        const std::vector<ReStoreMPI::RecvMessage>& messages, HandleBlockDataFunc handleBlockData) {
+        for (auto&& message: messages) {
+            assert(message.data.size() > 0);
+            assert(message.srcRank < _mpiContext.getCurrentSize());
+            parseIncomingMessage_ranged(message, handleBlockData);
         }
     }
 

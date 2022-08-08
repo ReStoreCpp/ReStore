@@ -61,16 +61,16 @@ inline void getServingRanks(
 template <class MPIContext>
 inline ReStoreMPI::original_rank_t getServingRank(
     const typename BlockDistribution<MPIContext>::BlockRange& blockRange,
-    const BlockDistribution<MPIContext>* _blockDistribution, ReStoreMPI::original_rank_t receivingRank) {
+    const BlockDistribution<MPIContext>& _blockDistribution, ReStoreMPI::original_rank_t receivingRank) {
     // Special case treatment for blocks that we have locally
-    if (_blockDistribution->isStoredOn(blockRange, receivingRank)) {
+    if (_blockDistribution.isStoredOn(blockRange, receivingRank)) {
         return receivingRank;
     }
 
     // Select a random alive rank to serve this block range; use same PE for all requests of a PE for a given
     // BlockRange.
     auto servingRank =
-        _blockDistribution->randomAliveRankBlockRangeIsStoredOn(blockRange, asserting_cast<uint64_t>(receivingRank));
+        _blockDistribution.randomAliveRankBlockRangeIsStoredOn(blockRange, asserting_cast<uint64_t>(receivingRank));
 
     if (servingRank == -1) {
         throw UnrecoverableDataLossException();
@@ -131,7 +131,7 @@ projectBlockRequestsFromUserToPermutedIDs<IdentityPermutation>(
 // Returns sendBlockRanges and recvBlockRanges with current ranks
 template <class MPIContext>
 inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_request_t>> getSendRecvBlockRanges(
-    const std::vector<block_range_request_t>& blockRanges, const BlockDistribution<MPIContext>* _blockDistribution,
+    const std::vector<block_range_request_t>& blockRanges, const BlockDistribution<MPIContext>& _blockDistribution,
     const MPIContext& _mpiContext) {
     std::vector<block_range_request_t> sendBlockRanges;
     std::vector<block_range_request_t> recvBlockRanges;
@@ -141,23 +141,22 @@ inline std::pair<std::vector<block_range_request_t>, std::vector<block_range_req
         assert(lengthOfRange > 0);
         const auto lastBlockIdInRange = firstBlockIdInRange + lengthOfRange - 1;
         assert(firstBlockIdInRange <= lastBlockIdInRange);
-        assert(lastBlockIdInRange < _blockDistribution->numBlocks());
+        assert(lastBlockIdInRange < _blockDistribution.numBlocks());
         const auto destinationRank = blockRange.second;
 
         const auto firstBlockIdOfNextInternalRange = [&_blockDistribution](const block_id_t blockId) {
-            return _blockDistribution->rangeOfBlock(blockId).start()
-                   + _blockDistribution->rangeOfBlock(blockId).length();
+            return _blockDistribution.rangeOfBlock(blockId).start()
+                   + _blockDistribution.rangeOfBlock(blockId).length();
         };
 
         // The requested block range might span over multiple internal block ranges. We therefore might need to split up
         // the request.
         for (block_id_t blockId = firstBlockIdInRange; blockId <= lastBlockIdInRange;
              blockId            = firstBlockIdOfNextInternalRange(blockId)) {
-            assert(blockId < _blockDistribution->numBlocks());
-            assert(_blockDistribution);
+            assert(blockId < _blockDistribution.numBlocks());
 
             const typename BlockDistribution<MPIContext>::BlockRange blockRangeInternal =
-                _blockDistribution->rangeOfBlock(blockId);
+                _blockDistribution.rangeOfBlock(blockId);
 
             block_id_t end =
                 std::min(blockRangeInternal.start() + blockRangeInternal.length(), firstBlockIdInRange + lengthOfRange);
@@ -252,7 +251,7 @@ inline void handleReceivedBlocks(
 template <class MPIContext = ReStoreMPI::MPIContext>
 inline std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(
     const std::vector<block_range_request_t>& sendBlockRanges, const OffsetMode _offsetMode,
-    const MPIContext& _mpiContext, const SerializedBlockStorage<MPIContext>* _serializedBlocks) {
+    const MPIContext& _mpiContext, const SerializedBlockStorage<MPIContext>& _serializedBlocks) {
     assert(std::is_sorted(
         sendBlockRanges.begin(), sendBlockRanges.end(),
         [](const block_range_request_t& lhs, const block_range_request_t& rhs) {
@@ -278,7 +277,7 @@ inline std::vector<ReStoreMPI::RecvMessage> sparseAllToAll(
         // TODO Implement LUT mode
         assert(_offsetMode == OffsetMode::constant);
         UNUSED(_offsetMode);
-        _serializedBlocks->forAllBlocks(sendBlockRange.first, [&sendData](const std::byte* ptr, size_t size) {
+        _serializedBlocks.forAllBlocks(sendBlockRange.first, [&sendData](const std::byte* ptr, size_t size) {
             sendData.back().insert(sendData.back().end(), ptr, ptr + size);
         });
     }
