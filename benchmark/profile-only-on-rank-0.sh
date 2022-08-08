@@ -2,7 +2,7 @@
 
 PROFILING_RANK="${PROFILING_RANK-0}"
 GPERF_LIB="/usr/lib/x86_64-linux-gnu/libprofiler.so.0"
-PPROF="${PPROF-$(which pprof)}"
+PPROF="${PPROF-$(command -v pprof)}"
 if [ "$PPROF" == "" ]; then
     echo "pprof not found, please specify \$PPROF"
     exit 2
