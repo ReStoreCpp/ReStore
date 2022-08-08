@@ -379,3 +379,9 @@ experiments/page-rank/
 experiments/k-means/cluster-centers
 experiments/microbenchmarks/communication-pattern-*.csv
 experiments/microbenchmarks/plot-communication-pattern.R
+
+# Profiling outputs (Score-P etc.)
+profiling/
+
+# Competitors
+competitors/
