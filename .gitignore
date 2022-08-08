@@ -379,6 +379,8 @@ experiments/page-rank/
 experiments/k-means/cluster-centers
 experiments/microbenchmarks/communication-pattern-*.csv
 experiments/microbenchmarks/plot-communication-pattern.R
+experiments/microbenchmarks/serialized-submit*
+experiments/serialized-submit/
 
 # Profiling outputs (Score-P etc.)
 profiling/
