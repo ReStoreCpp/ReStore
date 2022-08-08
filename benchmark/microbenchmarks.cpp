@@ -31,6 +31,10 @@
 
 using iter::range;
 
+// Ranks to not submit their own working data (used in the comparison against Fenix).
+constexpr bool SUBMIT_FOREIGN_DATA = false;
+constexpr int  RANKS_PER_NODE      = 48;
+
 static void BM_submitBlocks(benchmark::State& state) {
     // Parse arguments
     auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
@@ -38,6 +42,7 @@ static void BM_submitBlocks(benchmark::State& state) {
     auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
     auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
     auto fractionOfRanksThatFail   = static_cast<double>(state.range(4)) / 1000.;
+    bool submitForeignData         = SUBMIT_FOREIGN_DATA;
     UNUSED(fractionOfRanksThatFail);
 
     assert(bytesPerRank % bytesPerBlock == 0);
@@ -78,16 +83,23 @@ static void BM_submitBlocks(benchmark::State& state) {
         // Start measurement
         auto start = std::chrono::high_resolution_clock::now();
 
-        unsigned counter = 0;
+        unsigned counter     = 0;
+        uint64_t baseBlockId = 0;
+        if (submitForeignData) {
+            baseBlockId = static_cast<size_t>((myRankId() + RANKS_PER_NODE) % numRanks()) * data.size();
+        } else {
+            baseBlockId = static_cast<size_t>(myRankId()) * data.size();
+        }
+
         store.submitBlocks(
             [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
                 stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
             },
-            [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
-                auto ret = data.size() == counter
-                               ? std::nullopt
-                               : std::make_optional(ReStore::NextBlock<BlockType>(
-                                   {counter + static_cast<size_t>(myRankId()) * data.size(), data[counter]}));
+            [&counter, &data, baseBlockId]() -> std::optional<ReStore::NextBlock<BlockType>> {
+                auto ret =
+                    data.size() == counter
+                        ? std::nullopt
+                        : std::make_optional(ReStore::NextBlock<BlockType>({baseBlockId + counter, data[counter]}));
                 counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair
                            // is bound before or after the increment.
                 return ret;
@@ -103,6 +115,7 @@ static void BM_submitBlocks(benchmark::State& state) {
     }
 }
 
+#ifndef ID_RANDOMIZATION
 static void BM_submitSerializedData(benchmark::State& state) {
     // Parse arguments
     auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
@@ -110,6 +123,7 @@ static void BM_submitSerializedData(benchmark::State& state) {
     auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
     auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
     auto fractionOfRanksThatFail   = static_cast<double>(state.range(4)) / 1000.;
+    bool submitForeignData         = SUBMIT_FOREIGN_DATA;
     UNUSED(fractionOfRanksThatFail);
 
     assert(bytesPerRank % bytesPerBlock == 0);
@@ -120,8 +134,13 @@ static void BM_submitSerializedData(benchmark::State& state) {
 
     const auto rankId               = asserting_cast<uint64_t>(myRankId());
     const auto numBlocks            = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
-    const auto firstBlockOfThisRank = rankId * blocksPerRank;
-    const auto lastBlockOfThisRank  = (rankId + 1) * blocksPerRank - 1;
+    auto firstBlockOfThisRank = rankId * blocksPerRank;
+    auto lastBlockOfThisRank  = firstBlockOfThisRank + blocksPerRank - 1;
+
+    if (submitForeignData) {
+        firstBlockOfThisRank = (rankId + RANKS_PER_NODE) % asserting_cast<size_t>(numRanks()) * blocksPerRank;
+        lastBlockOfThisRank  = firstBlockOfThisRank + blocksPerRank - 1;
+    }
 
     // Generate the data to be stored in the ReStore.
     std::vector<uint8_t> data(blocksPerRank * bytesPerBlock);
@@ -157,6 +176,8 @@ static void BM_submitSerializedData(benchmark::State& state) {
         state.SetIterationTime(elapsedSeconds);
     }
 }
+#endif
+
 // pushBlocks was declassified by pullBlocks in experiments, we therefore no longer benchmark it.
 //
 // static void BM_pushBlocksRedistribute(benchmark::State& state) {
@@ -385,8 +406,6 @@ static void BM_submitSerializedData(benchmark::State& state) {
 // }
 
 static void BM_pullBlocksSingleRank(benchmark::State& state) {
-    // Each rank submits different data. The replication level is set to 3.
-
     // Parse arguments
     auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
     auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
@@ -500,6 +519,118 @@ static void BM_pullBlocksSingleRank(benchmark::State& state) {
     }
 }
 
+static void BM_pullBlocksSingleRankToSingleRank(benchmark::State& state) {
+    // Parse arguments
+    auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
+    auto fractionOfRanksThatFail   = static_cast<double>(state.range(4)) / 1000.;
+    UNUSED(fractionOfRanksThatFail);
+
+    assert(bytesPerRank % bytesPerBlock == 0);
+    auto blocksPerRank = bytesPerRank / bytesPerBlock;
+
+    const auto numRankFailures = 1;
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    // Setup
+    uint64_t rankId    = asserting_cast<uint64_t>(myRankId());
+    size_t   numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
+
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(bytesPerBlock);
+        for (uint64_t increment: range(0ul, bytesPerBlock)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == bytesPerBlock);
+    }
+    assert(data.size() == blocksPerRank);
+
+    ReStore::ReStore<BlockType> store(
+        MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * bytesPerBlock,
+        blocksPerPermutationRange);
+
+    unsigned counter = 0;
+
+    store.submitBlocks(
+        [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
+            stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
+        },
+        [&counter, &data]() -> std::optional<ReStore::NextBlock<BlockType>> {
+            auto ret = data.size() == counter
+                           ? std::nullopt
+                           : std::make_optional(ReStore::NextBlock<BlockType>(
+                               {counter + static_cast<size_t>(myRankId()) * data.size(), data[counter]}));
+            counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair
+                       // is bound before or after the increment.
+            return ret;
+        },
+        numBlocks);
+    assert(counter == data.size() + 1);
+
+    std::vector<std::pair<ReStore::block_id_t, size_t>> blockRanges;
+    blockRanges.reserve(asserting_cast<size_t>(numRanks()));
+    ReStore::block_id_t myStartBlock = std::numeric_limits<ReStore::block_id_t>::max();
+
+    // Use a random Range of numRankFailures PEs whose data we redistribute
+    std::mt19937                                             rng(42);
+    std::uniform_int_distribution<std::mt19937::result_type> dist(
+        0, asserting_cast<unsigned long>(numRanks()) - numRankFailures);
+
+    std::vector<BlockType> recvData(blocksPerRank, BlockType(bytesPerBlock));
+    // Measurement
+    for (auto _: state) {
+        UNUSED(_);
+
+        assert(myStartBlock == std::numeric_limits<ReStore::block_id_t>::max());
+
+        // Build the data structure specifying which block to transfer to which rank.
+        blockRanges.clear();
+        size_t              sourceRank   = 2;
+        ReStore::block_id_t startBlockId = sourceRank * blocksPerRank;
+        myStartBlock                     = startBlockId;
+        if (rankId == 1) {
+            blockRanges.emplace_back(myStartBlock, blocksPerRank);
+        }
+        assert(myStartBlock != std::numeric_limits<ReStore::block_id_t>::max());
+        assert(rankId == 1 || blockRanges.size() == 0);
+        assert(rankId != 1 || blockRanges.size() == 1);
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        store.pullBlocks(
+            blockRanges, [&recvData, myStartBlock](const std::byte* buffer, size_t size, ReStore::block_id_t blockId) {
+                assert(blockId >= myStartBlock);
+                auto index = blockId - myStartBlock;
+                assert(index < recvData.size());
+                // assert(recvData[index].size() == 0);
+                recvData[index].clear();
+                recvData[index].insert(
+                    recvData[index].end(), reinterpret_cast<const ElementType*>(buffer),
+                    reinterpret_cast<const ElementType*>(buffer + size));
+            });
+        benchmark::DoNotOptimize(recvData.data());
+        benchmark::ClobberMemory();
+        assert(std::all_of(recvData.begin(), recvData.end(), [bytesPerBlock](const BlockType& block) {
+            return block.size() == bytesPerBlock;
+        }));
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+        myStartBlock = std::numeric_limits<ReStore::block_id_t>::max();
+    }
+}
 static void BM_pullBlocksSmallRange(benchmark::State& state) {
     // Each rank submits different data. The replication level is set to 3.
 
@@ -814,7 +945,7 @@ static void BM_DiskRedistribute(benchmark::State& state) {
 
         assert(
             static_cast<uint8_t>(readData[0])
-            == static_cast<ElementType>((readBlock) % std::numeric_limits<uint8_t>::max()));
+            == static_cast<ElementType>((blocksPerRank * readRank) % std::numeric_limits<uint8_t>::max()));
         benchmark::DoNotOptimize(readData.data());
         benchmark::ClobberMemory();
         auto end            = std::chrono::high_resolution_clock::now();
@@ -1179,12 +1310,14 @@ const auto MAX_REPLICATION_LEVEL = 4;
 template <
     bool sweepBlocksPerPermutationRange, bool sweepReplicationLevel, bool sweepDataPerRank, bool sweepFailureRateOfPEs>
 static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
-    const int64_t bytesPerBlock             = 64;
-    const int64_t replicationLevel          = 4;
+    const int64_t bytesPerBlock = 64;
+    // const int64_t replicationLevel          = 4;
+    const int64_t replicationLevel          = 1;
     const int64_t bytesPerRank              = MiB(16);
     const int64_t promilleOfRankFailures    = 10;
     const int64_t blocksPerPermutationRange = 4096;
 
+#ifdef ID_RANDOMIZATION
     if (sweepBlocksPerPermutationRange) {
         std::vector<int64_t> blocksPerPermutationRange_values = {
             1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
@@ -1193,6 +1326,7 @@ static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
             benchmark->Args({bytesPerBlock, replicationLevel, bytesPerRank, b, promilleOfRankFailures});
         }
     }
+#endif
 
     // Replication level
     if (sweepReplicationLevel) {
@@ -1226,30 +1360,38 @@ BENCHMARK(BM_submitBlocks)          ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Iterations(1)                 ///
-    ->Apply(benchmarkArguments<false, true, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
 
+#ifndef ID_RANDOMIZATION
 BENCHMARK(BM_submitSerializedData)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Iterations(1)                 ///
-    ->Apply(benchmarkArguments<false, true, true, false>);
+    ->Apply(benchmarkArguments<false, false, false, false>);
+#endif
 
 BENCHMARK(BM_pullBlocksRedistribute) ///
     ->UseManualTime()                ///
     ->Unit(benchmark::kMillisecond)  ///
     ->Iterations(1)                  ///
-    ->Apply(benchmarkArguments<false, true, true, true>);
+    ->Apply(benchmarkArguments<false, false, false, true>);
 
 BENCHMARK(BM_pullBlocksSmallRange)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Iterations(1)                 ///
-    ->Apply(benchmarkArguments<false, true, true, true>);
+    ->Apply(benchmarkArguments<false, false, false, true>);
 
 BENCHMARK(BM_pullBlocksSingleRank)  ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Iterations(1)                 ///
+    ->Apply(benchmarkArguments<false, false, false, false>);
+
+BENCHMARK(BM_pullBlocksSingleRankToSingleRank) ///
+    ->UseManualTime()                          ///
+    ->Unit(benchmark::kMillisecond)            ///
+    ->Iterations(1)                            ///
     ->Apply(benchmarkArguments<false, false, false, false>);
 
 BENCHMARK_TEMPLATE(BM_DiskRedistribute, false) ///
