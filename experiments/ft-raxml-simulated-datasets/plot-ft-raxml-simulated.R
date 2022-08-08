@@ -82,7 +82,7 @@ ggplot(
     #legend.justification = c("left", "bottom"),
     legend.title = element_blank(),
     axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.title.y = element_blank()
+    #axis.title.y = element_blank()
   ) +
   ylab("time [ms]") +
   xlab("number of PEs") +
@@ -99,9 +99,10 @@ ggplot(
   ) +
   guides(
     color = guide_legend(
-      nrow = 4,
+      nrow = 2,
       byrow = TRUE,
       keyheight  = unit(0, "mm"),
   ))
-ggsave(paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'), width = 58.5, height = 55, units = "mm")
+# ggsave(paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'), width = 58.5, height = 55, units = "mm")
+ggsave(paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'), width = 85, height = 55, units = "mm")
 

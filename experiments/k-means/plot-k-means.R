@@ -121,8 +121,6 @@ aggregated_data <- data %>%
     .groups = "keep"
   )
 
-# TODO How many runs did not finish?
-
 # Plot the data
 x_breaks <- aggregated_data %>% pull(numRanksStart) %>% unique
 aggregated_data %>%
@@ -159,7 +157,7 @@ ggplot(
   scale_x_log10(breaks = x_breaks) +
   facet_wrap(
     vars(timer),
-    nrow = 1,
+    ncol = 1,
     scales = "fixed"
   ) +
   theme_husky(
@@ -177,7 +175,7 @@ ggplot(
   )
 ggsave(
   paste(output_dir, "k-means.pdf", sep = '/'),
-  width = 120, height = 40, units = "mm"
+  width = 85, height = 100, units = "mm"
 )
 
 # slowdown introduced by fault-tolerance and failures

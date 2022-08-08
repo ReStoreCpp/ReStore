@@ -123,7 +123,7 @@ ggplot() +
   ) +
   theme_husky(
     legend.position = "none",
-    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.45),
+    axis.text.x = element_text(angle = 45, hjust = 1),
     axis.title.x = element_blank(),
     # legend.position = c(0, 1),
     # legend.justification = c("left", "top"),
@@ -161,4 +161,5 @@ ggplot() +
       values = c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e")
   ) + 
   annotation_logticks(sides = "l")
-ggsave(paste(output_dir, "ft-raxml-empirical.pdf", sep = '/'), width = 60, height = 52, units = "mm")
+# ggsave(paste(output_dir, "ft-raxml-empirical.pdf", sep = '/'), width = 60, height = 52, units = "mm")
+ggsave(paste(output_dir, "ft-raxml-empirical.pdf", sep = '/'), width = 85, height = 50, units = "mm")

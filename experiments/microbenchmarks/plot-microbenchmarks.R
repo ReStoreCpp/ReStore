@@ -10,6 +10,8 @@ NUM_RANKS_PER_NODE <- 48
 # Select the data source depending on the plot you want to generate.
 #csv_file <- "determine-optimal-blocksPerPermutationRange.csv"
 csv_file <- "microbenchmarks.csv"
+#csv_file <- "serialized-submit.csv"
+csv_file <- "microbenchmarks-with-an-r-of-1.csv"
 
 asPowerOfTwo <- function(n) {
   treshold <- 1024
@@ -55,7 +57,6 @@ data <- read_csv(csv_file,
     numberOfRankFailures = ceiling(numberOfRanks * promilleOfRanksThatFail / 1000.),
     real_time = real_time, # * 10^6,
     cpu_time = cpu_time, # * 10^6,
-    time_unit = "ns",
     bytesPerBlockHR = humanReadable(bytesPerBlock, standard = "IEC", digits = 0),
     bytesPerBlockHR = factor(bytesPerBlockHR, levels = c("64 B")),
     bytesPerRankHR = humanReadable(bytesPerRank, standard = "IEC", digits = 0),
@@ -67,18 +68,22 @@ data <- read_csv(csv_file,
     idRandomization = factor(recode(idRandomization, `FALSE` = "Off", `TRUE` = "On")),
     benchmarkHR = factor(recode(benchmark,
       submitBlocks = "submit to restore",
+      submitSerializedData = "submit to restore (already serialized data)",
       pullBlocksRedistribute = "load from restore (all data)",
       pullBlocksSmallRange = "load from restore (1 % of data)",
       DiskRedistribute = "load from disk (all data)",
       DiskSmallRange = "load from disk (1 % of data)",
       pullBlocksSingleRank = "load from restore (data of a single rank)",
+      pullBlocksSingleRankToSingleRank = "load from restore (data of a single rank to a single rank)",
       DiskSingleRank = "load from disk (data of a single rank)",
       MpiIoRedistribute = "load from disk (MPI I/O; all data)",
       MpiIoSmallRange = "load from disk (MPI I/O; 1 % of data)"
-    ), levels = c("submit to restore", "load from restore (all data)", "load from restore (1 % of data)",
-                  "load from disk (all data)", "load from disk (1 % of data)",
+    ), levels = c("submit to restore", "submit to restore (already serialized data)", "load from restore (all data)",
+                  "load from restore (1 % of data)", "load from disk (all data)", "load from disk (1 % of data)",
                   "load from restore (data of a single rank)", "load from disk (data of a single rank)",
-                  "load from disk (MPI I/O; all data)", "load from disk (MPI I/O; 1 % of data)"))
+                  "load from restore (data of a single rank to a single rank)",
+                  "load from disk (MPI I/O; all data)", "load from disk (MPI I/O; 1 % of data)"
+                  ))
   ) %>%
   group_by(
     numberOfRanks, benchmark, benchmarkHR, bytesPerBlock, replicationLevel, bytesPerRank, blocksPerPermutationRange,
@@ -95,8 +100,8 @@ data <- read_csv(csv_file,
     ymin = quantile(real_time, probs = c(0.1)),
     ymax = quantile(real_time, probs = c(0.9)),
     .groups = "keep"
-  ) %>%
-  filter(replicationLevel != 1)
+  ) #%>%
+  #filter(replicationLevel != 1)
 
 # Define some labellers for facets
 # facet_labeller_width_description = function(description, value) {
@@ -151,7 +156,7 @@ ggplot(
   ) +
   facet_wrap(
     scales = "free",
-    ncol = 2,
+    ncol = 1,
     vars(benchmarkHR),
   ) +
   theme_husky(
@@ -166,26 +171,27 @@ ggplot(
   )
 ggsave(
   paste(output_dir, "determine-optimal-bytes-per-permutation-range.pdf", sep = '/'),
-  width = 120, height = 60, units = "mm"
+  width = 85, height = 100, units = "mm"
 )
 
 ### ID randomization On vs Off? ###
 # load microbenchmarks.csv
 data %>%
     filter(
-      bytesPerRankHR == " 16 MiB",
-      replicationLevel == 4,
+      bytesPerRank == 16777216,
+      #replicationLevel == 4,
+      replicationLevel == 1,
       bytesPerBlock == 64,
       blocksPerPermutationRange == 4096,
       promilleOfRanksThatFail == 10,
-      benchmarkHR %in% c("submit to restore", "load from restore (all data)", "load from restore (1 % of data)")
+      # benchmarkHR %in% c("submit to restore", "load from restore (all data)", "load from restore (1 % of data)")
   ) %>%
-  mutate(
-    benchmarkHR = recode(benchmarkHR,
-      "submit to restore" = "submit",
-      "load from restore (all data)" = "load all data",
-      "load from restore (1 % of data)" = "load 1 % of data"
-  )) %>%
+  #mutate(
+  #  benchmarkHR = recode(benchmarkHR,
+  #    "submit to restore" = "submit",
+  #    "load from restore (all data)" = "load all data",
+  #    "load from restore (1 % of data)" = "load 1 % of data"
+  #)) %>%
 ggplot(
     aes(
       x = as.factor(numberOfRanks),
@@ -206,7 +212,9 @@ ggplot(
   ) +
   facet_wrap(
     vars(idRandomization),
-    labeller = labeller(idRandomization = c("Off" = "consecutive IDs", "On" = "permuted IDs"))
+    labeller = labeller(idRandomization = c("Off" = "consecutive IDs", "On" = "permuted IDs")),
+    scales = "free_y",
+    ncol = 1
   ) +
   theme_husky(
     legend.position = "bottom",
@@ -214,10 +222,11 @@ ggplot(
     legend.box.margin = margin(1, 1, 1, 1),
     legend.box.spacing = margin(0, 0, 0, 0),
     axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.spacing = unit(5, "mm")
   )
 ggsave(
   paste(output_dir, "id-randomization-on-or-off-bottom-legend.pdf", sep = '/'),
-  width = 120, height = 55, units = "mm"
+  width = 85, height = 94.5, units = "mm"
 )
 
 ### Compare load-from-restore vs load-from-disk ###
@@ -249,7 +258,8 @@ data <- data %>%
 data %>%
     filter(
       bytesPerRankHR == " 16 MiB",
-      replicationLevel == 4,
+      # replicationLevel == 4,
+      replicationLevel == 2,
       idRandomization == "On" && 
         (amountOfData == "1 % of data" || benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)")) || 
       idRandomization == "Off" && amountOfData == "all data",
@@ -321,3 +331,90 @@ data %>%
     speedupOverDisk_median = median(speedupOverDisk),
     speedupOverMpiIo_median = median(speedupOverMpiIo),
   )
+
+### Compare submitting of serialized vs non-serialized data.
+# load serialized-submit.csv
+data <- data %>%
+    mutate(
+      amountOfData = factor(recode(benchmark,
+        pullBlocksRedistribute = "all data",
+        pullBlocksSmallRange = "1 % of data",
+        DiskRedistribute = "all data",
+        DiskSmallRange = "1 % of data",
+        pullBlocksSingleRank = "data of a single rank",
+        DiskSingleRank = "data of a single rank",
+        MpiIoRedistribute = "all data",
+        MpiIoSmallRange = "1 % of data"
+      ), levels = c("data of a single rank", "1 % of data", "all data" )),
+      benchmark = recode(benchmark,
+        submitBlocks = "submit to restore",
+        submitSerializedData = "submit to restore (serialized data)",
+        pullBlocksRedistribute = "load from restore",
+        pullBlocksSmallRange = "load from restore",
+        DiskRedistribute = "load from disk (ifstream)",
+        DiskSmallRange = "load from disk (ifstream)",
+        pullBlocksSingleRank = "load from restore",
+        DiskSingleRank = "load from disk (ifstream)",
+        MpiIoRedistribute = "load from disk (MPI I/O)",
+        MpiIoSmallRange = "load from disk (MPI I/O)",
+    ))
+
+# Multiply the load-from-restore curve with the replication level to check if its runtime is in the
+# same order of magnitude as submit-to-restore.
+data$real_time_mean[data$benchmark == "load from restore"] <-
+  data$real_time_mean[data$benchmark == "load from restore"] * 4
+data$ymin[data$benchmark == "load from restore"] <-
+  data$ymin[data$benchmark == "load from restore"] * 4
+data$ymax[data$benchmark == "load from restore"] <-
+  data$ymax[data$benchmark == "load from restore"] * 4
+
+data %>%
+    filter(
+      bytesPerRankHR == "16 MiB",
+      replicationLevel == 4,
+      idRandomization == "Off" && 
+      #  (amountOfData == "1 % of data" || benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)")) || 
+      # idRandomization == "Off" && amountOfData == "all data",
+      blocksPerPermutationRange == 4096,
+      #promilleOfRanksThatFail == 10,
+      # benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)", "load from restore"),
+      # amountOfData %in% c("1 % of data", "all data")
+    ) %>%
+ggplot(
+    aes(
+      x = as.factor(numberOfRanks),
+      color = benchmark,
+      y = real_time_mean,
+      ymin = ymin,
+      ymax = ymax,
+      group = benchmark,
+  )) +
+  geom_line_with_points_and_errorbars() +
+  scale_color_dark2() +
+  #scale_y_log_with_ticks_and_lines(scale_accuracy = 1) +
+  labs(
+    x = "#PEs",
+    y = "time [ms]",
+    color = "algorithm"
+  ) +
+  # facet_wrap(
+  #   scales = "fixed",
+  #   ncol = 3,
+  #   vars(amountOfData),
+  # ) +
+  theme_husky(
+    #legend.position = c(1, 0),
+    #legend.justification = c("right", "bottom"),
+    #legend.box.just = "right",
+    legend.title = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+  )
+ggsave(
+  paste(output_dir, "serialized-submit.pdf", sep = '/'),
+  width = 120, height = 45, units = "mm"
+)
+
+# ggsave(
+#   paste(output_dir, "serialized-submit-scaled-load-from-restore.pdf", sep = '/'),
+#   width = 120, height = 45, units = "mm"
+# )
