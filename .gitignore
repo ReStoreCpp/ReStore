@@ -306,7 +306,7 @@ tags
 [._]*.un~
 
 ### VisualStudioCode ###
-.vscode/*
+**/.vscode/*
 !.vscode/tasks.json
 !.vscode/launch.json
 *.code-workspace
@@ -387,3 +387,6 @@ profiling/
 
 # Competitors
 competitors/
+
+# R Linter
+.lintr
