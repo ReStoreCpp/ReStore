@@ -3,24 +3,27 @@ input_dir <- "~/projects/ReStore/experiments/microbenchmarks"
 output_dir <- input_dir
 setwd(input_dir)
 
+STYLE <- "slides"
+#STYLE <- "print"
+
 source("../common.R")
 
 NUM_RANKS_PER_NODE <- 48
 
 # Select the data source depending on the plot you want to generate.
-#csv_file <- "determine-optimal-blocksPerPermutationRange.csv"
+# csv_file <- "determine-optimal-blocksPerPermutationRange.csv"
 csv_file <- "microbenchmarks.csv"
-#csv_file <- "serialized-submit.csv"
-csv_file <- "microbenchmarks-with-an-r-of-1.csv"
+# csv_file <- "serialized-submit.csv"
+# csv_file <- "microbenchmarks-with-an-r-of-1.csv"
 
 asPowerOfTwo <- function(n) {
-  treshold <- 1024
+  threshold <- 1024
   exponent <- log2(n)
   stopifnot(2**exponent == n)
   
-  return(ifelse (n <= treshold, 
+  return(ifelse (n <= threshold, 
           paste(n),
-          paste("2^", exponent, sep = ''))
+          paste("2^", exponent, sep = ""))
   )
 }
 # TODO generalize this
@@ -124,7 +127,8 @@ data %>% pull(idRandomization) %>% unique()
 # load determine-optimal-blocksPerPermutationRange.csv
 data %>%
     filter(
-      bytesPerRankHR == "16 MiB",
+      bytesPerRank == 16777216,
+      numberOfRanks <= 6144,
       replicationLevel == 4,
       idRandomization == "On",
   ) %>%
@@ -163,9 +167,6 @@ ggplot(
     legend.position = "bottom",
     legend.box.margin = margin(1, 1, 1, 1),
     legend.box.spacing = margin(0, 0, 0, 0),
-    # legend.position = c(1, 1),
-    # legend.justification = c("right", "top"),
-    # legend.box.just = "right",
     legend.text.align = 1,
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
   )
@@ -179,31 +180,27 @@ ggsave(
 data %>%
     filter(
       bytesPerRank == 16777216,
-      #replicationLevel == 4,
-      replicationLevel == 1,
+      replicationLevel == 4,
       bytesPerBlock == 64,
       blocksPerPermutationRange == 4096,
       promilleOfRanksThatFail == 10,
-      # benchmarkHR %in% c("submit to restore", "load from restore (all data)", "load from restore (1 % of data)")
+      benchmarkHR %in% c("submit to restore", "load from restore (1 % of data)")
   ) %>%
-  #mutate(
-  #  benchmarkHR = recode(benchmarkHR,
-  #    "submit to restore" = "submit",
-  #    "load from restore (all data)" = "load all data",
-  #    "load from restore (1 % of data)" = "load 1 % of data"
-  #)) %>%
 ggplot(
     aes(
       x = as.factor(numberOfRanks),
-      color = benchmarkHR,
-      #color = as.factor(replicationLevel),
+      colour = benchmarkHR,
+      shape = benchmarkHR,
       y = real_time_mean,
       ymin = ymin,
       ymax = ymax,
       group = benchmarkHR,
   )) +
-  geom_line_with_points_and_errorbars() +
-  scale_color_dark2() +
+  geom_line_with_points_and_errorbars(
+    point_size = if (STYLE == "slides") 3 else NULL,
+    line_width = if (STYLE == "slides") 1 else NULL
+  ) +
+  scale_shape_and_color(name = "benchmark") +
   scale_y_log_with_ticks_and_lines() +
   labs(
     x = "#PEs",
@@ -213,10 +210,11 @@ ggplot(
   facet_wrap(
     vars(idRandomization),
     labeller = labeller(idRandomization = c("Off" = "consecutive IDs", "On" = "permuted IDs")),
-    scales = "free_y",
-    ncol = 1
+    scales = if (STYLE == "print") "free_y" else "fixed",
+    ncol = if (STYLE == "print") 1 else 2
   ) +
   theme_husky(
+    style = STYLE,
     legend.position = "bottom",
     legend.title = element_blank(),
     legend.box.margin = margin(1, 1, 1, 1),
@@ -224,10 +222,18 @@ ggplot(
     axis.text.x = element_text(angle = 45, hjust = 1),
     panel.spacing = unit(5, "mm")
   )
-ggsave(
-  paste(output_dir, "id-randomization-on-or-off-bottom-legend.pdf", sep = '/'),
-  width = 85, height = 94.5, units = "mm"
-)
+if (STYLE == "print") {
+    ggsave(
+        paste(output_dir, "id-randomization-on-or-off-bottom-legend.pdf", sep = '/'),
+        width = 85, height = 94.5, units = "mm"
+    )
+} else if (STYLE == "slides") {
+    ggsave(
+        paste(output_dir, "id-randomization-on-or-off-bottom-legend-slides.svg", sep = '/'),
+        width = 280, height = 140, units = "mm"
+    )
+    to_jpeg("id-randomization-on-or-off-bottom-legend-slides.svg")
+}
 
 ### Compare load-from-restore vs load-from-disk ###
 # load microbenchmarks.csv
@@ -245,11 +251,11 @@ data <- data %>%
       ), levels = c("data of a single rank", "1 % of data", "all data" )),
       benchmark = recode(benchmark,
         submitBlocks = "submit to restore",
-        pullBlocksRedistribute = "load from restore",
-        pullBlocksSmallRange = "load from restore",
+        pullBlocksRedistribute = "load from ReStore",
+        pullBlocksSmallRange = "load from ReStore",
         DiskRedistribute = "load from disk (ifstream)",
         DiskSmallRange = "load from disk (ifstream)",
-        pullBlocksSingleRank = "load from restore",
+        pullBlocksSingleRank = "load from ReStore",
         DiskSingleRank = "load from disk (ifstream)",
         MpiIoRedistribute = "load from disk (MPI I/O)",
         MpiIoSmallRange = "load from disk (MPI I/O)",
@@ -257,28 +263,31 @@ data <- data %>%
 
 data %>%
     filter(
-      bytesPerRankHR == " 16 MiB",
-      # replicationLevel == 4,
-      replicationLevel == 2,
+      bytesPerRank == 16777216,
+      replicationLevel == 4,
       idRandomization == "On" && 
         (amountOfData == "1 % of data" || benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)")) || 
       idRandomization == "Off" && amountOfData == "all data",
       blocksPerPermutationRange == 4096,
       promilleOfRanksThatFail == 10,
-      benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)", "load from restore"),
+      benchmark %in% c("load from disk (ifstream)", "load from disk (MPI I/O)", "load from ReStore"),
       amountOfData %in% c("1 % of data", "all data")
     ) %>%
 ggplot(
     aes(
       x = as.factor(numberOfRanks),
       color = benchmark,
+      shape = benchmark,
       y = real_time_mean,
       ymin = ymin,
       ymax = ymax,
       group = benchmark,
   )) +
-  geom_line_with_points_and_errorbars() +
-  scale_color_dark2() +
+  geom_line_with_points_and_errorbars(
+    point_size = 3,
+    line_width = 1,
+  ) +
+  scale_color_shape_discrete(name = "benchmark") +
   scale_y_log_with_ticks_and_lines(scale_accuracy = 1) +
   labs(
     x = "#PEs",
@@ -291,22 +300,31 @@ ggplot(
     vars(amountOfData),
   ) +
   theme_husky(
+    style = STYLE,
     legend.position = c(1, 0),
     legend.justification = c("right", "bottom"),
     #legend.box.just = "right",
     legend.title = element_blank(),
     axis.text.x = element_text(angle = 45, hjust = 1),
   )
-ggsave(
-  paste(output_dir, "load-from-restore-vs-load-from-disk.pdf", sep = '/'),
-  width = 120, height = 45, units = "mm"
-)
+if (STYLE == "print") {
+    ggsave(
+    paste(output_dir, "load-from-restore-vs-load-from-disk-slides.pdf", sep = '/'),
+    width = 120, height = 45, units = "mm"
+    )
+} else if (STYLE == "slides") {
+    ggsave(
+        paste(output_dir, "load-from-restore-vs-load-from-disk-slides.svg", sep = '/'),
+        width = 1.3 * 300, height = 1.3 * 140, units = "mm"
+    )
+    to_jpeg("load-from-restore-vs-load-from-disk-slides.svg")
+}
 
 # What's the speedup?
 data %>%
   filter(
     numberOfRanks >= 512 * NUM_RANKS_PER_NODE,
-    bytesPerRankHR == " 16 MiB",
+    bytesPerRank == 16777216,
     replicationLevel == 4,
     idRandomization == "On" && 
       (amountOfData == "1 % of data" || benchmark %in% c("load from disk", "load from disk (MPI I/O)")) || 
@@ -348,12 +366,12 @@ data <- data %>%
       ), levels = c("data of a single rank", "1 % of data", "all data" )),
       benchmark = recode(benchmark,
         submitBlocks = "submit to restore",
-        submitSerializedData = "submit to restore (serialized data)",
-        pullBlocksRedistribute = "load from restore",
-        pullBlocksSmallRange = "load from restore",
+        submitSerializedData = "submit to ReStore (serialized data)",
+        pullBlocksRedistribute = "load from ReStore",
+        pullBlocksSmallRange = "load from ReStore",
         DiskRedistribute = "load from disk (ifstream)",
         DiskSmallRange = "load from disk (ifstream)",
-        pullBlocksSingleRank = "load from restore",
+        pullBlocksSingleRank = "load from ReStore",
         DiskSingleRank = "load from disk (ifstream)",
         MpiIoRedistribute = "load from disk (MPI I/O)",
         MpiIoSmallRange = "load from disk (MPI I/O)",

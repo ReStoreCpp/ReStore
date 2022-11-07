@@ -1,13 +1,17 @@
 # Read the input data
-output_dir = "~/projects/ReStore/experiments/k-means"
+output_dir <- "~/projects/ReStore/experiments/k-means"
 input_dir <- paste(output_dir, "data", sep = '/')
 setwd(input_dir)
+save_plot <- ggsave_factory(output_dir)
+
+STYLE <- "slides"
+# STYLE <- "print"
 
 source("../../common.R")
 
 ft_off_data <- 
   list.files(pattern = "ft-off.*.intelmpi.*.csv") %>% 
-  map_df(~read_csv(.)) %>%
+  map_df(~read_delim(.)) %>%
   # Older versions of the benchmark have a bug where the replication level is
   # not initialized if fault tolerance is turned off.
   mutate(replicationLevel = 0)
@@ -148,35 +152,53 @@ ggplot(
     x = numRanksStart,
     y = time_mean_s,
     color = useFaultTolerance,
-    # ymin = time_mean_s - time_sd_s,
-    # ymax = time_mean_s + time_sd_s
+    shape = useFaultTolerance,
     ymin = time_q10_s,
     ymax = time_q90_s
   )) +
-  geom_line_with_points_and_errorbars() +
+  geom_line_with_points_and_errorbars(
+    point_size = if (STYLE == "slides") 3 else NULL,
+    line_width = if (STYLE == "slides") 1 else NULL
+  ) +
   scale_x_log10(breaks = x_breaks) +
   facet_wrap(
     vars(timer),
-    ncol = 1,
-    scales = "fixed"
+    ncol = if (STYLE == "print") 1 else 2,
+    scales = if (STYLE == "print") "fixed" else "free_x"
   ) +
   theme_husky(
+    style = STYLE,
     # Angle the x-axis labels
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    
+    axis.text.x = element_text(size = 40, angle = 45, hjust = 1),
+
     # Move legend position and remove its title
-    legend.position = c(1, 0),
+    legend.position = c(0.48, 0.01),
     legend.justification = c("right", "bottom"),
+    axis.title.x = element_text(hjust = 0.25),
+    text_size = 40
   ) +
+  scale_color_shape_discrete(
+    name = "Fault tolerance",
+  ) +
+  guides(color = guide_legend(ncol = 2)) +
   labs(
     x = "#PEs",
     y = "time [s]",
     color = "rank failures"
-  )
-ggsave(
-  paste(output_dir, "k-means.pdf", sep = '/'),
-  width = 85, height = 100, units = "mm"
-)
+  ) +
+  gg_eps()
+
+if (STYLE == "print") {
+    save_plot(
+        "k-means", style = STYLE,
+        width = 85, height = 100
+    )   
+} else if (STYLE == "slides") {
+    save_plot(
+        "k-means", style = STYLE,
+        width = 290, height = 150
+    )   
+}
 
 # slowdown introduced by fault-tolerance and failures
 slowdown_data <- data %>%

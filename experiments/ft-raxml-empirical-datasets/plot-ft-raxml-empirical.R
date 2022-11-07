@@ -1,8 +1,13 @@
 output_dir <- "~/projects/ReStore/experiments/ft-raxml-empirical-datasets"
-data_dir <- paste(output_dir, "data", sep = '/') 
+data_dir <- paste(output_dir, "data", sep = "/")
 setwd(output_dir)
 
 source("../common.R")
+
+save_plot <- ggsave_factory(output_dir)
+
+# STYLE <- "print"
+STYLE <- "slides"
 
 # Dataset to verbose label
 dataset2Label <- function(s) {
@@ -114,26 +119,9 @@ across_ranks_stats_long <- across_ranks_stats_long %>%
         dataset = factor(dataset, levels = c("dna_rokasD4", "dna_rokasD1", "aa_rokasA1", "aa_rokasA8", "dna_PeteD8", "aa_rokasA4", "dna_rokasD7"))
     )
 
-ggplot() +
-  geom_point(
-    data = across_ranks_stats_long,
-    aes(y = msMax, x = dataset, color = timer),
-    position = position_dodge(width = 0.3),
-    size = 1
-  ) +
-  theme_husky(
-    legend.position = "none",
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.title.x = element_blank(),
-    # legend.position = c(0, 1),
-    # legend.justification = c("left", "top"),
-    # legend.box.just = "left",
-    # legend.title = element_blank(),
-  ) +
-  ylab("time [ms]") +
-  scale_y_log10(breaks = log_axis_breaks, minor_breaks = log_axis_minor_breaks) +
-  scale_x_discrete(
-    labels = c(
+dataset_labels <- c()
+if (STYLE == "print") {
+    dataset_labels <- c(
       #"aa_rokasA1" = "AA NagyA1 @ 96 ranks\n172k sites · 60 taxa\n10 MiB\n 0.10 MiB/rank",
       #"aa_rokasA4" = "AA ChenA4 @ 4000 ranks\n1806k sites · 58 taxa\n100 MiB\n0.03 MiB/rank",
       #"aa_rokasA8" = "AA YangA8 @ 96 ranks\n505k sites · 95 taxa\n46 MiB\n0.48 MiB/rank",
@@ -148,18 +136,84 @@ ggplot() +
       "dna_rokasD1" = "SongD1 · 480 PEs\n0.10 MiB/PE",
       "dna_rokasD4" = "XiD4 · 192 PEs\n0.06 MiB/PE",
       "dna_rokasD7" = "TarvD7 · 4000 PEs\n0.18 MiB/PE"
+    )
+} else {
+    dataset_labels <- c(
+      "aa_rokasA1" = "96 PEs\n0.10 MiB/PE",
+      "aa_rokasA4" = "4000 PEs\n0.03 MiB/PE",
+      "aa_rokasA8" = "96 PEs\n0.48 MiB/PE",
+      "dna_PeteD8" = "240 PEs\n2.08 MiB/PE",
+      "dna_rokasD1" = "480 PEs\n0.10 MiB/PE",
+      "dna_rokasD4" = "192 PEs\n0.06 MiB/PE",
+      "dna_rokasD7" = "4000 PEs\n0.18 MiB/PE"
+    )
+}
+
+benchmark_colors <-c(
+    "SaveToReStore" = "#ff7f0e",
+    "LoadMSAFromReStore" = "#d62728",
+    "LoadMSAFromRBACached" = "#1f77b4",
+    "LoadMSAFromRBAUncached" = "#2ca02c"
+)
+if (STYLE == "slides") {
+    benchmark_colors <- benchmark_colors %>% remove_elem("LoadMSAFromRBACached")
+}
+
+if (STYLE == "slides") {
+    across_ranks_stats_long <- across_ranks_stats_long %>%
+        filter(timer != "LoadMSAFromRBACached")
+}
+
+benchmark_labels <- c(
+    "SaveToReStore" = "submit to ReStore",
+    "LoadMSAFromReStore" = "load from ReStore",
+    "LoadMSAFromRBACached" = "load from binary file (cached, partial)",
+    "LoadMSAFromRBAUncached" = "load from binary file (uncached, partial)"
+)
+if (STYLE == "slides") {
+    benchmark_labels["LoadMSAFromRBACached"] = "load from disk"
+}
+
+ggplot() +
+  geom_point(
+    data = across_ranks_stats_long,
+    aes(
+        y = msMax,
+        x = dataset,
+        color = timer,
+        shape = timer
     ),
-    #limits = (across_ranks_stats_long %>% filter(timer == "LoadAssignmentDataFirstLoad") %>% arrange(msAvg))$dataset
+    position = position_dodge(width = 0.3),
+    size = 3
   ) +
-  scale_color_manual(
-      labels = c(
-        "SaveToReStore" = "submit to ReStore",
-        "LoadMSAFromReStore" = "load from ReStore",
-        "LoadMSAFromRBACached" = "load from binary file (cached, partial)",
-        "LoadMSAFromRBAUncached" = "load from binary file (uncached, partial)"
-      ),
-      values = c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e")
-  ) + 
+  theme_husky(
+    style = STYLE,
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title.x = element_blank(),
+  ) +
+  ylab("time [ms]") +
+  scale_y_log10(
+    breaks = log_axis_breaks,
+    minor_breaks = log_axis_minor_breaks
+  ) +
+  scale_x_discrete(
+    labels = dataset_labels,
+  ) +
+  scale_color_shape_manual(
+    color_values = benchmark_colors,
+    labels = benchmark_labels
+  ) +
   annotation_logticks(sides = "l")
-# ggsave(paste(output_dir, "ft-raxml-empirical.pdf", sep = '/'), width = 60, height = 52, units = "mm")
-ggsave(paste(output_dir, "ft-raxml-empirical.pdf", sep = '/'), width = 85, height = 50, units = "mm")
+
+if (STYLE == "print") {
+    save_plot(
+        "ft-raxml-empirical", style = STYLE,
+        width = 85, height = 56.5
+    )
+} else if (STYLE == "slides") {
+    save_plot(
+        "ft-raxml-empirical", style = STYLE,
+        width = 1.3 * 140, height = 1.3 * 147
+    )
+}

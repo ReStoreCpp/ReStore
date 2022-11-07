@@ -4,6 +4,9 @@ csv_file <- paste(input_dir, "data.csv", sep = '/')
 
 source("../common.R")
 
+STYLE <- "slides"
+# STYLE <- "print"
+
 NUM_RANKS_PER_NODE <- 48
 
 ### Data loading ###
@@ -59,6 +62,30 @@ data <- read_csv(
   )
 
 ### Plot data ###
+benchmark_labels = c(
+    "saveMSAToRestore" = "submit to ReStore",
+    "loadMSAFromReStore" = "load from ReStore (all data)",
+    "loadMSAFromRBACached" = "load cached binary file",
+    "loadMSAFromRBAUncached" = "load uncached binary file"
+)
+
+benchmark_colors <- c(
+    "saveMSAToRestore" = "#ff7f0e",
+    "loadMSAFromReStore" = "#d62728",
+    "loadMSAFromRBACached" = "#1f77b4",
+    "loadMSAFromRBAUncached" = "#2ca02c"
+)
+
+if (STYLE == "slides") {
+    data <- data %>%
+        filter(timer != "loadMSAFromRBACached")
+    benchmark_labels <- benchmark_labels[-3]
+    benchmark_colors <- benchmark_colors[-3]
+    benchmark_shapes <- benchmark_shapes[-3]
+    benchmark_labels["loadMSAFromRBAUncached"] = "load from disk"
+    print(benchmark_labels)
+}
+
 data %>% filter(timer != "loadMetadataFromRBA") %>%
 ggplot(
   aes(
@@ -67,42 +94,46 @@ ggplot(
     ymax = time_mean_ms + time_sd_ms,
     x = as.factor(numberOfRanks),
     color = timer,
+    shape = timer,
     group = timer
 )) +
   geom_point(
     position = position_dodge(width = 0.3),
-    size = 1
+    size = if (STYLE == "slides") 3 else 1,
   ) +
   theme_husky(
-    #legend.position = c(0, 0),
+    style = STYLE,
     legend.position = "bottom",
     legend.margin = margin(),
     legend.box.margin = margin(),
     legend.box.spacing = unit(1, "mm"),
-    #legend.justification = c("left", "bottom"),
     legend.title = element_blank(),
     axis.text.x = element_text(angle = 45, hjust = 1),
-    #axis.title.y = element_blank()
   ) +
   ylab("time [ms]") +
   xlab("number of PEs") +
   annotation_logticks(base = 10, sides = "l") +
   scale_y_log10(breaks = log_axis_breaks, minor_breaks = log_axis_minor_breaks) +
-  scale_color_manual(
-      labels = c(
-        "saveMSAToRestore" = "submit to ReStore",
-        "loadMSAFromReStore" = "load from ReStore (all data)",
-        "loadMSAFromRBACached" = "load cached binary file",
-        "loadMSAFromRBAUncached" = "load uncached binary file"
-      ),
-      values = c("#1f77b4", "#2ca02c", "#d62728", "#ff7f0e"),
+  scale_color_shape_manual(
+    color_values = benchmark_colors,
+    labels = benchmark_labels
   ) +
   guides(
     color = guide_legend(
       nrow = 2,
       byrow = TRUE,
       keyheight  = unit(0, "mm"),
-  ))
-# ggsave(paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'), width = 58.5, height = 55, units = "mm")
-ggsave(paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'), width = 85, height = 55, units = "mm")
+  )) +
+  gg_eps()
 
+if (STYLE == "print") {
+    ggsave(
+        paste(output_dir, "ft-raxml-simulated.pdf", sep = '/'),
+        width = 85, height = 55, units = "mm"
+    )
+} else if (STYLE == "slides") {
+    ggsave(paste(output_dir, "ft-raxml-simulated-slides.svg", sep = '/'),
+        width = 1.3 * 155, height = 1.3 * 150, units = "mm"
+    )
+    to_jpeg("ft-raxml-simulated-slides.svg")
+}
