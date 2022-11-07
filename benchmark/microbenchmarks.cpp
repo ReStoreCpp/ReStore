@@ -31,8 +31,8 @@
 
 using iter::range;
 
-// Ranks to not submit their own working data (used in the comparison against Fenix).
-constexpr bool SUBMIT_FOREIGN_DATA = false;
+// Ranks don't have a copy of their working data in ReStore (thus increasing redundancy).
+constexpr bool SUBMIT_FOREIGN_DATA = true;
 constexpr int  RANKS_PER_NODE      = 48;
 
 static void BM_submitBlocks(benchmark::State& state) {
@@ -1311,8 +1311,7 @@ template <
     bool sweepBlocksPerPermutationRange, bool sweepReplicationLevel, bool sweepDataPerRank, bool sweepFailureRateOfPEs>
 static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
     const int64_t bytesPerBlock = 64;
-    // const int64_t replicationLevel          = 4;
-    const int64_t replicationLevel          = 1;
+    const int64_t replicationLevel          = 4;
     const int64_t bytesPerRank              = MiB(16);
     const int64_t promilleOfRankFailures    = 10;
     const int64_t blocksPerPermutationRange = 4096;
