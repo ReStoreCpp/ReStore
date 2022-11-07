@@ -361,14 +361,12 @@ clangbuild
 softwipe_*
 
 # Experiment output files
+experiments/**/*.png
+experiments/**/*.pdf
 experiments/k-means-overhead/*.measurements.csv
-experiments/k-means-overhead/*.png
-experiments/simulate-failures-until-data-loss/*.png
-experiments/id-compression/*.png
 experiments/k-means-overhead/first-full-run/
 experiments/page-rank-overhead/measurements-ft-off.csv
 experiments/page-rank-overhead/measurements-ft-on.csv
-experiments/page-rank-overhead/*.png
 
 # Presentations
 Presentations/
