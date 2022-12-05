@@ -101,6 +101,7 @@ class ReStore {
     }
 
     void updateComm(MPI_Comm newComm) {
+        std::unique_lock<std::mutex> storageGuard(_storageMutex);
         _mpiContext.updateComm(newComm);
     }
 
@@ -125,6 +126,7 @@ class ReStore {
                 return sum + (block.blockIdEnd - block.blockIdBegin);
             });
         assert(_offsetMode == OffsetMode::constant);
+        std::unique_lock<std::mutex> storageGuard(_storageMutex);
 
         // The _blockIdPermuter has to exist for pullBlocks to not throw an assertion.
         _blockIdPermuter.emplace(0, 0, 0); // All values are dummy values.
@@ -220,7 +222,7 @@ class ReStore {
         if (totalNumberOfBlocks == 0) {
             throw std::runtime_error("Invalid number of blocks: 0.");
         }
-        std::unique_lock<std::mutex> submitBlocksGuard(_submitBlocksMutex);
+        std::unique_lock<std::mutex> storageGuard(_storageMutex);
 
         // Initialize the block id permuter.
         const auto largestBlockId            = totalNumberOfBlocks - 1;
@@ -252,7 +254,7 @@ class ReStore {
 
             auto exchangeAndStoreData = [this](
                                             auto _blockSubmissionComm, auto _sendBuffers,
-                                            [[maybe_unused]] std::unique_lock<std::mutex> _submitBlocksGuard) -> bool {
+                                            [[maybe_unused]] std::unique_lock<std::mutex> _storageGuard) -> bool {
                 // All blocks have been serialized, send & receive replicas
                 auto receivedMessages = _blockSubmissionComm.exchangeData(_sendBuffers);
 
@@ -279,10 +281,10 @@ class ReStore {
             if (asyncDataExchange) {
                 _exchangeAndStoreDataFuture = std::async(
                     std::launch::async, exchangeAndStoreData, std::move(blockSubmissionComm), std::move(sendBuffers),
-                    std::move(submitBlocksGuard));
+                    std::move(storageGuard));
             } else {
                 exchangeAndStoreData(
-                    std::move(blockSubmissionComm), std::move(sendBuffers), std::move(submitBlocksGuard));
+                    std::move(blockSubmissionComm), std::move(sendBuffers), std::move(storageGuard));
             }
         } catch (ReStoreMPI::FaultException& e) {
             // Reset BlockDistribution and SerializedBlockStorage
@@ -296,7 +298,7 @@ class ReStore {
     //
     // Returns true if the asynchronous message transfers and storage of the submitBlocks() call has finished.
     // If the submitBlocks() call was not asynchronous, this function will always return true.
-    bool pollSubmitBlocksIsFinished() {
+    bool pollSubmitBlocksIsFinished() const {
         if (_exchangeAndStoreDataFuture.valid()) {
             return _exchangeAndStoreDataFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
             // TODO we need to handle possible node failures during the data exchange.
@@ -308,7 +310,7 @@ class ReStore {
     // waitSubmitBlocksIsFinished()
     //
     // Blocks until the asynchronous message transfers and storage of the submitBlocks() call are finished.
-    void waitSubmitBlocksIsFinished() {
+    void waitSubmitBlocksIsFinished() const {
         // TODO we need to handle possible node failures during the data exchange.
         if (_exchangeAndStoreDataFuture.valid()) {
             _exchangeAndStoreDataFuture.wait();
@@ -332,6 +334,7 @@ class ReStore {
         bool canBeParallelized = false // not supported yet
     ) {
         UNUSED(canBeParallelized);
+        std::unique_lock<std::mutex> storageGuard(_storageMutex);
 
         // Transform to format used by functions already implemented for pushBlocks.
         std::vector<std::pair<std::pair<block_id_t, size_t>, ReStoreMPI::current_rank_t>> blockRangesWithReceiver;
@@ -438,6 +441,7 @@ class ReStore {
             throw std::runtime_error("LUT mode is not implemented yet.");
         }
         UNUSED(canBeParallelized);
+        std::unique_lock<std::mutex> storageGuard(_storageMutex);
 
         // Project the block ids from the user ids to the internal ids. This means that the length of the requested
         // block ranges change, too. If we are using the RangePermutation, we will still get some consecutive blocks
@@ -498,7 +502,7 @@ class ReStore {
     std::optional<SerializedBlockStorage<>> _serializedBlocks  = std::nullopt;
     std::optional<BlockIdPermuter>          _blockIdPermuter   = std::nullopt;
     std::future<bool>                       _exchangeAndStoreDataFuture;
-    std::mutex                              _submitBlocksMutex;
+    std::mutex                              _storageMutex;
 
     void _assertInvariants() const {
         assert(
