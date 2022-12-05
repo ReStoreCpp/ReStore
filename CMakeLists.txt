@@ -20,11 +20,17 @@ project(ReStore VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# Find and link MPI
 find_package(MPI REQUIRED)
 if(MPI_CXX_FOUND)
   include_directories(BEFORE SYSTEM ${MPI_CXX_INCLUDE_PATH})
   link_libraries(${MPI_LIBRARIES})
 endif()
+
+# Find and link threading library (e.g. pthreads)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+link_libraries(Threads::Threads)
 
 # Make additinal cmake modules findable
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")

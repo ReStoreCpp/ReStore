@@ -123,6 +123,11 @@ restore_add_mpi_test(
 )
 
 restore_add_mpi_test(
+    mpi_tests_failures/test_restore_end_to_end_asynchronous_submit.cpp TestRestore_EndToEnd_Asynchronous_Submit
+    4 "ReStore::ReStore;cppitertools"
+)
+
+restore_add_mpi_test(
   mpi_tests_failures/test_restore_end_to_end_simple2_pull_blocks.cpp TestRestore_EndToEnd_Simple2_PullBlocks
   4 "ReStore::ReStore;cppitertools"
   )
