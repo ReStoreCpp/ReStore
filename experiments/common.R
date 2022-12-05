@@ -9,7 +9,6 @@ library(scales)
 library(showtext)
 library(latex2exp)
 library(tools)
-library(purrr)
 
 # TODO: Develop this collection of helper functions into a reusable library
 

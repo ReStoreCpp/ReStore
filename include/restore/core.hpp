@@ -1,11 +1,12 @@
 #ifndef RESTORE_CORE_H
 #define RESTORE_CORE_H
 
-#include <algorithm>
+//#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <future>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -73,11 +74,11 @@ class ReStore {
 
     // Copying a ReStore object does not really make sense. It would be really hard and probably not
     // what you want to deep copy the replicated blocks (including the remote ones?), too.
-    ReStore(const ReStore& other) = delete;
+    ReStore(const ReStore& other)            = delete;
     ReStore& operator=(const ReStore& other) = delete;
 
     // Moving a ReStore is disabled for now, because we do not need it and use const members
-    ReStore(ReStore&& other) = delete;
+    ReStore(ReStore&& other)            = delete;
     ReStore& operator=(ReStore&& other) = delete;
 
     // Destructor
@@ -192,6 +193,7 @@ class ReStore {
     // nextBlock: a generator function which should return <globalBlockId, const reference to block>
     //      on each call. If there are no more blocks getNextBlock should return {}.
     // totalNumberOfBlocks: The total number of blocks across all ranks.
+    // asyncMessages: If true, the communication will be asynchronous.
     // canBeParallelized: Indicates if multiple serializeFunc calls can happen on different blocks
     //      concurrently. Also assumes that the blocks do not have to be serialized in the order they
     //      are emitted by nextBlock.
@@ -200,6 +202,7 @@ class ReStore {
     template <class SerializeBlockCallbackFunction, class NextBlockCallbackFunction>
     void submitBlocks(
         SerializeBlockCallbackFunction serializeFunc, NextBlockCallbackFunction nextBlock, size_t totalNumberOfBlocks,
+        bool asyncDataExchange = false,
         bool canBeParallelized = false // not supported yet
     ) {
         if (_offsetMode == OffsetMode::lookUpTable) {
@@ -217,6 +220,7 @@ class ReStore {
         if (totalNumberOfBlocks == 0) {
             throw std::runtime_error("Invalid number of blocks: 0.");
         }
+        std::unique_lock<std::mutex> submitBlocksGuard(_submitBlocksMutex);
 
         // Initialize the block id permuter.
         const auto largestBlockId            = totalNumberOfBlocks - 1;
@@ -240,35 +244,74 @@ class ReStore {
             assert(_mpiContext.getOriginalSize() == _mpiContext.getCurrentSize());
 
             // Initialize the Implementation object (as in PImpl)
-            BlockSubmissionCommunication<BlockType> comm(_mpiContext, *_blockDistribution, offsetMode());
+            BlockSubmissionCommunication<BlockType> blockSubmissionComm(_mpiContext, *_blockDistribution, offsetMode());
 
             // Allocate send buffers and serialize the blocks to be sent
-            auto sendBuffers =
-                comm.serializeBlocksForTransmission(serializeFunc, nextBlock, *_blockIdPermuter, canBeParallelized);
+            auto sendBuffers = blockSubmissionComm.serializeBlocksForTransmission(
+                serializeFunc, nextBlock, *_blockIdPermuter, canBeParallelized);
 
-            // All blocks have been serialized, send & receive replicas
-            auto receivedMessages = comm.exchangeData(sendBuffers);
+            auto exchangeAndStoreData = [this](
+                                            auto _blockSubmissionComm, auto _sendBuffers,
+                                            [[maybe_unused]] std::unique_lock<std::mutex> _submitBlocksGuard) -> bool {
+                // All blocks have been serialized, send & receive replicas
+                auto receivedMessages = _blockSubmissionComm.exchangeData(_sendBuffers);
 
-            // Deallocate sendBuffers, they are no longer needed and take up replicationLevel * bytesPerRank memory.
-            // By deallocating them now, before the received messages are stored into the serialized block storage,
-            // we can reduce the peak memory consumption of this algorithm.
-            sendBuffers = decltype(sendBuffers)();
+                // Deallocate sendBuffers, they are no longer needed and take up replicationLevel * bytesPerRank memory.
+                // By deallocating them now, before the received messages are stored into the serialized block storage,
+                // we can reduce the peak memory consumption of this algorithm.
+                _sendBuffers = decltype(_sendBuffers)();
 
-            // Store the received blocks into our local block storage
-            comm.parseAllIncomingMessages(
-                receivedMessages, [this](
-                                      block_id_t blockId, const std::byte* data, size_t lengthInBytes,
-                                      ReStoreMPI::current_rank_t srcRank) {
-                    UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
-                    assert(lengthInBytes == _constOffset);
-                    UNUSED(srcRank); // We simply do not need this right now
-                    this->_serializedBlocks->writeBlock(blockId, data);
-                });
+                // Store the received blocks into our local block storage
+                _blockSubmissionComm.parseAllIncomingMessages(
+                    receivedMessages, [this](
+                                          block_id_t blockId, const std::byte* data, size_t lengthInBytes,
+                                          ReStoreMPI::current_rank_t srcRank) {
+                        UNUSED(lengthInBytes); // Currently, only constant offset mode is implemented
+                        assert(lengthInBytes == _constOffset);
+                        UNUSED(srcRank); // We simply do not need this right now
+                        this->_serializedBlocks->writeBlock(blockId, data);
+                    });
+
+                return true;
+            };
+
+            // Start the exchange and store data in a separate thread?
+            if (asyncDataExchange) {
+                _exchangeAndStoreDataFuture = std::async(
+                    std::launch::async, exchangeAndStoreData, std::move(blockSubmissionComm), std::move(sendBuffers),
+                    std::move(submitBlocksGuard));
+            } else {
+                exchangeAndStoreData(
+                    std::move(blockSubmissionComm), std::move(sendBuffers), std::move(submitBlocksGuard));
+            }
         } catch (ReStoreMPI::FaultException& e) {
             // Reset BlockDistribution and SerializedBlockStorage
             _blockDistribution = std::nullopt;
             _serializedBlocks  = std::nullopt;
             throw e;
+        }
+    }
+
+    // pollSubmitBlocksIsFinished()
+    //
+    // Returns true if the asynchronous message transfers and storage of the submitBlocks() call has finished.
+    // If the submitBlocks() call was not asynchronous, this function will always return true.
+    bool pollSubmitBlocksIsFinished() {
+        if (_exchangeAndStoreDataFuture.valid()) {
+            return _exchangeAndStoreDataFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+            // TODO we need to handle possible node failures during the data exchange.
+        } else {
+            return true;
+        }
+    }
+
+    // waitSubmitBlocksIsFinished()
+    //
+    // Blocks until the asynchronous message transfers and storage of the submitBlocks() call are finished.
+    void waitSubmitBlocksIsFinished() {
+        // TODO we need to handle possible node failures during the data exchange.
+        if (_exchangeAndStoreDataFuture.valid()) {
+            _exchangeAndStoreDataFuture.wait();
         }
     }
 
@@ -454,6 +497,8 @@ class ReStore {
     std::optional<BlockDistribution<>>      _blockDistribution = std::nullopt;
     std::optional<SerializedBlockStorage<>> _serializedBlocks  = std::nullopt;
     std::optional<BlockIdPermuter>          _blockIdPermuter   = std::nullopt;
+    std::future<bool>                       _exchangeAndStoreDataFuture;
+    std::mutex                              _submitBlocksMutex;
 
     void _assertInvariants() const {
         assert(

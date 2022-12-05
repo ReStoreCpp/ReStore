@@ -115,6 +115,91 @@ static void BM_submitBlocks(benchmark::State& state) {
     }
 }
 
+static void BM_submitBlocksAsynchronously(benchmark::State& state) {
+    // Parse arguments
+    auto bytesPerBlock             = throwing_cast<size_t>(state.range(0));
+    auto replicationLevel          = throwing_cast<uint16_t>(state.range(1));
+    auto bytesPerRank              = throwing_cast<size_t>(state.range(2));
+    auto blocksPerPermutationRange = throwing_cast<size_t>(state.range(3));
+    auto fractionOfRanksThatFail   = static_cast<double>(state.range(4)) / 1000.;
+    bool submitForeignData         = SUBMIT_FOREIGN_DATA;
+    UNUSED(fractionOfRanksThatFail);
+
+    assert(bytesPerRank % bytesPerBlock == 0);
+    size_t blocksPerRank = bytesPerRank / bytesPerBlock;
+
+    using ElementType = uint8_t;
+    using BlockType   = std::vector<ElementType>;
+
+    auto rankId    = asserting_cast<uint64_t>(myRankId());
+    auto numBlocks = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
+
+    // Generate the data to be stored in the ReStore.
+    std::vector<BlockType> data;
+    for (uint64_t base: range(blocksPerRank * rankId, blocksPerRank * rankId + blocksPerRank)) {
+        data.emplace_back();
+        data.back().reserve(bytesPerBlock);
+        for (uint64_t increment: range(0ul, bytesPerBlock)) {
+            data.back().push_back(static_cast<ElementType>((base - increment) % std::numeric_limits<uint8_t>::max()));
+        }
+        assert(data.back().size() == bytesPerBlock);
+    }
+    assert(data.size() == blocksPerRank);
+
+    // Measurement
+    for (auto _: state) {
+        UNUSED(_);
+
+        ReStore::ReStore<BlockType> store(
+            MPI_COMM_WORLD, replicationLevel, ReStore::OffsetMode::constant, sizeof(uint8_t) * bytesPerBlock,
+            blocksPerPermutationRange);
+
+        // Ensure, that all ranks start into the times section at about the same time. This prevens faster ranks from
+        // having to wait for the slower ranks in the timed section. This ist also a workaround for a bug in the
+        // SparseAllToAll implementation which will sometimes allow messages spilling over into the next SparseAllToAll
+        // round.
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        // Start measurement
+        auto start = std::chrono::high_resolution_clock::now();
+
+        unsigned counter     = 0;
+        uint64_t baseBlockId = 0;
+        if (submitForeignData) {
+            baseBlockId = static_cast<size_t>((myRankId() + RANKS_PER_NODE) % numRanks()) * data.size();
+        } else {
+            baseBlockId = static_cast<size_t>(myRankId()) * data.size();
+        }
+
+        store.submitBlocks(
+            [](const BlockType& range, ReStore::SerializedBlockStoreStream& stream) {
+                stream.writeBytes(reinterpret_cast<const std::byte*>(range.data()), range.size() * sizeof(ElementType));
+            },
+            [&counter, &data, baseBlockId]() -> std::optional<ReStore::NextBlock<BlockType>> {
+                auto ret =
+                    data.size() == counter
+                        ? std::nullopt
+                        : std::make_optional(ReStore::NextBlock<BlockType>({baseBlockId + counter, data[counter]}));
+                counter++; // We cannot put this in the above line, as we can't assume if the first argument of the pair
+                           // is bound before or after the increment.
+                return ret;
+            },
+            numBlocks,
+            true // asynchronous data exchange
+        );
+        assert(counter == data.size() + 1);
+
+        // End and register measurement
+        auto end            = std::chrono::high_resolution_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+        MPI_Allreduce(MPI_IN_PLACE, &elapsedSeconds, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        state.SetIterationTime(elapsedSeconds);
+
+        // Wait for all asynchronous operations to finish to not interfere with the next iteration.
+        store.waitSubmitBlocksIsFinished();
+    }
+}
+
 #ifndef ID_RANDOMIZATION
 static void BM_submitSerializedData(benchmark::State& state) {
     // Parse arguments
@@ -134,8 +219,8 @@ static void BM_submitSerializedData(benchmark::State& state) {
 
     const auto rankId               = asserting_cast<uint64_t>(myRankId());
     const auto numBlocks            = static_cast<size_t>(numRanks()) * bytesPerRank / bytesPerBlock;
-    auto firstBlockOfThisRank = rankId * blocksPerRank;
-    auto lastBlockOfThisRank  = firstBlockOfThisRank + blocksPerRank - 1;
+    auto       firstBlockOfThisRank = rankId * blocksPerRank;
+    auto       lastBlockOfThisRank  = firstBlockOfThisRank + blocksPerRank - 1;
 
     if (submitForeignData) {
         firstBlockOfThisRank = (rankId + RANKS_PER_NODE) % asserting_cast<size_t>(numRanks()) * blocksPerRank;
@@ -1310,7 +1395,7 @@ const auto MAX_REPLICATION_LEVEL = 4;
 template <
     bool sweepBlocksPerPermutationRange, bool sweepReplicationLevel, bool sweepDataPerRank, bool sweepFailureRateOfPEs>
 static void benchmarkArguments(benchmark::internal::Benchmark* benchmark) {
-    const int64_t bytesPerBlock = 64;
+    const int64_t bytesPerBlock             = 64;
     const int64_t replicationLevel          = 4;
     const int64_t bytesPerRank              = MiB(16);
     const int64_t promilleOfRankFailures    = 10;
@@ -1359,6 +1444,12 @@ BENCHMARK(BM_submitBlocks)          ///
     ->UseManualTime()               ///
     ->Unit(benchmark::kMillisecond) ///
     ->Iterations(1)                 ///
+    ->Apply(benchmarkArguments<false, false, false, false>);
+
+BENCHMARK(BM_submitBlocksAsynchronously) ///
+    ->UseManualTime()                    ///
+    ->Unit(benchmark::kMillisecond)      ///
+    ->Iterations(1)                      ///
     ->Apply(benchmarkArguments<false, false, false, false>);
 
 #ifndef ID_RANDOMIZATION
@@ -1441,7 +1532,10 @@ class NullReporter : public ::benchmark::BenchmarkReporter {
 
 // The main is rewritten to allow for MPI initializing and for selecting a reporter according to the process rank.
 int main(int argc, char** argv) {
-    MPI_Init(&argc, &argv);
+    // MPI_Init(&argc, &argv);
+    [[maybe_unused]] int mpi_thread_level;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &mpi_thread_level);
+    assert(mpi_thread_level == MPI_THREAD_MULTIPLE);
 
     int rank = -1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);

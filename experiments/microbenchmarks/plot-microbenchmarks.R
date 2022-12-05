@@ -40,7 +40,7 @@ bytesPerPermutationRangeLevels <- c("64 B", "128 B", "256 B", "512 B", "1 KiB", 
                                     "1 MiB", "2 MiB", "4 MiB", "8 MiB", "16 MiB")
 
 # Load the simulations' results
-data <- read_csv(csv_file,
+benchmark_data <- read_csv(csv_file,
     col_types = cols(
       idRandomization = col_character(),
       numberOfNodes = col_integer(),
@@ -71,6 +71,7 @@ data <- read_csv(csv_file,
     idRandomization = factor(recode(idRandomization, `FALSE` = "Off", `TRUE` = "On")),
     benchmarkHR = factor(recode(benchmark,
       submitBlocks = "submit to restore",
+      submitBlocksAsynchronously = "submit to restore (async)",
       submitSerializedData = "submit to restore (already serialized data)",
       pullBlocksRedistribute = "load from restore (all data)",
       pullBlocksSmallRange = "load from restore (1 % of data)",
@@ -85,7 +86,8 @@ data <- read_csv(csv_file,
                   "load from restore (1 % of data)", "load from disk (all data)", "load from disk (1 % of data)",
                   "load from restore (data of a single rank)", "load from disk (data of a single rank)",
                   "load from restore (data of a single rank to a single rank)",
-                  "load from disk (MPI I/O; all data)", "load from disk (MPI I/O; 1 % of data)"
+                  "load from disk (MPI I/O; all data)", "load from disk (MPI I/O; 1 % of data)",
+                  "submit to restore (async)"
                   ))
   ) %>%
   group_by(
@@ -116,16 +118,16 @@ data <- read_csv(csv_file,
 # }
 
 # Which measurements are available?
-data %>% pull(bytesPerRankHR) %>% unique()
-data %>% pull(replicationLevel) %>% unique()
-data %>% pull(blocksPerPermutationRange) %>% unique()
-data %>% pull(promilleOfRanksThatFail) %>% unique()
-data %>% pull(benchmark) %>% unique()
-data %>% pull(idRandomization) %>% unique()
+benchmark_data %>% pull(bytesPerRankHR) %>% unique()
+benchmark_data %>% pull(replicationLevel) %>% unique()
+benchmark_data %>% pull(blocksPerPermutationRange) %>% unique()
+benchmark_data %>% pull(promilleOfRanksThatFail) %>% unique()
+benchmark_data %>% pull(benchmark) %>% unique()
+benchmark_data %>% pull(idRandomization) %>% unique()
 
 ### What is the ideal value for blocksPerPermutationRange? ###
 # load determine-optimal-blocksPerPermutationRange.csv
-data %>%
+benchmark_data %>%
     filter(
       bytesPerRank == 16777216,
       numberOfRanks <= 6144,
@@ -177,14 +179,14 @@ ggsave(
 
 ### ID randomization On vs Off? ###
 # load microbenchmarks.csv
-data %>%
+benchmark_data %>%
     filter(
       bytesPerRank == 16777216,
       replicationLevel == 4,
       bytesPerBlock == 64,
       blocksPerPermutationRange == 4096,
       promilleOfRanksThatFail == 10,
-      benchmarkHR %in% c("submit to restore", "load from restore (1 % of data)")
+      benchmark %in% c("pullBlocksSmallRange", "submitBlocksAsynchronously", "submitBlocks")
   ) %>%
 ggplot(
     aes(
@@ -200,7 +202,7 @@ ggplot(
     point_size = if (STYLE == "slides") 3 else NULL,
     line_width = if (STYLE == "slides") 1 else NULL
   ) +
-  scale_shape_and_color(name = "benchmark") +
+  scale_color_shape_discrete(name = "benchmark") +
   scale_y_log_with_ticks_and_lines() +
   labs(
     x = "#PEs",
@@ -237,7 +239,7 @@ if (STYLE == "print") {
 
 ### Compare load-from-restore vs load-from-disk ###
 # load microbenchmarks.csv
-data <- data %>%
+data <- benchmark_data %>%
     mutate(
       amountOfData = factor(recode(benchmark,
         pullBlocksRedistribute = "all data",
