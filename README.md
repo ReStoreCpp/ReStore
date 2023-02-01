@@ -154,11 +154,15 @@ _loadBalancer.commitToPreviousCall();
 If you use ReStore in your research, please cite the following paper:
 
 ```bibtex
-@article{restore,
-  title={ReStore: In-Memory REplicated STORagE for Rapid Recovery in Fault-Tolerant Algorithms},
-  author={Hespe, Demian and Hübner, Lukas and Sanders, Peter and Stamatakis, Alexandros},
-  journal={arXiv preprint arXiv:2203.01107},
-  year={2022}
+@inproceedings{restore,
+  author={Hübner, Lukas and Hespe, Demian and Sanders, Peter and Stamatakis, Alexandros},
+  booktitle={2022 IEEE/ACM 12th Workshop on Fault Tolerance for HPC at eXtreme Scale (FTXS)}, 
+  title={ReStore: In-Memory REplicated STORagE for Rapid Recovery in Fault-Tolerant Algorithms}, 
+  year={2022},
+  volume={},
+  number={},
+  pages={24-35},
+  doi={10.1109/FTXS56515.2022.00008}
 }
 ```
 
