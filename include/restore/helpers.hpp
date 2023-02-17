@@ -209,25 +209,25 @@ template <class data_t>
 // Some bit twiddling helper functions.
 template <typename Data>
 constexpr uint8_t num_bits() {
-    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    static_assert(std::is_trivially_copyable_v<Data>, "Data has to be a trivially copyable type.");
     return sizeof(Data) * 8;
 }
 
 template <typename Data>
 inline int64_t bits_left_half(Data bytes) {
-    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    static_assert(std::is_trivially_copyable_v<Data>, "Data has to be a trivially copyable type.");
     return bytes >> num_bits<Data>() / 2;
 }
 
 template <typename Data>
 inline int64_t bits_right_half(Data bytes) {
-    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    static_assert(std::is_trivially_copyable_v<Data>, "Data has to be a trivially copyable type.");
     return bytes & static_cast<Data>(-1) >> num_bits<Data>() / 2;
 }
 
 template <typename Data>
 inline int64_t bits_combine_halves(Data left, Data right) {
-    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    static_assert(std::is_trivially_copyable_v<Data>, "Data has to be a trivially copyable type.");
     return (left << num_bits<Data> / 2) | right;
 }
 
@@ -237,7 +237,7 @@ inline int64_t bits_combine_halves(Data left, Data right) {
 // content source operand is 0, the content of the destination operand is undefined.
 template <typename Data>
 inline uint8_t most_significant_bit_set(Data bytes) {
-    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    static_assert(std::is_trivially_copyable_v<Data>, "Data has to be a trivially copyable type.");
 
     if (bytes == 0) {
         return 0;
@@ -405,7 +405,7 @@ class ResultsCSVPrinter {
 
 template <class Data>
 inline XXH64_hash_t xxhash(Data n, XXH64_hash_t seed) {
-    static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+    static_assert(std::is_trivially_copyable_v<Data>, "Data has to be a trivially copyable type.");
     return XXH64(&n, sizeof(Data), seed);
 }
 
