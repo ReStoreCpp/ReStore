@@ -104,6 +104,14 @@ class NullReporter : public ::benchmark::BenchmarkReporter {
     void Finalize() override {}
 };
 
+// From https://stackoverflow.com/questions/3477525/is-it-possible-to-use-a-c-smart-pointers-together-with-cs-malloc
+struct free_delete {
+    void operator()(void* x) {
+        free(x);
+    }
+};
+
+
 // The main is rewritten to allow for MPI initializing and for selecting a reporter according to the process rank.
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
@@ -140,8 +148,8 @@ int main(int argc, char** argv) {
         tmpFile.append("/restore-microbenchmark-sdfuihK789ahajgdfCVgjhkjFDTSATF.tmp");
 
         std::string benchmark_out_string = std::string{"--benchmark_out="} + tmpFile;
-        auto        benchmark_out =
-            std::unique_ptr<char>(reinterpret_cast<char*>(malloc(sizeof(char) * benchmark_out_string.length())));
+        auto        benchmark_out        = std::unique_ptr<char, free_delete>(
+            reinterpret_cast<char*>(malloc(sizeof(char) * benchmark_out_string.length())));
         strcpy(benchmark_out.get(), benchmark_out_string.c_str());
 
         expanded_argv.push_back(benchmark_out.get());
