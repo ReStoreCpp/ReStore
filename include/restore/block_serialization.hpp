@@ -47,10 +47,10 @@ class SerializedBlockStoreStream {
     }
 
     // Keep the user from copying or moving our SerializedBlockStore object we pass to him.
-    SerializedBlockStoreStream(const SerializedBlockStoreStream&) = delete;
-    SerializedBlockStoreStream(SerializedBlockStoreStream&&)      = delete;
+    SerializedBlockStoreStream(const SerializedBlockStoreStream&)            = delete;
+    SerializedBlockStoreStream(SerializedBlockStoreStream&&)                 = delete;
     SerializedBlockStoreStream& operator=(const SerializedBlockStoreStream&) = delete;
-    SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&) = delete;
+    SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&)      = delete;
 
     // reserve()
     //
@@ -399,7 +399,7 @@ class SerializedBlockStorage {
     const BlockDistribution<MPIContext>&   _blockDistribution;
 
     struct WritingState {
-        WritingState(BlockRange _range, std::vector<std::byte>& _data) : range(_range), data(_data) {}
+        WritingState(BlockRange _range, std::vector<std::byte>& _data) noexcept : range(_range), data(_data) {}
 
         BlockRange              range;
         std::vector<std::byte>& data;
