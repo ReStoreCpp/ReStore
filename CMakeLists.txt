@@ -64,7 +64,6 @@ option(${PROJECT_NAME}_INSTALL "Add ${PROJECT_NAME} to the install list" ON)
 # Options to disable building the tests, examples, benchmarks, ...
 option(${PROJECT_NAME}_BUILD_TESTS "Build unit tests" ON)
 option(${PROJECT_NAME}_BUILD_BENCHMARKS "Build benchmarks" ON)
-option(${PROJECT_NAME}_BUILD_EXAMPLES "Build examples" OFF)
 
 # Other build options
 option(${PROJECT_NAME}_SIMULATE_FAILURES "Simulate node failues (for example when running unit test)." OFF)
@@ -301,10 +300,3 @@ else()
     message(STATUS "Building benchmarks: NO")
 endif()
 
-# Build the examples
-if(${PROJECT_NAME}_BUILD_EXAMPLES)
-    message(STATUS "Building examples: YES")
-    add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/examples")
-else()
-    message(STATUS "Building examples: NO")
-endif()
