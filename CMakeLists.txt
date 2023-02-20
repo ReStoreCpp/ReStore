@@ -167,7 +167,6 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     list(
         APPEND WARNING_FLAGS
         "-Wcast-align"
-        "-Wnull-dereference"
         "-Wpedantic"
     )
 endif()
@@ -176,7 +175,6 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     list(
         APPEND WARNING_FLAGS
         "-Wcast-align"
-        "-Wnull-dereference"
         "-Wpedantic"
         "-Wnoexcept"
         "-Wsuggest-attribute=const"
