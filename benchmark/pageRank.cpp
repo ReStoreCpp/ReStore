@@ -525,7 +525,7 @@ int main(int argc, char** argv) {
     cxxopts::ParseResult options;
     try {
         options = cliParser.parse(argc, argv);
-    } catch (cxxopts::OptionException& e) {
+    } catch (cxxopts::exceptions::exception& e) {
         if (myRank == 0) {
             std::cout << e.what() << std::endl << std::endl;
             std::cout << cliParser.help() << std::endl;

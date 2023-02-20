@@ -68,7 +68,7 @@ class CommandLineOptions {
         cxxopts::ParseResult options;
         try {
             options = cliParser.parse(argc, argv);
-        } catch (cxxopts::OptionException& e) {
+        } catch (cxxopts::exceptions::exception& e) {
             std::cout << e.what() << std::endl << std::endl;
             std::cout << cliParser.help() << std::endl;
             exit(1);
