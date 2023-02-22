@@ -353,7 +353,7 @@ class MPIContext {
     // TODO compile time enable exceptions instead of assertions
     template <class data_t>
     void broadcast(data_t* data, size_t numDataElements = 1, int root = 0) {
-        static_assert(std::is_pod_v<data_t>, "broadcast only works for POD data");
+        static_assert(std::is_trivially_copyable_v<data_t>, "broadcast only works for trivially copyable data");
         _possiblySimulateFailure();
         int _numDataElements = asserting_cast<int>(numDataElements);
         return successOrThrowMpiCall(
@@ -362,7 +362,7 @@ class MPIContext {
 
     template <class data_t>
     void allreduce(data_t* data, MPI_Op operation, size_t numDataElements = 1) {
-        static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
+        static_assert(std::is_trivially_copyable_v<data_t>, "allreduce only works for trivially copyable data");
         int _numDataElements = asserting_cast<int>(numDataElements);
         _possiblySimulateFailure();
         successOrThrowMpiCall([&]() {
@@ -372,13 +372,13 @@ class MPIContext {
 
     template <class data_t>
     void allreduce(std::vector<data_t>& data, MPI_Op operation) {
-        static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
+        static_assert(std::is_trivially_copyable_v<data_t>, "allreduce only works for trivially copyable data");
         allreduce(data.data(), operation, data.size());
     }
 
     template <class data_t>
     data_t allreduce(data_t value, MPI_Op operation) {
-        static_assert(std::is_pod_v<data_t>, "allreduce only works for POD data");
+        static_assert(std::is_trivially_copyable_v<data_t>, "allreduce only works for trivially copyable data");
         allreduce(&value, operation, 1);
         return value;
     }
@@ -396,7 +396,7 @@ class MPIContext {
 
     template <class data_t>
     std::vector<data_t> gatherv(std::vector<data_t>& data, int root = 0) {
-        static_assert(std::is_pod_v<data_t>, "gatherv only works for POD data");
+        static_assert(std::is_trivially_copyable_v<data_t>, "gatherv only works for trivially copyable data");
         _possiblySimulateFailure();
 
         // First, gather the number of data elements per rank
@@ -472,7 +472,7 @@ class MPIContext {
     //// ! Untested
     // template <class data_t>
     // std::vector<data_t> inclusive_scan(data_t value, MPI_Op operation) {
-    //    static_assert(std::is_pod_v<data_t>, "inclusive_scan only works for POD data");
+    //    static_assert(std::is_trivially_copyable_v<data_t>, "inclusive_scan only works for trivially copyable data");
     //    std::vector<data_t> result(getCurrentSize(), 0);
     //    return successOrThrowMpiCall(
     //        [&]() { return MPI_Scan(&value, result, 1, get_mpi_type<data_t>(), operation, _comm); });
@@ -481,7 +481,7 @@ class MPIContext {
 
     template <class data_t>
     data_t exclusive_scan(data_t value, MPI_Op operation) {
-        static_assert(std::is_pod_v<data_t>, "inclusive_scan only works for POD data");
+        static_assert(std::is_trivially_copyable_v<data_t>, "inclusive_scan only works for trivially copyable data");
         _possiblySimulateFailure();
 
         successOrThrowMpiCall(

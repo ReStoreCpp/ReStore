@@ -276,7 +276,7 @@ class FeistelPseudoRandomPermutation {
 
     template <class Data>
     inline XXH64_hash_t _xxhash(Data n, XXH64_hash_t key) const {
-        static_assert(std::is_pod_v<Data>, "Data has to be a POD.");
+        static_assert(std::is_trivially_copyable_v<Data>, "Data has to be a trivially copyable type.");
         return XXH64(&n, sizeof(Data), key);
     }
 };

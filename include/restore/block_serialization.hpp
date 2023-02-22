@@ -47,10 +47,10 @@ class SerializedBlockStoreStream {
     }
 
     // Keep the user from copying or moving our SerializedBlockStore object we pass to him.
-    SerializedBlockStoreStream(const SerializedBlockStoreStream&) = delete;
-    SerializedBlockStoreStream(SerializedBlockStoreStream&&)      = delete;
+    SerializedBlockStoreStream(const SerializedBlockStoreStream&)            = delete;
+    SerializedBlockStoreStream(SerializedBlockStoreStream&&)                 = delete;
     SerializedBlockStoreStream& operator=(const SerializedBlockStoreStream&) = delete;
-    SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&) = delete;
+    SerializedBlockStoreStream& operator=(SerializedBlockStoreStream&&)      = delete;
 
     // reserve()
     //
@@ -63,10 +63,10 @@ class SerializedBlockStoreStream {
 
     // operator<<
     //
-    // Can be used to serialize a plain old datatype (pod)
+    // Can be used to serialize a trivially copyable type
     template <class T>
     inline SerializedBlockStoreStream& operator<<(const T& value) {
-        static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
+        static_assert(std::is_trivially_copyable<T>(), "You may only serialize a trivially copyable type this way.");
 
         auto src = reinterpret_cast<const std::byte*>(&value);
         for (auto buffer: _outputBuffers) {
@@ -173,7 +173,7 @@ class SerializedBlockStoreStream {
 
     template <class T>
     void writeToReservedBytes(WritableStreamPosition& position, const T& value) {
-        static_assert(std::is_pod<T>(), "You may only serialize a POD this way.");
+        static_assert(std::is_trivially_copyable<T>(), "You may only serialize a trivially copyable type this way.");
         assert(sizeof(T) <= position.length);
 
         auto src = reinterpret_cast<const std::byte*>(&value);
@@ -399,7 +399,7 @@ class SerializedBlockStorage {
     const BlockDistribution<MPIContext>&   _blockDistribution;
 
     struct WritingState {
-        WritingState(BlockRange _range, std::vector<std::byte>& _data) : range(_range), data(_data) {}
+        WritingState(BlockRange _range, std::vector<std::byte>& _data) noexcept : range(_range), data(_data) {}
 
         BlockRange              range;
         std::vector<std::byte>& data;

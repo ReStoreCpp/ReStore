@@ -157,7 +157,7 @@ class BlockSubmissionCommunication {
         private:
         using WritableStreamPosition = SerializedBlockStoreStream::WritableStreamPosition;
         struct IDRangeState {
-            IDRangeState(BlockIDRange _range, WritableStreamPosition _positionInStream)
+            IDRangeState(BlockIDRange _range, WritableStreamPosition _positionInStream) noexcept
                 : range(_range),
                   positionInStream(_positionInStream) {}
             BlockIDRange           range;
@@ -195,10 +195,10 @@ class BlockSubmissionCommunication {
             assert(_dataStream.size() >= DESCRIPTOR_SIZE);
         }
 
-        BlockIDDeserialization()                              = delete;
-        BlockIDDeserialization(BlockIDDeserialization&&)      = delete;
-        BlockIDDeserialization(const BlockIDDeserialization&) = delete;
-        BlockIDDeserialization& operator=(BlockIDDeserialization&&) = delete;
+        BlockIDDeserialization()                                         = delete;
+        BlockIDDeserialization(BlockIDDeserialization&&)                 = delete;
+        BlockIDDeserialization(const BlockIDDeserialization&)            = delete;
+        BlockIDDeserialization& operator=(BlockIDDeserialization&&)      = delete;
         BlockIDDeserialization& operator=(const BlockIDDeserialization&) = delete;
 
         // Returns the next block. If the current range still hast ids left, returns the next one from that
