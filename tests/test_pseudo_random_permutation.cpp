@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <unordered_set>
 
 #include <gmock/gmock.h>
@@ -8,30 +9,32 @@
 
 using namespace ::testing;
 
-// TEST(PseudoRandomPermutationTest, LCG) {
-//    uint64_t n = 10;
-//
-//    LCGPseudoRandomPermutation permutation(asserting_cast<int64_t>(n - 1));
-//    std::vector<uint64_t> sequence;
-//
-//    // Build test vector
-//    sequence.reserve(n);
-//    for (uint64_t i = 0; i < n; ++i) {
-//        sequence.push_back(i);
-//    }
-//
-//    // Apply permutation to every element in the test vector.
-//    for (size_t idx = 0; idx < n; ++idx) {
-//        // Test that the permutation is invertible
-//        ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
-//
-//        // Compute the permutation, to later check that each element only appears once.
-//        sequence[idx] = permutation.f(sequence[idx]);
-//    }
-//
-//    // Check that no element appears more than once. Also check, that we did not exceed the given range.
-//    EXPECT_THAT(sequence, UnorderedElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
-//}
+TEST(PseudoRandomPermutationTest, LCG) {
+    uint64_t n = 34;
+
+    LCGPseudoRandomPermutation permutation(asserting_cast<int64_t>(n - 1));
+    std::vector<int64_t>       sequence;
+
+    // Build test vector
+    sequence.reserve(n);
+    for (int64_t i = 0; i < asserting_cast<int64_t>(n); ++i) {
+        sequence.push_back(i);
+    }
+
+    auto sequence_copy(sequence);
+
+    // Apply permutation to every element in the test vector.
+    for (size_t idx = 0; idx < n; ++idx) {
+        // Test that the permutation is invertible
+        ASSERT_EQ(sequence[idx], permutation.finv(permutation.f(sequence[idx])));
+
+        // Compute the permutation, to later check that each element only appears once.
+        sequence[idx] = permutation.f(sequence[idx]);
+    }
+
+    // Check that no element appears more than once. Also check, that we did not exceed the given range.
+    EXPECT_THAT(sequence, UnorderedElementsAreArray(sequence_copy));
+}
 
 TEST(PseudoRandomPermutationTest, FeistelEvenBitCount) {
     const uint64_t n          = 10;
