@@ -26,6 +26,8 @@ class LCGPseudoRandomPermutation {
 
     int64_t finv(int64_t n) const {
         do {
+            // TODO: I think this is undefined because the standard doesn't specify the bit-representation of negative
+            // values
             n = _mod((n - _c) * _ainv);
         } while (n > _max_value);
         return n;
@@ -54,7 +56,6 @@ class LCGPseudoRandomPermutation {
 
         _modulo_and_mask = max_value;     // Set all bits except the highest one of the bitmask.
         _modulo          = max_value + 1; // Add 1, which will carry over to the first 0 after all the ones.
-        _modulo_and_mask |= _modulo;      // Set the highest bit of the bitmask.
     }
 
     // TODO: How do we choose a proper a?
