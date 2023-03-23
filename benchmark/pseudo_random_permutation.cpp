@@ -8,8 +8,8 @@
     #include <benchmark/benchmark.h>
 #endif
 
-#include "restore/pseudo_random_permutation.hpp"
 #include "restore/helpers.hpp"
+#include "restore/pseudo_random_permutation.hpp"
 
 #include <xxhash.h>
 
@@ -39,7 +39,7 @@ BENCHMARK(BM_Feistel);
 
 static void BM_LCG(benchmark::State& state) {
     // Setup
-    const int64_t MAX_VALUE  = 100000;
+    const uint64_t MAX_VALUE = 100000;
 
     LCGPseudoRandomPermutation permutation(MAX_VALUE);
 
@@ -47,7 +47,7 @@ static void BM_LCG(benchmark::State& state) {
     for (auto _: state) {
         UNUSED(_);
 
-        for (int64_t i = 0; i <= MAX_VALUE; i++) {
+        for (uint64_t i = 0; i <= MAX_VALUE; i++) {
             benchmark::DoNotOptimize(permutation.f(i));
         }
     }
