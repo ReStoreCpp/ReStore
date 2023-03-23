@@ -11,12 +11,12 @@
 
 class LCGPseudoRandomPermutation {
     public:
-    LCGPseudoRandomPermutation(int64_t max_value) : _max_value(max_value) {
+    LCGPseudoRandomPermutation(uint64_t max_value) : _max_value(max_value) {
         _choose_modulo(_max_value);
         _choose_a();
     }
 
-    int64_t f(int64_t n) const {
+    uint64_t f(uint64_t n) const {
         // We use cycle walking to ensure, that the generated number is at most _max_value
         do {
             n = _mod(n * _a + _c);
@@ -24,25 +24,23 @@ class LCGPseudoRandomPermutation {
         return n;
     }
 
-    int64_t finv(int64_t n) const {
+    uint64_t finv(uint64_t n) const {
         do {
-            // TODO: I think this is undefined because the standard doesn't specify the bit-representation of negative
-            // values
             n = _mod((n - _c) * _ainv);
         } while (n > _max_value);
         return n;
     }
 
     private:
-    int64_t _max_value;
-    int64_t _modulo;
-    int64_t _modulo_and_mask;
-    int64_t _c =
+    uint64_t _max_value;
+    uint64_t _modulo;
+    uint64_t _modulo_and_mask;
+    uint64_t _c =
         1; // Satisfies the Hull-Dobell theorem. The distribution of random numbers is not sensitive to the value of c.
-    int64_t _a    = 0;
-    int64_t _ainv = 0;
+    uint64_t _a    = 0;
+    uint64_t _ainv = 0;
 
-    void _choose_modulo(int64_t max_value) {
+    void _choose_modulo(uint64_t max_value) {
         // See http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
         // Round max_value up to the next highest power of 2.
         max_value--; // In case max_value already is a power of two, we do not want to change it.
@@ -68,12 +66,14 @@ class LCGPseudoRandomPermutation {
         _ainv = _modulo_multiplicative_inverse(_a, _modulo);
     }
 
-    int64_t _mod(int64_t n) const {
+    uint64_t _mod(uint64_t n) const {
         return n & _modulo_and_mask;
     }
 
-    int64_t _modulo_multiplicative_inverse(int64_t a, int64_t m) const {
+    uint64_t _modulo_multiplicative_inverse(uint64_t param_a, uint64_t param_m) const {
         // https://rosettacode.org/wiki/Modular_inverse#C.2B.2B
+        int64_t a  = asserting_cast<int64_t>(param_a);
+        int64_t m  = asserting_cast<int64_t>(param_m);
         int64_t m0 = m, t, q;
         int64_t x0 = 0, x1 = 1;
 
@@ -91,7 +91,7 @@ class LCGPseudoRandomPermutation {
             x1 += m0;
         }
 
-        return x1;
+        return asserting_cast<uint64_t>(x1);
     }
 };
 

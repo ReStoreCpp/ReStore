@@ -12,12 +12,12 @@ using namespace ::testing;
 TEST(PseudoRandomPermutationTest, LCG) {
     uint64_t n = 34;
 
-    LCGPseudoRandomPermutation permutation(asserting_cast<int64_t>(n - 1));
-    std::vector<int64_t>       sequence;
+    LCGPseudoRandomPermutation permutation(asserting_cast<uint64_t>(n - 1));
+    std::vector<uint64_t>      sequence;
 
     // Build test vector
     sequence.reserve(n);
-    for (int64_t i = 0; i < asserting_cast<int64_t>(n); ++i) {
+    for (uint64_t i = 0; i < n; ++i) {
         sequence.push_back(i);
     }
 
